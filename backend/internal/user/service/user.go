@@ -8,6 +8,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/user/repo"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
 var ErrInvalidUserOrPassword = errors.New("邮箱或密码错误")
@@ -25,13 +26,13 @@ type UserService interface {
 
 type userService struct {
 	repo   repo.UserRepository
-	logger *zap.Logger
+	l      logger.LoggerV1
 }
 
-func NewUserService(repo repo.UserRepository, logger *zap.Logger) UserService {
+func NewUserService(repo repo.UserRepository, l logger.LoggerV1) UserService {
 	return &userService{
 		repo:   repo,
-		logger: zap.L(),
+		l: 		l,
 	}
 }
 
@@ -62,9 +63,7 @@ func (svc *userService) Login(ctx context.Context, email, password string) (doma
 
 func (svc *userService) Logout(ctx context.Context, userID int64) error {
 	// 登出逻辑：可以在这里处理 token 失效、清除缓存等操作
-	// 目前返回 nil，实际业务中可能需要配合 Redis 等实现
-	svc.logger.Info("user logout", zap.Int64("user_id", userID))
-	return nil
+	
 }
 
 // Update 更新用户信息

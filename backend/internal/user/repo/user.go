@@ -5,6 +5,7 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/user/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/user/repo/dao"
+	"github.com/XDWow/DouyinMall/backend/internal/user/repo/cache"
 )
 
 var ErrUserNorFound = dao.ErrDataNotFound
@@ -18,27 +19,28 @@ type UserRepository interface {
 	Delete(ctx context.Context, id int64) error
 }
 
-// userRepository 实现 UserRepository 接口
-type userRepository struct {
-	dao *dao.UserDAO
+// CachedUserRepository 使用了缓存的 repository 实现
+type CachedUserRepository struct {
+	dao   dao.UserDAO
+	cache cache.UserCache
 }
 
-// NewUserRepository 创建 UserRepository 实例
-func NewUserRepository(d *dao.UserDAO) UserRepository {
-	return &userRepository{
+func NewUserRepository(d dao.UserDAO, c cache.UserCache) UserRepository {
+	return &CachedUserRepository{
 		dao: d,
+		cache: c,
 	}
 }
 
-func (r *userRepository) Create(ctx context.Context, u domain.User) (int64, error) {
+func (r *CachedUserRepository) Create(ctx context.Context, u domain.User) (int64, error) {
 	return r.dao.Insert(ctx, r.domainToEntity(u))
 }
 
-func (r *userRepository) Update(ctx context.Context, u domain.User) error {
+func (r *CachedUserRepository) Update(ctx context.Context, u domain.User) error {
 	return r.dao.Update(ctx, r.domainToEntity(u))
 }
 
-func (r *userRepository) FindById(ctx context.Context, id int64) (domain.User, error) {
+func (r *CachedUserRepository) FindById(ctx context.Context, id int64) (domain.User, error) {
 	user, err := r.dao.FindById(ctx, id)
 	if err != nil {
 		return domain.User{}, err
@@ -46,7 +48,7 @@ func (r *userRepository) FindById(ctx context.Context, id int64) (domain.User, e
 	return r.entityToDomain(user), nil
 }
 
-func (r *userRepository) FindByEmail(ctx context.Context, email string) (domain.User, error) {
+func (r *CachedUserRepository) FindByEmail(ctx context.Context, email string) (domain.User, error) {
 	user, err := r.dao.FindByEmail(ctx, email)
 	if err != nil {
 		return domain.User{}, err
@@ -54,12 +56,11 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (domain.
 	return r.entityToDomain(user), nil
 }
 
-func (r *userRepository) Delete(ctx context.Context, id int64) error {
+func (r *CachedUserRepository) Delete(ctx context.Context, id int64) error {
 	return r.dao.Delete(ctx, id)
 }
 
-// domainToEntity 将领域模型转换为数据库实体
-func (r *userRepository) domainToEntity(u domain.User) dao.User {
+func (r *CachedUserRepository) domainToEntity(u domain.User) dao.User {
 	entity := dao.User{
 		UserName: u.UserName,
 		Email:    u.Email,
@@ -67,15 +68,13 @@ func (r *userRepository) domainToEntity(u domain.User) dao.User {
 		Phone:    u.Phone,
 		Avatar:   u.Avatar,
 	}
-	// 如果有 ID，设置到 Model 中（用于更新操作）
 	if u.ID > 0 {
 		entity.ID = uint(u.ID)
 	}
 	return entity
 }
 
-// entityToDomain 将数据库实体转换为领域模型
-func (r *userRepository) entityToDomain(u dao.User) domain.User {
+func (r *CachedUserRepository) entityToDomain(u dao.User) domain.User {
 	return domain.User{
 		ID:       int64(u.ID),
 		UserName: u.UserName,
