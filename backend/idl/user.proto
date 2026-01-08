@@ -6,7 +6,7 @@ option go_package="user/v1;userv1";
 import "google/protobuf/empty.proto";
 
 service UserService {
-    rpc Register(RegisterReq) returns (RegisterResp) {}
+    rpc Signup(SignupReq) returns (SignupResp) {}
     rpc Login(LoginReq) returns (LoginResp) {}
     rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 
@@ -15,13 +15,13 @@ service UserService {
     rpc Query(QueryUserReq) returns (QueryUserResp) {}
 }
 
-message RegisterReq {
+message SignupReq {
     string email = 1;
     string password = 2;
 }
 
-message RegisterResp {
-    int32 user_id = 1;
+message SignupResp {
+    int64 user_id = 1;
 }
 
 message LoginReq {
