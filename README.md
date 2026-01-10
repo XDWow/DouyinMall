@@ -1,10 +1,3 @@
 # DouyinMall
-字节跳动青训营抖音电商项目
+字节跳动青训营抖音电商项目，项目文档：https://ocn58gfuqyel.feishu.cn/docx/PqckduAiYo98o3xpZxOcV9C0n3c
 
-## 项目规划
-
-### 后端
-基于官方提供的 proto
-
-### 前端
-前端可能比较简单，借助ai完成

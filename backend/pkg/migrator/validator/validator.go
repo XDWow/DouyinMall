@@ -2,15 +2,16 @@ package validator
 
 import (
 	"context"
-	"github.com/XDWow/ScholarNet/cmd/pkg/logger"
-	"github.com/XDWow/ScholarNet/cmd/pkg/migrator"
-	events "github.com/XDWow/ScholarNet/cmd/pkg/migrator/events"
+	"reflect"
+	"time"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator"
+	events "github.com/XDWow/DouyinMall/backend/pkg/migrator/events"
 	"github.com/ecodeclub/ekit/slice"
 	"github.com/ecodeclub/ekit/syncx/atomicx"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
-	"reflect"
-	"time"
 )
 
 // 这部分代码做的是全量校验/增量校验+发修复信息:

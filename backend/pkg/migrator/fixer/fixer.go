@@ -3,8 +3,9 @@ package fixer
 import (
 	"context"
 	"errors"
-	"github.com/XDWow/ScholarNet/cmd/pkg/migrator"
-	"github.com/XDWow/ScholarNet/cmd/pkg/migrator/events"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator"
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator/events"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

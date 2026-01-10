@@ -1,11 +1,12 @@
 package ginx
 
 import (
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/logger"
-	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
 	"net/http"
 	"strconv"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // 受制于泛型，我们这里只能使用包变量，我深恶痛绝的包变量

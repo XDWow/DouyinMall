@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/logger"
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
 type BatchHandler[T any] struct {

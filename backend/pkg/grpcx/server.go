@@ -2,14 +2,15 @@ package grpcx
 
 import (
 	"context"
-	"github.com/XDWow/ScholarNet/cmd/pkg/logger"
-	"github.com/XDWow/ScholarNet/cmd/pkg/netx"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/client/v3/naming/endpoints"
-	"google.golang.org/grpc"
 	"net"
 	"strconv"
 	"time"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/XDWow/DouyinMall/backend/pkg/netx"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/naming/endpoints"
+	"google.golang.org/grpc"
 )
 
 type Server struct {

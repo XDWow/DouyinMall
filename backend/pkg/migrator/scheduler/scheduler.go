@@ -3,16 +3,17 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"github.com/XDWow/ScholarNet/cmd/pkg/ginx"
-	"github.com/XDWow/ScholarNet/cmd/pkg/gormx/connpool"
-	"github.com/XDWow/ScholarNet/cmd/pkg/logger"
-	"github.com/XDWow/ScholarNet/cmd/pkg/migrator"
-	"github.com/XDWow/ScholarNet/cmd/pkg/migrator/events"
-	"github.com/XDWow/ScholarNet/cmd/pkg/migrator/validator"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"sync"
 	"time"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
+	"github.com/XDWow/DouyinMall/backend/pkg/gormx/connpool"
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator"
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator/events"
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator/validator"
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // Scheduler 用来统一管理整个迁移过程

@@ -4,7 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/logger"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 	"github.com/ecodeclub/ekit/syncx/atomicx"
 	"gorm.io/gorm"
 )

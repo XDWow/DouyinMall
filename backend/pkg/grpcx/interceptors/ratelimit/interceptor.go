@@ -2,12 +2,13 @@ package ratelimit
 
 import (
 	"context"
-	"github.com/XDWow/ScholarNet/cmd/pkg/logger"
-	"github.com/XDWow/ScholarNet/cmd/pkg/ratelimit"
+	"strings"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/XDWow/DouyinMall/backend/pkg/ratelimit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"strings"
 )
 
 type InterceptorBuilder struct {

@@ -3,14 +3,15 @@ package fixer
 import (
 	"context"
 	"errors"
-	"github.com/IBM/sarama"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/migrator"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/migrator/events"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/migrator/fixer"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/saramax"
-	"gorm.io/gorm"
 	"time"
+
+	"github.com/IBM/sarama"
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator"
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator/events"
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator/fixer"
+	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
+	"gorm.io/gorm"
 )
 
 type Consumer[T migrator.Entity] struct {

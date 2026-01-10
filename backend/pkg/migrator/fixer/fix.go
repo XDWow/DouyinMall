@@ -2,7 +2,8 @@ package fixer
 
 import (
 	"context"
-	"github.com/XDWow/ScholarNet/cmd/pkg/migrator"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/migrator"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

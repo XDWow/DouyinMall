@@ -17,5 +17,3 @@ func L() LoggerV1 {
 	lMutex.RUnlock()
 	return g
 }
-
-var GL LoggerV1 = &NopLogger{}

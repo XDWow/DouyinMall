@@ -1,9 +1,9 @@
 package wego
 
 import (
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/ginx"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/grpcx"
-	"github.com/XDWow/DouyinMall/backend/cmd/pkg/saramax"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
+	"github.com/XDWow/DouyinMall/backend/pkg/grpcx"
+	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
 	"github.com/robfig/cron/v3"
 )
 
