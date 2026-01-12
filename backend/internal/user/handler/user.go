@@ -1,4 +1,4 @@
-package main
+package handler
 
 import (
 	"context"
@@ -9,20 +9,17 @@ import (
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
-// UserServiceImpl implements the last service interface defined in the IDL.
-type UserServiceImpl struct {
+type UserServiceServer struct {
 	userService service.UserService
 }
 
-// NewUserServiceImpl 创建 UserServiceImpl 实例
-func NewUserServiceImpl(userService service.UserService) *UserServiceImpl {
-	return &UserServiceImpl{
+func NewUserServiceServer(userService service.UserService) *UserServiceServer {
+	return &UserServiceServer{
 		userService: userService,
 	}
 }
 
-// Register implements the UserServiceImpl interface.
-func (s *UserServiceImpl) Register(ctx context.Context, req *v1.RegisterReq) (resp *v1.RegisterResp, err error) {
+func (s *UserServiceServer) Signup(ctx context.Context, req *v1.SignupReq) (resp *v1.SignupResp, err error) {
 	user := domain.User{
 		Email:    req.Email,
 		Password: req.Password,
@@ -31,62 +28,69 @@ func (s *UserServiceImpl) Register(ctx context.Context, req *v1.RegisterReq) (re
 	if err != nil {
 		return nil, err
 	}
-	return &v1.RegisterResp{
-		UserId: int32(id),
+	return &v1.SignupResp{
+		UserId: id,
 	}, nil
 }
 
-// Login implements the UserServiceImpl interface.
-func (s *UserServiceImpl) Login(ctx context.Context, req *v1.LoginReq) (resp *v1.LoginResp, err error) {
-	user, err := s.userService.Login(ctx, req.Email, req.Password)
+func (s *UserServiceServer) Login(ctx context.Context, req *v1.LoginReq) (resp *v1.LoginResp, err error) {
+	userID, err := s.userService.Login(ctx, req.Email, req.Password)
 	if err != nil {
 		return nil, err
 	}
 	return &v1.LoginResp{
-		UserId:   user.ID,
-		Username: user.UserName,
-		Email:    user.Email,
+		UserId: userID,
 	}, nil
 }
 
-// Logout implements the UserServiceImpl interface.
-func (s *UserServiceImpl) Logout(ctx context.Context, req *emptypb.Empty) (resp *emptypb.Empty, err error) {
-	// 登出逻辑：可以从 context 中获取用户 ID
-	// 这里简单返回空响应，实际业务中可能需要清除 token 等
-	return &emptypb.Empty{}, nil
-}
-
-// Update implements the UserServiceImpl interface.
-func (s *UserServiceImpl) Update(ctx context.Context, req *v1.UpdateUserReq) (resp *emptypb.Empty, err error) {
-	user := domain.User{
-		ID: req.UserId,
-	}
-	// 处理 optional 字段
+func (s *UserServiceServer) UpdateProfile(ctx context.Context, req *v1.UpdateProfileReq) (resp *emptypb.Empty, err error) {
+	user := domain.User{ID: req.UserId}
 	if req.Username != nil {
 		user.UserName = *req.Username
 	}
 	if req.Avatar != nil {
 		user.Avatar = *req.Avatar
 	}
-	// 使用非敏感信息更新，避免更新邮箱等敏感字段
-	err = s.userService.UpdateNonSensitiveInfo(ctx, user)
+	err = s.userService.UpdateProfile(ctx, user)
 	if err != nil {
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
 }
 
-// Delete implements the UserServiceImpl interface.
-func (s *UserServiceImpl) Delete(ctx context.Context, req *v1.DeleteUserReq) (resp *emptypb.Empty, err error) {
-	err = s.userService.Delete(ctx, req.UserId)
+func (s *UserServiceServer) ChangePassword(ctx context.Context, req *v1.ChangePasswordReq) (resp *emptypb.Empty, err error) {
+	err = s.userService.ChangePassword(ctx, req.UserId, req.OldPassword, req.NewPassword)
 	if err != nil {
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
 }
 
-// Query implements the UserServiceImpl interface.
-func (s *UserServiceImpl) Query(ctx context.Context, req *v1.QueryUserReq) (resp *v1.QueryUserResp, err error) {
+func (s *UserServiceServer) ChangeEmail(ctx context.Context, req *v1.ChangeEmailReq) (resp *emptypb.Empty, err error) {
+	err = s.userService.ChangeEmail(ctx, req.UserId, req.Password, req.NewEmail)
+	if err != nil {
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *UserServiceServer) ChangePhone(ctx context.Context, req *v1.ChangePhoneReq) (resp *emptypb.Empty, err error) {
+	err = s.userService.ChangePhone(ctx, req.UserId, req.OldPhone, req.NewPhone)
+	if err != nil {
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *UserServiceServer) Delete(ctx context.Context, req *v1.DeleteUserReq) (resp *emptypb.Empty, err error) {
+	err = s.userService.Delete(ctx, req.UserId, req.Password)
+	if err != nil {
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *UserServiceServer) Query(ctx context.Context, req *v1.QueryUserReq) (resp *v1.QueryUserResp, err error) {
 	user, err := s.userService.Query(ctx, req.UserId)
 	if err != nil {
 		return nil, err

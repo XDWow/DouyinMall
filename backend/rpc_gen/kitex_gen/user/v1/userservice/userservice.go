@@ -17,10 +17,10 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
-	"Register": kitex.NewMethodInfo(
-		registerHandler,
-		newRegisterArgs,
-		newRegisterResult,
+	"Signup": kitex.NewMethodInfo(
+		signupHandler,
+		newSignupArgs,
+		newSignupResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingUnary),
 	),
@@ -31,17 +31,31 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingUnary),
 	),
-	"Logout": kitex.NewMethodInfo(
-		logoutHandler,
-		newLogoutArgs,
-		newLogoutResult,
+	"UpdateProfile": kitex.NewMethodInfo(
+		updateProfileHandler,
+		newUpdateProfileArgs,
+		newUpdateProfileResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingUnary),
 	),
-	"Update": kitex.NewMethodInfo(
-		updateHandler,
-		newUpdateArgs,
-		newUpdateResult,
+	"ChangePassword": kitex.NewMethodInfo(
+		changePasswordHandler,
+		newChangePasswordArgs,
+		newChangePasswordResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingUnary),
+	),
+	"ChangeEmail": kitex.NewMethodInfo(
+		changeEmailHandler,
+		newChangeEmailArgs,
+		newChangeEmailResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingUnary),
+	),
+	"ChangePhone": kitex.NewMethodInfo(
+		changePhoneHandler,
+		newChangePhoneArgs,
+		newChangePhoneResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingUnary),
 	),
@@ -125,52 +139,52 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 	return svcInfo
 }
 
-func registerHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+func signupHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	switch s := arg.(type) {
 	case *streaming.Args:
 		st := s.Stream
-		req := new(v1.RegisterReq)
+		req := new(v1.SignupReq)
 		if err := st.RecvMsg(req); err != nil {
 			return err
 		}
-		resp, err := handler.(userv1.UserService).Register(ctx, req)
+		resp, err := handler.(userv1.UserService).Signup(ctx, req)
 		if err != nil {
 			return err
 		}
 		return st.SendMsg(resp)
-	case *RegisterArgs:
-		success, err := handler.(userv1.UserService).Register(ctx, s.Req)
+	case *SignupArgs:
+		success, err := handler.(userv1.UserService).Signup(ctx, s.Req)
 		if err != nil {
 			return err
 		}
-		realResult := result.(*RegisterResult)
+		realResult := result.(*SignupResult)
 		realResult.Success = success
 		return nil
 	default:
 		return errInvalidMessageType
 	}
 }
-func newRegisterArgs() interface{} {
-	return &RegisterArgs{}
+func newSignupArgs() interface{} {
+	return &SignupArgs{}
 }
 
-func newRegisterResult() interface{} {
-	return &RegisterResult{}
+func newSignupResult() interface{} {
+	return &SignupResult{}
 }
 
-type RegisterArgs struct {
-	Req *v1.RegisterReq
+type SignupArgs struct {
+	Req *v1.SignupReq
 }
 
-func (p *RegisterArgs) Marshal(out []byte) ([]byte, error) {
+func (p *SignupArgs) Marshal(out []byte) ([]byte, error) {
 	if !p.IsSetReq() {
 		return out, nil
 	}
 	return proto.Marshal(p.Req)
 }
 
-func (p *RegisterArgs) Unmarshal(in []byte) error {
-	msg := new(v1.RegisterReq)
+func (p *SignupArgs) Unmarshal(in []byte) error {
+	msg := new(v1.SignupReq)
 	if err := proto.Unmarshal(in, msg); err != nil {
 		return err
 	}
@@ -178,38 +192,38 @@ func (p *RegisterArgs) Unmarshal(in []byte) error {
 	return nil
 }
 
-var RegisterArgs_Req_DEFAULT *v1.RegisterReq
+var SignupArgs_Req_DEFAULT *v1.SignupReq
 
-func (p *RegisterArgs) GetReq() *v1.RegisterReq {
+func (p *SignupArgs) GetReq() *v1.SignupReq {
 	if !p.IsSetReq() {
-		return RegisterArgs_Req_DEFAULT
+		return SignupArgs_Req_DEFAULT
 	}
 	return p.Req
 }
 
-func (p *RegisterArgs) IsSetReq() bool {
+func (p *SignupArgs) IsSetReq() bool {
 	return p.Req != nil
 }
 
-func (p *RegisterArgs) GetFirstArgument() interface{} {
+func (p *SignupArgs) GetFirstArgument() interface{} {
 	return p.Req
 }
 
-type RegisterResult struct {
-	Success *v1.RegisterResp
+type SignupResult struct {
+	Success *v1.SignupResp
 }
 
-var RegisterResult_Success_DEFAULT *v1.RegisterResp
+var SignupResult_Success_DEFAULT *v1.SignupResp
 
-func (p *RegisterResult) Marshal(out []byte) ([]byte, error) {
+func (p *SignupResult) Marshal(out []byte) ([]byte, error) {
 	if !p.IsSetSuccess() {
 		return out, nil
 	}
 	return proto.Marshal(p.Success)
 }
 
-func (p *RegisterResult) Unmarshal(in []byte) error {
-	msg := new(v1.RegisterResp)
+func (p *SignupResult) Unmarshal(in []byte) error {
+	msg := new(v1.SignupResp)
 	if err := proto.Unmarshal(in, msg); err != nil {
 		return err
 	}
@@ -217,22 +231,22 @@ func (p *RegisterResult) Unmarshal(in []byte) error {
 	return nil
 }
 
-func (p *RegisterResult) GetSuccess() *v1.RegisterResp {
+func (p *SignupResult) GetSuccess() *v1.SignupResp {
 	if !p.IsSetSuccess() {
-		return RegisterResult_Success_DEFAULT
+		return SignupResult_Success_DEFAULT
 	}
 	return p.Success
 }
 
-func (p *RegisterResult) SetSuccess(x interface{}) {
-	p.Success = x.(*v1.RegisterResp)
+func (p *SignupResult) SetSuccess(x interface{}) {
+	p.Success = x.(*v1.SignupResp)
 }
 
-func (p *RegisterResult) IsSetSuccess() bool {
+func (p *SignupResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
 
-func (p *RegisterResult) GetResult() interface{} {
+func (p *SignupResult) GetResult() interface{} {
 	return p.Success
 }
 
@@ -347,52 +361,52 @@ func (p *LoginResult) GetResult() interface{} {
 	return p.Success
 }
 
-func logoutHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+func updateProfileHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	switch s := arg.(type) {
 	case *streaming.Args:
 		st := s.Stream
-		req := new(emptypb.Empty)
+		req := new(v1.UpdateProfileReq)
 		if err := st.RecvMsg(req); err != nil {
 			return err
 		}
-		resp, err := handler.(userv1.UserService).Logout(ctx, req)
+		resp, err := handler.(userv1.UserService).UpdateProfile(ctx, req)
 		if err != nil {
 			return err
 		}
 		return st.SendMsg(resp)
-	case *LogoutArgs:
-		success, err := handler.(userv1.UserService).Logout(ctx, s.Req)
+	case *UpdateProfileArgs:
+		success, err := handler.(userv1.UserService).UpdateProfile(ctx, s.Req)
 		if err != nil {
 			return err
 		}
-		realResult := result.(*LogoutResult)
+		realResult := result.(*UpdateProfileResult)
 		realResult.Success = success
 		return nil
 	default:
 		return errInvalidMessageType
 	}
 }
-func newLogoutArgs() interface{} {
-	return &LogoutArgs{}
+func newUpdateProfileArgs() interface{} {
+	return &UpdateProfileArgs{}
 }
 
-func newLogoutResult() interface{} {
-	return &LogoutResult{}
+func newUpdateProfileResult() interface{} {
+	return &UpdateProfileResult{}
 }
 
-type LogoutArgs struct {
-	Req *emptypb.Empty
+type UpdateProfileArgs struct {
+	Req *v1.UpdateProfileReq
 }
 
-func (p *LogoutArgs) Marshal(out []byte) ([]byte, error) {
+func (p *UpdateProfileArgs) Marshal(out []byte) ([]byte, error) {
 	if !p.IsSetReq() {
 		return out, nil
 	}
 	return proto.Marshal(p.Req)
 }
 
-func (p *LogoutArgs) Unmarshal(in []byte) error {
-	msg := new(emptypb.Empty)
+func (p *UpdateProfileArgs) Unmarshal(in []byte) error {
+	msg := new(v1.UpdateProfileReq)
 	if err := proto.Unmarshal(in, msg); err != nil {
 		return err
 	}
@@ -400,37 +414,37 @@ func (p *LogoutArgs) Unmarshal(in []byte) error {
 	return nil
 }
 
-var LogoutArgs_Req_DEFAULT *emptypb.Empty
+var UpdateProfileArgs_Req_DEFAULT *v1.UpdateProfileReq
 
-func (p *LogoutArgs) GetReq() *emptypb.Empty {
+func (p *UpdateProfileArgs) GetReq() *v1.UpdateProfileReq {
 	if !p.IsSetReq() {
-		return LogoutArgs_Req_DEFAULT
+		return UpdateProfileArgs_Req_DEFAULT
 	}
 	return p.Req
 }
 
-func (p *LogoutArgs) IsSetReq() bool {
+func (p *UpdateProfileArgs) IsSetReq() bool {
 	return p.Req != nil
 }
 
-func (p *LogoutArgs) GetFirstArgument() interface{} {
+func (p *UpdateProfileArgs) GetFirstArgument() interface{} {
 	return p.Req
 }
 
-type LogoutResult struct {
+type UpdateProfileResult struct {
 	Success *emptypb.Empty
 }
 
-var LogoutResult_Success_DEFAULT *emptypb.Empty
+var UpdateProfileResult_Success_DEFAULT *emptypb.Empty
 
-func (p *LogoutResult) Marshal(out []byte) ([]byte, error) {
+func (p *UpdateProfileResult) Marshal(out []byte) ([]byte, error) {
 	if !p.IsSetSuccess() {
 		return out, nil
 	}
 	return proto.Marshal(p.Success)
 }
 
-func (p *LogoutResult) Unmarshal(in []byte) error {
+func (p *UpdateProfileResult) Unmarshal(in []byte) error {
 	msg := new(emptypb.Empty)
 	if err := proto.Unmarshal(in, msg); err != nil {
 		return err
@@ -439,71 +453,71 @@ func (p *LogoutResult) Unmarshal(in []byte) error {
 	return nil
 }
 
-func (p *LogoutResult) GetSuccess() *emptypb.Empty {
+func (p *UpdateProfileResult) GetSuccess() *emptypb.Empty {
 	if !p.IsSetSuccess() {
-		return LogoutResult_Success_DEFAULT
+		return UpdateProfileResult_Success_DEFAULT
 	}
 	return p.Success
 }
 
-func (p *LogoutResult) SetSuccess(x interface{}) {
+func (p *UpdateProfileResult) SetSuccess(x interface{}) {
 	p.Success = x.(*emptypb.Empty)
 }
 
-func (p *LogoutResult) IsSetSuccess() bool {
+func (p *UpdateProfileResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
 
-func (p *LogoutResult) GetResult() interface{} {
+func (p *UpdateProfileResult) GetResult() interface{} {
 	return p.Success
 }
 
-func updateHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+func changePasswordHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	switch s := arg.(type) {
 	case *streaming.Args:
 		st := s.Stream
-		req := new(v1.UpdateUserReq)
+		req := new(v1.ChangePasswordReq)
 		if err := st.RecvMsg(req); err != nil {
 			return err
 		}
-		resp, err := handler.(userv1.UserService).Update(ctx, req)
+		resp, err := handler.(userv1.UserService).ChangePassword(ctx, req)
 		if err != nil {
 			return err
 		}
 		return st.SendMsg(resp)
-	case *UpdateArgs:
-		success, err := handler.(userv1.UserService).Update(ctx, s.Req)
+	case *ChangePasswordArgs:
+		success, err := handler.(userv1.UserService).ChangePassword(ctx, s.Req)
 		if err != nil {
 			return err
 		}
-		realResult := result.(*UpdateResult)
+		realResult := result.(*ChangePasswordResult)
 		realResult.Success = success
 		return nil
 	default:
 		return errInvalidMessageType
 	}
 }
-func newUpdateArgs() interface{} {
-	return &UpdateArgs{}
+func newChangePasswordArgs() interface{} {
+	return &ChangePasswordArgs{}
 }
 
-func newUpdateResult() interface{} {
-	return &UpdateResult{}
+func newChangePasswordResult() interface{} {
+	return &ChangePasswordResult{}
 }
 
-type UpdateArgs struct {
-	Req *v1.UpdateUserReq
+type ChangePasswordArgs struct {
+	Req *v1.ChangePasswordReq
 }
 
-func (p *UpdateArgs) Marshal(out []byte) ([]byte, error) {
+func (p *ChangePasswordArgs) Marshal(out []byte) ([]byte, error) {
 	if !p.IsSetReq() {
 		return out, nil
 	}
 	return proto.Marshal(p.Req)
 }
 
-func (p *UpdateArgs) Unmarshal(in []byte) error {
-	msg := new(v1.UpdateUserReq)
+func (p *ChangePasswordArgs) Unmarshal(in []byte) error {
+	msg := new(v1.ChangePasswordReq)
 	if err := proto.Unmarshal(in, msg); err != nil {
 		return err
 	}
@@ -511,37 +525,37 @@ func (p *UpdateArgs) Unmarshal(in []byte) error {
 	return nil
 }
 
-var UpdateArgs_Req_DEFAULT *v1.UpdateUserReq
+var ChangePasswordArgs_Req_DEFAULT *v1.ChangePasswordReq
 
-func (p *UpdateArgs) GetReq() *v1.UpdateUserReq {
+func (p *ChangePasswordArgs) GetReq() *v1.ChangePasswordReq {
 	if !p.IsSetReq() {
-		return UpdateArgs_Req_DEFAULT
+		return ChangePasswordArgs_Req_DEFAULT
 	}
 	return p.Req
 }
 
-func (p *UpdateArgs) IsSetReq() bool {
+func (p *ChangePasswordArgs) IsSetReq() bool {
 	return p.Req != nil
 }
 
-func (p *UpdateArgs) GetFirstArgument() interface{} {
+func (p *ChangePasswordArgs) GetFirstArgument() interface{} {
 	return p.Req
 }
 
-type UpdateResult struct {
+type ChangePasswordResult struct {
 	Success *emptypb.Empty
 }
 
-var UpdateResult_Success_DEFAULT *emptypb.Empty
+var ChangePasswordResult_Success_DEFAULT *emptypb.Empty
 
-func (p *UpdateResult) Marshal(out []byte) ([]byte, error) {
+func (p *ChangePasswordResult) Marshal(out []byte) ([]byte, error) {
 	if !p.IsSetSuccess() {
 		return out, nil
 	}
 	return proto.Marshal(p.Success)
 }
 
-func (p *UpdateResult) Unmarshal(in []byte) error {
+func (p *ChangePasswordResult) Unmarshal(in []byte) error {
 	msg := new(emptypb.Empty)
 	if err := proto.Unmarshal(in, msg); err != nil {
 		return err
@@ -550,22 +564,244 @@ func (p *UpdateResult) Unmarshal(in []byte) error {
 	return nil
 }
 
-func (p *UpdateResult) GetSuccess() *emptypb.Empty {
+func (p *ChangePasswordResult) GetSuccess() *emptypb.Empty {
 	if !p.IsSetSuccess() {
-		return UpdateResult_Success_DEFAULT
+		return ChangePasswordResult_Success_DEFAULT
 	}
 	return p.Success
 }
 
-func (p *UpdateResult) SetSuccess(x interface{}) {
+func (p *ChangePasswordResult) SetSuccess(x interface{}) {
 	p.Success = x.(*emptypb.Empty)
 }
 
-func (p *UpdateResult) IsSetSuccess() bool {
+func (p *ChangePasswordResult) IsSetSuccess() bool {
 	return p.Success != nil
 }
 
-func (p *UpdateResult) GetResult() interface{} {
+func (p *ChangePasswordResult) GetResult() interface{} {
+	return p.Success
+}
+
+func changeEmailHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	switch s := arg.(type) {
+	case *streaming.Args:
+		st := s.Stream
+		req := new(v1.ChangeEmailReq)
+		if err := st.RecvMsg(req); err != nil {
+			return err
+		}
+		resp, err := handler.(userv1.UserService).ChangeEmail(ctx, req)
+		if err != nil {
+			return err
+		}
+		return st.SendMsg(resp)
+	case *ChangeEmailArgs:
+		success, err := handler.(userv1.UserService).ChangeEmail(ctx, s.Req)
+		if err != nil {
+			return err
+		}
+		realResult := result.(*ChangeEmailResult)
+		realResult.Success = success
+		return nil
+	default:
+		return errInvalidMessageType
+	}
+}
+func newChangeEmailArgs() interface{} {
+	return &ChangeEmailArgs{}
+}
+
+func newChangeEmailResult() interface{} {
+	return &ChangeEmailResult{}
+}
+
+type ChangeEmailArgs struct {
+	Req *v1.ChangeEmailReq
+}
+
+func (p *ChangeEmailArgs) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetReq() {
+		return out, nil
+	}
+	return proto.Marshal(p.Req)
+}
+
+func (p *ChangeEmailArgs) Unmarshal(in []byte) error {
+	msg := new(v1.ChangeEmailReq)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Req = msg
+	return nil
+}
+
+var ChangeEmailArgs_Req_DEFAULT *v1.ChangeEmailReq
+
+func (p *ChangeEmailArgs) GetReq() *v1.ChangeEmailReq {
+	if !p.IsSetReq() {
+		return ChangeEmailArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+func (p *ChangeEmailArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChangeEmailArgs) GetFirstArgument() interface{} {
+	return p.Req
+}
+
+type ChangeEmailResult struct {
+	Success *emptypb.Empty
+}
+
+var ChangeEmailResult_Success_DEFAULT *emptypb.Empty
+
+func (p *ChangeEmailResult) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetSuccess() {
+		return out, nil
+	}
+	return proto.Marshal(p.Success)
+}
+
+func (p *ChangeEmailResult) Unmarshal(in []byte) error {
+	msg := new(emptypb.Empty)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Success = msg
+	return nil
+}
+
+func (p *ChangeEmailResult) GetSuccess() *emptypb.Empty {
+	if !p.IsSetSuccess() {
+		return ChangeEmailResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+func (p *ChangeEmailResult) SetSuccess(x interface{}) {
+	p.Success = x.(*emptypb.Empty)
+}
+
+func (p *ChangeEmailResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChangeEmailResult) GetResult() interface{} {
+	return p.Success
+}
+
+func changePhoneHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	switch s := arg.(type) {
+	case *streaming.Args:
+		st := s.Stream
+		req := new(v1.ChangePhoneReq)
+		if err := st.RecvMsg(req); err != nil {
+			return err
+		}
+		resp, err := handler.(userv1.UserService).ChangePhone(ctx, req)
+		if err != nil {
+			return err
+		}
+		return st.SendMsg(resp)
+	case *ChangePhoneArgs:
+		success, err := handler.(userv1.UserService).ChangePhone(ctx, s.Req)
+		if err != nil {
+			return err
+		}
+		realResult := result.(*ChangePhoneResult)
+		realResult.Success = success
+		return nil
+	default:
+		return errInvalidMessageType
+	}
+}
+func newChangePhoneArgs() interface{} {
+	return &ChangePhoneArgs{}
+}
+
+func newChangePhoneResult() interface{} {
+	return &ChangePhoneResult{}
+}
+
+type ChangePhoneArgs struct {
+	Req *v1.ChangePhoneReq
+}
+
+func (p *ChangePhoneArgs) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetReq() {
+		return out, nil
+	}
+	return proto.Marshal(p.Req)
+}
+
+func (p *ChangePhoneArgs) Unmarshal(in []byte) error {
+	msg := new(v1.ChangePhoneReq)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Req = msg
+	return nil
+}
+
+var ChangePhoneArgs_Req_DEFAULT *v1.ChangePhoneReq
+
+func (p *ChangePhoneArgs) GetReq() *v1.ChangePhoneReq {
+	if !p.IsSetReq() {
+		return ChangePhoneArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+func (p *ChangePhoneArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChangePhoneArgs) GetFirstArgument() interface{} {
+	return p.Req
+}
+
+type ChangePhoneResult struct {
+	Success *emptypb.Empty
+}
+
+var ChangePhoneResult_Success_DEFAULT *emptypb.Empty
+
+func (p *ChangePhoneResult) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetSuccess() {
+		return out, nil
+	}
+	return proto.Marshal(p.Success)
+}
+
+func (p *ChangePhoneResult) Unmarshal(in []byte) error {
+	msg := new(emptypb.Empty)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Success = msg
+	return nil
+}
+
+func (p *ChangePhoneResult) GetSuccess() *emptypb.Empty {
+	if !p.IsSetSuccess() {
+		return ChangePhoneResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+func (p *ChangePhoneResult) SetSuccess(x interface{}) {
+	p.Success = x.(*emptypb.Empty)
+}
+
+func (p *ChangePhoneResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChangePhoneResult) GetResult() interface{} {
 	return p.Success
 }
 
@@ -801,11 +1037,11 @@ func newServiceClient(c client.Client) *kClient {
 	}
 }
 
-func (p *kClient) Register(ctx context.Context, Req *v1.RegisterReq) (r *v1.RegisterResp, err error) {
-	var _args RegisterArgs
+func (p *kClient) Signup(ctx context.Context, Req *v1.SignupReq) (r *v1.SignupResp, err error) {
+	var _args SignupArgs
 	_args.Req = Req
-	var _result RegisterResult
-	if err = p.c.Call(ctx, "Register", &_args, &_result); err != nil {
+	var _result SignupResult
+	if err = p.c.Call(ctx, "Signup", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil
@@ -821,21 +1057,41 @@ func (p *kClient) Login(ctx context.Context, Req *v1.LoginReq) (r *v1.LoginResp,
 	return _result.GetSuccess(), nil
 }
 
-func (p *kClient) Logout(ctx context.Context, Req *emptypb.Empty) (r *emptypb.Empty, err error) {
-	var _args LogoutArgs
+func (p *kClient) UpdateProfile(ctx context.Context, Req *v1.UpdateProfileReq) (r *emptypb.Empty, err error) {
+	var _args UpdateProfileArgs
 	_args.Req = Req
-	var _result LogoutResult
-	if err = p.c.Call(ctx, "Logout", &_args, &_result); err != nil {
+	var _result UpdateProfileResult
+	if err = p.c.Call(ctx, "UpdateProfile", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil
 }
 
-func (p *kClient) Update(ctx context.Context, Req *v1.UpdateUserReq) (r *emptypb.Empty, err error) {
-	var _args UpdateArgs
+func (p *kClient) ChangePassword(ctx context.Context, Req *v1.ChangePasswordReq) (r *emptypb.Empty, err error) {
+	var _args ChangePasswordArgs
 	_args.Req = Req
-	var _result UpdateResult
-	if err = p.c.Call(ctx, "Update", &_args, &_result); err != nil {
+	var _result ChangePasswordResult
+	if err = p.c.Call(ctx, "ChangePassword", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ChangeEmail(ctx context.Context, Req *v1.ChangeEmailReq) (r *emptypb.Empty, err error) {
+	var _args ChangeEmailArgs
+	_args.Req = Req
+	var _result ChangeEmailResult
+	if err = p.c.Call(ctx, "ChangeEmail", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ChangePhone(ctx context.Context, Req *v1.ChangePhoneReq) (r *emptypb.Empty, err error) {
+	var _args ChangePhoneArgs
+	_args.Req = Req
+	var _result ChangePhoneResult
+	if err = p.c.Call(ctx, "ChangePhone", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

@@ -7,10 +7,17 @@ import (
 )
 
 type UserCache interface {
+	// 暂时为空，后续按需添加缓存方法
 }
 
 type RedisUserCache struct {
-	cmd redis.Cmdable
-	// 过期时间
+	cmd        redis.Cmdable
 	expiration time.Duration
+}
+
+func NewRedisUserCache(cmd redis.Cmdable) UserCache {
+	return &RedisUserCache{
+		cmd:        cmd,
+		expiration: 15 * time.Minute,
+	}
 }

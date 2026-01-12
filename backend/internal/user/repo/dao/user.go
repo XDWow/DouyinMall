@@ -2,20 +2,27 @@ package dao
 
 import (
 	"context"
+	"database/sql"
 	"time"
+	"errors"
 
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
 
 // ErrDataNotFound 通用的数据没找到
 var ErrDataNotFound = gorm.ErrRecordNotFound
+// 数据库错误：唯一索引冲突 转化为 业务错误
+var ErrUserDuplicate = errors.New("用户邮箱或者手机号冲突")
+
 
 type UserDAO interface {
-	Insert(ctx context.Context, u User) error
-	UpdateNonZeroFields(ctx context.Context, u User) error
+	Insert(ctx context.Context, u User) (int64, error)
+	Update(ctx context.Context, u User) error
 	FindByPhone(ctx context.Context, phone string) (User, error)
 	FindByEmail(ctx context.Context, email string) (User, error)
 	FindById(ctx context.Context, id int64) (User, error)
+	Delete(ctx context.Context, id int64) error
 }
 
 type GORMUserDAO struct {
@@ -31,24 +38,29 @@ func NewGORMUserDAO(db *gorm.DB) UserDAO {
 func (d *GORMUserDAO) Insert(ctx context.Context, u User) (int64, error) {
 	err := d.db.WithContext(ctx).Create(&u).Error
 	if err != nil {
+		if me, ok := err.(*mysql.MySQLError); ok {
+			const uniqueIndexErrNo uint16 = 1062
+			if me.Number == uniqueIndexErrNo {
+				return 0, ErrUserDuplicate
+			}
+		}
 		return 0, err
 	}
-	return int64(u.ID), nil
+	return u.ID, nil
 }
 
-func (d *GORMUserDAO) UpdateNonZeroFields(ctx context.Context, u User) error {
+func (d *GORMUserDAO) Update(ctx context.Context, u User) error {
 	// 使用 Updates 方法，只更新非零值字段
 	return d.db.WithContext(ctx).Model(&User{}).
 		Where("id = ?", u.ID).
 		Updates(map[string]interface{}{
+			"updated_at": time.Now(),
 			"user_name": u.UserName,
+			"email":     u.Email,
+			"phone":     u.Phone,
 			"avatar":    u.Avatar,
-			// 如果需要更新敏感字段，可以在这里添加
+			"password":  u.Password,
 		}).Error
-}
-
-func (d *GORMUserDAO) UpdateWithMap(ctx context.Context, id uint, updates map[string]interface{}) error {
-	return d.db.WithContext(ctx).Model(&User{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func (d *GORMUserDAO) FindById(ctx context.Context, id int64) (User, error) {
@@ -71,7 +83,9 @@ func (d *GORMUserDAO) FindByPhone(ctx context.Context, phone string) (User, erro
 
 // 软删除
 func (d *GORMUserDAO) Delete(ctx context.Context, id int64) error {
-	return d.db.WithContext(ctx).Delete(&User{}, id).Error
+	return d.db.WithContext(ctx).Model(&User{}).
+		Where("id = ?", id).
+		Update("deleted_at", time.Now()).Error
 }
 
 // 持久化模型
@@ -84,8 +98,8 @@ type User struct {
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 
 	UserName string
-	Email    string `gorm:"uniqueIndex"`
-	Password string `gorm:"type:varchar(255);not null"`
-	Phone    string `gorm:"type:varchar(20);not null"`
+	Email    sql.NullString `gorm:"uniqueIndex"`
+	Password string         `gorm:"type:varchar(255)"`
+	Phone    sql.NullString `gorm:"type:varchar(20);uniqueIndex"`
 	Avatar   string
 }

@@ -9,42 +9,42 @@ import (
 	"github.com/cloudwego/prutal"
 )
 
-type RegisterReq struct {
+type SignupReq struct {
 	Email    string `protobuf:"bytes,1,opt,name=email" json:"email,omitempty"`
 	Password string `protobuf:"bytes,2,opt,name=password" json:"password,omitempty"`
 }
 
-func (x *RegisterReq) Reset() { *x = RegisterReq{} }
+func (x *SignupReq) Reset() { *x = SignupReq{} }
 
-func (x *RegisterReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+func (x *SignupReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
 
-func (x *RegisterReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+func (x *SignupReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
 
-func (x *RegisterReq) GetEmail() string {
+func (x *SignupReq) GetEmail() string {
 	if x != nil {
 		return x.Email
 	}
 	return ""
 }
 
-func (x *RegisterReq) GetPassword() string {
+func (x *SignupReq) GetPassword() string {
 	if x != nil {
 		return x.Password
 	}
 	return ""
 }
 
-type RegisterResp struct {
-	UserId int32 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+type SignupResp struct {
+	UserId int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
 }
 
-func (x *RegisterResp) Reset() { *x = RegisterResp{} }
+func (x *SignupResp) Reset() { *x = SignupResp{} }
 
-func (x *RegisterResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+func (x *SignupResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
 
-func (x *RegisterResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+func (x *SignupResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
 
-func (x *RegisterResp) GetUserId() int32 {
+func (x *SignupResp) GetUserId() int64 {
 	if x != nil {
 		return x.UserId
 	}
@@ -77,9 +77,7 @@ func (x *LoginReq) GetPassword() string {
 }
 
 type LoginResp struct {
-	UserId   int64  `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	Username string `protobuf:"bytes,2,opt,name=username" json:"username,omitempty"`
-	Email    string `protobuf:"bytes,3,opt,name=email" json:"email,omitempty"`
+	UserId int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
 }
 
 func (x *LoginResp) Reset() { *x = LoginResp{} }
@@ -95,63 +93,141 @@ func (x *LoginResp) GetUserId() int64 {
 	return 0
 }
 
-func (x *LoginResp) GetUsername() string {
-	if x != nil {
-		return x.Username
-	}
-	return ""
-}
-
-func (x *LoginResp) GetEmail() string {
-	if x != nil {
-		return x.Email
-	}
-	return ""
-}
-
-type UpdateUserReq struct {
+type UpdateProfileReq struct {
 	UserId   int64   `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
 	Username *string `protobuf:"bytes,2,opt,name=username" json:"username,omitempty"`
 	Avatar   *string `protobuf:"bytes,3,opt,name=avatar" json:"avatar,omitempty"`
-	Email    *string `protobuf:"bytes,4,opt,name=email" json:"email,omitempty"`
 }
 
-func (x *UpdateUserReq) Reset() { *x = UpdateUserReq{} }
+func (x *UpdateProfileReq) Reset() { *x = UpdateProfileReq{} }
 
-func (x *UpdateUserReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+func (x *UpdateProfileReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
 
-func (x *UpdateUserReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+func (x *UpdateProfileReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
 
-func (x *UpdateUserReq) GetUserId() int64 {
+func (x *UpdateProfileReq) GetUserId() int64 {
 	if x != nil {
 		return x.UserId
 	}
 	return 0
 }
 
-func (x *UpdateUserReq) GetUsername() string {
+func (x *UpdateProfileReq) GetUsername() string {
 	if x != nil && x.Username != nil {
 		return *x.Username
 	}
 	return ""
 }
 
-func (x *UpdateUserReq) GetAvatar() string {
+func (x *UpdateProfileReq) GetAvatar() string {
 	if x != nil && x.Avatar != nil {
 		return *x.Avatar
 	}
 	return ""
 }
 
-func (x *UpdateUserReq) GetEmail() string {
-	if x != nil && x.Email != nil {
-		return *x.Email
+type ChangePasswordReq struct {
+	UserId      int64  `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	OldPassword string `protobuf:"bytes,2,opt,name=old_password" json:"old_password,omitempty"`
+	NewPassword string `protobuf:"bytes,3,opt,name=new_password" json:"new_password,omitempty"`
+}
+
+func (x *ChangePasswordReq) Reset() { *x = ChangePasswordReq{} }
+
+func (x *ChangePasswordReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *ChangePasswordReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *ChangePasswordReq) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *ChangePasswordReq) GetOldPassword() string {
+	if x != nil {
+		return x.OldPassword
+	}
+	return ""
+}
+
+func (x *ChangePasswordReq) GetNewPassword() string {
+	if x != nil {
+		return x.NewPassword
+	}
+	return ""
+}
+
+type ChangeEmailReq struct {
+	UserId   int64  `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	Password string `protobuf:"bytes,2,opt,name=password" json:"password,omitempty"` // 验证密码
+	NewEmail string `protobuf:"bytes,3,opt,name=new_email" json:"new_email,omitempty"`
+}
+
+func (x *ChangeEmailReq) Reset() { *x = ChangeEmailReq{} }
+
+func (x *ChangeEmailReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *ChangeEmailReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *ChangeEmailReq) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *ChangeEmailReq) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *ChangeEmailReq) GetNewEmail() string {
+	if x != nil {
+		return x.NewEmail
+	}
+	return ""
+}
+
+type ChangePhoneReq struct {
+	UserId   int64  `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	OldPhone string `protobuf:"bytes,2,opt,name=old_phone" json:"old_phone,omitempty"`
+	NewPhone string `protobuf:"bytes,3,opt,name=new_phone" json:"new_phone,omitempty"`
+}
+
+func (x *ChangePhoneReq) Reset() { *x = ChangePhoneReq{} }
+
+func (x *ChangePhoneReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *ChangePhoneReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *ChangePhoneReq) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *ChangePhoneReq) GetOldPhone() string {
+	if x != nil {
+		return x.OldPhone
+	}
+	return ""
+}
+
+func (x *ChangePhoneReq) GetNewPhone() string {
+	if x != nil {
+		return x.NewPhone
 	}
 	return ""
 }
 
 type DeleteUserReq struct {
-	UserId int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	UserId   int64  `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	Password string `protobuf:"bytes,2,opt,name=password" json:"password,omitempty"` // 注销账号需要验证密码
 }
 
 func (x *DeleteUserReq) Reset() { *x = DeleteUserReq{} }
@@ -165,6 +241,13 @@ func (x *DeleteUserReq) GetUserId() int64 {
 		return x.UserId
 	}
 	return 0
+}
+
+func (x *DeleteUserReq) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
 }
 
 type QueryUserReq struct {
@@ -243,10 +326,12 @@ func (x *User) GetAvatar() string {
 }
 
 type UserService interface {
-	Register(ctx context.Context, req *RegisterReq) (res *RegisterResp, err error)
+	Signup(ctx context.Context, req *SignupReq) (res *SignupResp, err error)
 	Login(ctx context.Context, req *LoginReq) (res *LoginResp, err error)
-	Logout(ctx context.Context, req *emptypb.Empty) (res *emptypb.Empty, err error)
-	Update(ctx context.Context, req *UpdateUserReq) (res *emptypb.Empty, err error)
+	UpdateProfile(ctx context.Context, req *UpdateProfileReq) (res *emptypb.Empty, err error)
+	ChangePassword(ctx context.Context, req *ChangePasswordReq) (res *emptypb.Empty, err error)
+	ChangeEmail(ctx context.Context, req *ChangeEmailReq) (res *emptypb.Empty, err error)
+	ChangePhone(ctx context.Context, req *ChangePhoneReq) (res *emptypb.Empty, err error)
 	Delete(ctx context.Context, req *DeleteUserReq) (res *emptypb.Empty, err error)
 	Query(ctx context.Context, req *QueryUserReq) (res *QueryUserResp, err error)
 }

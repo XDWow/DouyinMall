@@ -1,0 +1,117 @@
+services:
+  # ==================== 基础设施 ====================
+  mysql:
+    image: mysql:8.0
+    container_name: douyinmall-mysql
+    restart: unless-stopped
+    ports:
+      - "13306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: douyinmall
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    networks:
+      - douyinmall-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: douyinmall-redis
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - douyinmall-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  etcd:
+    image: bitnami/etcd:3.5
+    container_name: douyinmall-etcd
+    restart: unless-stopped
+    ports:
+      - "12379:2379"
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    volumes:
+      - etcd-data:/bitnami/etcd
+    networks:
+      - douyinmall-net
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== 微服务 ====================
+  # UserService
+  user-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/user/Dockerfile
+    container_name: user-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - DB_DSN=root:root@tcp(mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local
+      - REDIS_ADDR=redis:6379
+      - ETCD_ENDPOINTS=etcd:2379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+    networks:
+      - douyinmall-net
+
+  # 未来可以添加其他微服务
+  # product-service:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: cmd/product/Dockerfile
+  #   container_name: product-service
+  #   ports:
+  #     - "8082:8082"
+  #   environment:
+  #     - DB_DSN=root:root@tcp(mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local
+  #     - REDIS_ADDR=redis:6379
+  #     - ETCD_ENDPOINTS=etcd:2379
+  #   depends_on:
+  #     - mysql
+  #     - redis
+  #     - etcd
+  #   networks:
+  #     - douyinmall-net
+
+volumes:
+  mysql-data:
+    driver: local
+  redis-data:
+    driver: local
+  etcd-data:
+    driver: local
+
+networks:
+  douyinmall-net:
+    driver: bridge
+

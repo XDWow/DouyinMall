@@ -1,8 +1,6 @@
 package BloomFilter
 
 import (
-	"fmt"
-	"hash/fnv"
 	"math"
 )
 

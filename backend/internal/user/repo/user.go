@@ -2,12 +2,14 @@ package repo
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/XDWow/DouyinMall/backend/internal/user/domain"
-	"github.com/XDWow/DouyinMall/backend/internal/user/repo/dao"
 	"github.com/XDWow/DouyinMall/backend/internal/user/repo/cache"
+	"github.com/XDWow/DouyinMall/backend/internal/user/repo/dao"
 )
 
+var ErrUserDuplicateEmail = dao.ErrUserDuplicate
 var ErrUserNorFound = dao.ErrDataNotFound
 
 type UserRepository interface {
@@ -27,7 +29,7 @@ type CachedUserRepository struct {
 
 func NewUserRepository(d dao.UserDAO, c cache.UserCache) UserRepository {
 	return &CachedUserRepository{
-		dao: d,
+		dao:   d,
 		cache: c,
 	}
 }
@@ -61,26 +63,23 @@ func (r *CachedUserRepository) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *CachedUserRepository) domainToEntity(u domain.User) dao.User {
-	entity := dao.User{
+	return dao.User{
+		ID:       u.ID,
 		UserName: u.UserName,
-		Email:    u.Email,
+		Email:    sql.NullString{String: u.Email, Valid: u.Email != ""},
 		Password: u.Password,
-		Phone:    u.Phone,
+		Phone:    sql.NullString{String: u.Phone, Valid: u.Phone != ""},
 		Avatar:   u.Avatar,
 	}
-	if u.ID > 0 {
-		entity.ID = uint(u.ID)
-	}
-	return entity
 }
 
 func (r *CachedUserRepository) entityToDomain(u dao.User) domain.User {
 	return domain.User{
-		ID:       int64(u.ID),
+		ID:       u.ID,
 		UserName: u.UserName,
-		Email:    u.Email,
+		Email:    u.Email.String,
 		Password: u.Password,
-		Phone:    u.Phone,
+		Phone:    u.Phone.String,
 		Avatar:   u.Avatar,
 	}
 }

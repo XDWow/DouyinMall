@@ -10,7 +10,7 @@ import (
 )
 
 // 受制于泛型，我们这里只能使用包变量，我深恶痛绝的包变量
-var log logger.LoggerV1 = logger.NewNoOpLogger()
+var log logger.LoggerV1 = logger.NewZapLogger(nil)
 
 // 这个东西，放到你们的 ginx 插件库里面去
 // 技术含量不是很高，但是绝对有技巧

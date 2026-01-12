@@ -8,9 +8,11 @@ import "google/protobuf/empty.proto";
 service UserService {
     rpc Signup(SignupReq) returns (SignupResp) {}
     rpc Login(LoginReq) returns (LoginResp) {}
-    rpc Logout(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 
-    rpc Update(UpdateUserReq) returns (google.protobuf.Empty) {}
+    rpc UpdateProfile(UpdateProfileReq) returns (google.protobuf.Empty) {}
+    rpc ChangePassword(ChangePasswordReq) returns (google.protobuf.Empty) {}
+    rpc ChangeEmail(ChangeEmailReq) returns (google.protobuf.Empty) {}
+    rpc ChangePhone(ChangePhoneReq) returns (google.protobuf.Empty) {}
     rpc Delete(DeleteUserReq) returns (google.protobuf.Empty) {}
     rpc Query(QueryUserReq) returns (QueryUserResp) {}
 }
@@ -25,26 +27,41 @@ message SignupResp {
 }
 
 message LoginReq {
-    string email= 1;
+    string email = 1;
     string password = 2;
 }
 
 message LoginResp {
     int64 user_id = 1;
-    string username = 2;
-    string email = 3;
 }
 
-message UpdateUserReq {
+message UpdateProfileReq {
     int64 user_id = 1;
-
     optional string username = 2;
     optional string avatar = 3;
-    optional string email = 4;
+}
+
+message ChangePasswordReq {
+    int64 user_id = 1;
+    string old_password = 2;
+    string new_password = 3;
+}
+
+message ChangeEmailReq {
+    int64 user_id = 1;
+    string password = 2;       // 验证密码
+    string new_email = 3;
+}
+
+message ChangePhoneReq {
+    int64 user_id = 1;
+    string old_phone = 2;       
+    string new_phone = 3;
 }
 
 message DeleteUserReq {
     int64 user_id = 1;
+    string password = 2;       // 注销账号需要验证密码
 }
 
 message QueryUserReq {

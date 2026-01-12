@@ -12,10 +12,12 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
-	Register(ctx context.Context, Req *v1.RegisterReq, callOptions ...callopt.Option) (r *v1.RegisterResp, err error)
+	Signup(ctx context.Context, Req *v1.SignupReq, callOptions ...callopt.Option) (r *v1.SignupResp, err error)
 	Login(ctx context.Context, Req *v1.LoginReq, callOptions ...callopt.Option) (r *v1.LoginResp, err error)
-	Logout(ctx context.Context, Req *emptypb.Empty, callOptions ...callopt.Option) (r *emptypb.Empty, err error)
-	Update(ctx context.Context, Req *v1.UpdateUserReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error)
+	UpdateProfile(ctx context.Context, Req *v1.UpdateProfileReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error)
+	ChangePassword(ctx context.Context, Req *v1.ChangePasswordReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error)
+	ChangeEmail(ctx context.Context, Req *v1.ChangeEmailReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error)
+	ChangePhone(ctx context.Context, Req *v1.ChangePhoneReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error)
 	Delete(ctx context.Context, Req *v1.DeleteUserReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error)
 	Query(ctx context.Context, Req *v1.QueryUserReq, callOptions ...callopt.Option) (r *v1.QueryUserResp, err error)
 }
@@ -49,9 +51,9 @@ type kUserServiceClient struct {
 	*kClient
 }
 
-func (p *kUserServiceClient) Register(ctx context.Context, Req *v1.RegisterReq, callOptions ...callopt.Option) (r *v1.RegisterResp, err error) {
+func (p *kUserServiceClient) Signup(ctx context.Context, Req *v1.SignupReq, callOptions ...callopt.Option) (r *v1.SignupResp, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.Register(ctx, Req)
+	return p.kClient.Signup(ctx, Req)
 }
 
 func (p *kUserServiceClient) Login(ctx context.Context, Req *v1.LoginReq, callOptions ...callopt.Option) (r *v1.LoginResp, err error) {
@@ -59,14 +61,24 @@ func (p *kUserServiceClient) Login(ctx context.Context, Req *v1.LoginReq, callOp
 	return p.kClient.Login(ctx, Req)
 }
 
-func (p *kUserServiceClient) Logout(ctx context.Context, Req *emptypb.Empty, callOptions ...callopt.Option) (r *emptypb.Empty, err error) {
+func (p *kUserServiceClient) UpdateProfile(ctx context.Context, Req *v1.UpdateProfileReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.Logout(ctx, Req)
+	return p.kClient.UpdateProfile(ctx, Req)
 }
 
-func (p *kUserServiceClient) Update(ctx context.Context, Req *v1.UpdateUserReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error) {
+func (p *kUserServiceClient) ChangePassword(ctx context.Context, Req *v1.ChangePasswordReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.Update(ctx, Req)
+	return p.kClient.ChangePassword(ctx, Req)
+}
+
+func (p *kUserServiceClient) ChangeEmail(ctx context.Context, Req *v1.ChangeEmailReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ChangeEmail(ctx, Req)
+}
+
+func (p *kUserServiceClient) ChangePhone(ctx context.Context, Req *v1.ChangePhoneReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ChangePhone(ctx, Req)
 }
 
 func (p *kUserServiceClient) Delete(ctx context.Context, Req *v1.DeleteUserReq, callOptions ...callopt.Option) (r *emptypb.Empty, err error) {
