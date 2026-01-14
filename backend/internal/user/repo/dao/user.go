@@ -3,8 +3,8 @@ package dao
 import (
 	"context"
 	"database/sql"
-	"time"
 	"errors"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
@@ -12,9 +12,9 @@ import (
 
 // ErrDataNotFound 通用的数据没找到
 var ErrDataNotFound = gorm.ErrRecordNotFound
+
 // 数据库错误：唯一索引冲突 转化为 业务错误
 var ErrUserDuplicate = errors.New("用户邮箱或者手机号冲突")
-
 
 type UserDAO interface {
 	Insert(ctx context.Context, u User) (int64, error)
@@ -54,12 +54,11 @@ func (d *GORMUserDAO) Update(ctx context.Context, u User) error {
 	return d.db.WithContext(ctx).Model(&User{}).
 		Where("id = ?", u.ID).
 		Updates(map[string]interface{}{
-			"updated_at": time.Now(),
-			"user_name": u.UserName,
-			"email":     u.Email,
-			"phone":     u.Phone,
-			"avatar":    u.Avatar,
-			"password":  u.Password,
+			"user_name":  u.UserName,
+			"email":      u.Email,
+			"phone":      u.Phone,
+			"avatar":     u.Avatar,
+			"password":   u.Password,
 		}).Error
 }
 
@@ -90,7 +89,8 @@ func (d *GORMUserDAO) Delete(ctx context.Context, id int64) error {
 
 // 持久化模型
 type User struct {
-	ID        int64 `gorm:"primaryKey;autoIncrement"`
+	ID int64 `gorm:"primaryKey;autoIncrement"`
+	// 这两个时间字段，gorm 能识别的，更新插入操作会自动更新这两字段
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	// 软删除字段，GORM 会自动处理 gorm.DeletedAt 类型

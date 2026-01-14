@@ -1,0 +1,15 @@
+db:
+  dsn: "root:root@tcp(localhost:13316)/DouyinMall"
+
+redis:
+  addr: "localhost:6379"
+
+etcd:
+  endpoints:
+    - "localhost:12379"
+
+grpc:
+  server:
+    name: product.service
+    port: 8092
+    etcdTTL: 60

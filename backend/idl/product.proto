@@ -2,34 +2,63 @@ syntax = "proto3";
 
 package product;
 
-option go_package = "/product";
+option go_package="product/v1;productv1";
 
-service ProductCatalogService {
+service ProductService {
     // 获取商品列表
     rpc ListProducts(ListProductsReq) returns (ListProductsResp) {}
-    // 获取商品详情，商家，类别
+    // 获取商品详情
     rpc GetProduct(GetProductReq) returns (GetProductResp) {}
-    // 搜索商品，有商家，无类别
-    rpc SearchProducts(SearchProductsReq) returns (SearchProductsResp) {}
-}
-
-message ListProductsReq {
-    int32 page = 1;
-    int32 pageSize = 2;
-    string categoryName = 3;
+    // 添加新商品
+    rpc CreateProduct(CreateProductReq) returns (CreateProductResp) {}
+    // 修改商品
+    rpc UpdateProduct(UpdateProductReq) returns (UpdateProductResp) {}
+    // 删除商品
+    rpc DeleteProduct(DeleteProductReq) returns (DeleteProductResp) {}
 }
 
 message Product {
-    uint32 id = 1; // 商品ID
+    int64 id = 1; // 商品ID
     string name = 2; // 商品名称
     string description = 3; // 商品描述
     string picture = 4; // 商品图片地址
-    float price = 5; // 商品价格
-    repeated string categories = 6; // 商品分类
-    uint32 stock = 7; // 商品库存
-    uint32 ownerId = 8; // 商品所属用户ID
-    string ownerName = 9; // 商品所属用户名称
-    repeated string sliderImgs = 10; // 商品轮播图地址
+    repeated string sliderImgs = 5; // 商品轮播图地址
+    int64 price = 6; // 商品价格
+    repeated string categories = 7; // 商品分类
+    int64 stock = 8; // 商品库存
+
+    int64 merchantID = 9; // 商品所属商家ID
+    string merchantName = 10; // 商品所属商家名称
+}
+
+message CreateProductReq{
+    Product product = 1;
+}
+
+message CreateProductResp{
+    int64 id = 1;
+}
+
+message UpdateProductReq{
+    Product product = 1;
+}
+
+message UpdateProductResp{
+    int64 id = 1;
+}
+
+message DeleteProductReq{
+    int64 id = 1;
+    int64 user_id = 2;
+}
+
+message DeleteProductResp{
+}
+
+message ListProductsReq {
+    int64 page = 1;
+    int64 pageSize = 2;
+    string category = 3;
 }
 
 message ListProductsResp {
@@ -37,17 +66,9 @@ message ListProductsResp {
 }
 
 message GetProductReq {
-    uint32 id = 1;
+    int64 id = 1;
 }
 
 message GetProductResp {
     Product product = 1;
-}
-
-message SearchProductsReq {
-    string query = 1;
-}
-
-message SearchProductsResp {
-    repeated Product results = 1;
 }
