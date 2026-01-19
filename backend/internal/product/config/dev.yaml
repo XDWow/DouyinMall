@@ -13,3 +13,15 @@ grpc:
     name: product.service
     port: 8092
     etcdTTL: 60
+
+kafka:
+  brokers:
+    - "localhost:9092"
+
+canal:
+  mysql:
+    host: "localhost"
+    port: 13316
+    user: "root"
+    password: "root"
+  server_id: 1234

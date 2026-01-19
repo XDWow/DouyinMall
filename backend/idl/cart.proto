@@ -2,33 +2,42 @@ syntax = "proto3";
 
 package cart;
 
-option go_package = '/cart';
+option go_package="cart/v1;cartv1";
 
 service CartService {
     rpc AddItem(AddItemReq) returns (AddItemResp) {}
+    rpc DeleteItem(DeleteItemReq) returns (DeleteItemResp) {}
     rpc GetCart(GetCartReq) returns (GetCartResp) {}
     rpc EmptyCart(EmptyCartReq) returns (EmptyCartResp) {}
     rpc ChangeQty(ChangeQtyReq) returns (ChangeQtyResp){}
+    
 }
 
 message CartItem {
-    uint32 product_id = 1;
-    uint32  quantity = 2;
+    int64 product_id = 1;
+    int64  quantity = 2;
 }
 
 message AddItemReq {
-    uint32 user_id = 1;
+    int64 user_id = 1;
     CartItem item = 2;
 }
+
+message DeleteItemReq {
+    int64 user_id = 1;
+    int64 product_id = 2;
+}
+
+message DeleteItemResp {}
 
 message AddItemResp {}
 
 message GetCartReq {
-    uint32 user_id = 1;
+    int64 user_id = 1;
 }
 
 message Cart {
-    uint32 user_id = 1;
+    int64 user_id = 1;
     repeated CartItem items = 2;
 }
 
@@ -36,19 +45,15 @@ message GetCartResp {
     Cart cart = 1;
 }
 
-// 新增
 message EmptyCartReq {
-    uint32 user_id = 1;
+    int64 user_id = 1;
 }
 
-// 新增
 message EmptyCartResp {}
 
-// 新增
 message ChangeQtyReq{
-    uint32 user_id = 1;
+    int64 user_id = 1;
     CartItem item = 2;
 }
 
-// 新增
 message ChangeQtyResp{}

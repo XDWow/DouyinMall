@@ -78,12 +78,12 @@ func TestProductHandler_ListProducts(t *testing.T) {
 
 func TestProductHandler_GetProduct(t *testing.T) {
 	testCases := []struct {
-		name       string
-		req        *v1.GetProductReq
-		mock       func(ctrl *gomock.Controller) *svcmocks.MockProductService
-		wantID     int64
-		wantName   string
-		wantErr    bool
+		name     string
+		req      *v1.GetProductReq
+		mock     func(ctrl *gomock.Controller) *svcmocks.MockProductService
+		wantID   int64
+		wantName string
+		wantErr  bool
 	}{
 		{
 			name: "成功获取商品详情",
@@ -94,7 +94,7 @@ func TestProductHandler_GetProduct(t *testing.T) {
 					ID:           1,
 					Name:         "iPhone 15",
 					Price:        599900,
-					Stock:        100,
+					InStock:      true, // domain 层使用 InStock (bool)
 					Categories:   []string{"电子产品", "手机"},
 					MerchantID:   1001,
 					MerchantName: "Apple Store",
@@ -153,7 +153,7 @@ func TestProductHandler_CreateProduct(t *testing.T) {
 				Product: &v1.Product{
 					Name:       "新商品",
 					Price:      9900,
-					Stock:      50,
+					InStock:    true, // 有货
 					Categories: []string{"服装"},
 					MerchantID: 1001,
 				},
@@ -347,7 +347,7 @@ func TestToProto(t *testing.T) {
 		SlideImgs:    []string{"http://example.com/1.jpg", "http://example.com/2.jpg"},
 		Price:        599900,
 		Categories:   []string{"电子产品", "手机"},
-		Stock:        100,
+		InStock:      true, // domain 层使用 InStock (bool)
 		MerchantID:   1001,
 		MerchantName: "Apple Store",
 	}
@@ -361,7 +361,7 @@ func TestToProto(t *testing.T) {
 	assert.Equal(t, []string{"http://example.com/1.jpg", "http://example.com/2.jpg"}, proto.SliderImgs)
 	assert.Equal(t, int64(599900), proto.Price)
 	assert.Equal(t, []string{"电子产品", "手机"}, proto.Categories)
-	assert.Equal(t, int64(100), proto.Stock)
+	assert.Equal(t, true, proto.InStock) // stock=100 > 0，所以 in_stock 应该为 true
 	assert.Equal(t, int64(1001), proto.MerchantID)
 	assert.Equal(t, "Apple Store", proto.MerchantName)
 }
@@ -375,7 +375,7 @@ func TestToDomain(t *testing.T) {
 		SliderImgs:   []string{"http://example.com/1.jpg"},
 		Price:        599900,
 		Categories:   []string{"电子产品"},
-		Stock:        100,
+		InStock:      true, // 有货
 		MerchantID:   1001,
 		MerchantName: "Apple Store",
 	}
@@ -385,6 +385,7 @@ func TestToDomain(t *testing.T) {
 	assert.Equal(t, int64(1), domain.ID)
 	assert.Equal(t, "iPhone 15", domain.Name)
 	assert.Equal(t, int64(599900), domain.Price)
+	assert.Equal(t, true, domain.InStock) // 直接使用 in_stock
 }
 
 func TestToDomain_Nil(t *testing.T) {
@@ -406,4 +407,3 @@ func TestToProtoList(t *testing.T) {
 	assert.Equal(t, int64(2), protos[1].Id)
 	assert.Equal(t, int64(3), protos[2].Id)
 }
-

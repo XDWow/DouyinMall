@@ -103,10 +103,10 @@ func TestProductService_GetProduct(t *testing.T) {
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
 				repo := repomocks.NewMockProductRepo(ctrl)
 				repo.EXPECT().GetProduct(gomock.Any(), int64(1)).Return(domain.Product{
-					ID:    1,
-					Name:  "iPhone 15",
-					Price: 599900,
-					Stock: 100,
+					ID:      1,
+					Name:    "iPhone 15",
+					Price:   599900,
+					InStock: true,
 				}, nil)
 				return repo
 			},
@@ -159,7 +159,7 @@ func TestProductService_CreateProduct(t *testing.T) {
 			product: domain.Product{
 				Name:       "新商品",
 				Price:      9900,
-				Stock:      50,
+				InStock:    true,
 				Categories: []string{"服装"},
 			},
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
@@ -339,4 +339,3 @@ func TestProductService_DeleteProduct(t *testing.T) {
 		})
 	}
 }
-

@@ -74,7 +74,7 @@ func toProto(p domain.Product) *v1.Product {
 		SliderImgs:   p.SlideImgs,
 		Price:        p.Price,
 		Categories:   p.Categories,
-		Stock:        p.Stock,
+		InStock:      p.InStock, // 直接使用 in_stock（来自库存服务）
 		MerchantID:   p.MerchantID,
 		MerchantName: p.MerchantName,
 	}
@@ -97,7 +97,7 @@ func toDomain(p *v1.Product) domain.Product {
 		SlideImgs:    p.GetSliderImgs(),
 		Price:        p.GetPrice(),
 		Categories:   p.GetCategories(),
-		Stock:        p.GetStock(),
+		InStock:      p.GetInStock(), // 直接使用 in_stock（库存服务管理）
 		MerchantID:   p.GetMerchantID(),
 		MerchantName: p.GetMerchantName(),
 	}

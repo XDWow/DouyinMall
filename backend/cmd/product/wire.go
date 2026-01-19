@@ -5,20 +5,23 @@ package main
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/product/handler"
 	"github.com/XDWow/DouyinMall/backend/internal/product/ioc"
+	"github.com/XDWow/DouyinMall/backend/internal/product/producer"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo"
-	"github.com/XDWow/DouyinMall/backend/internal/product/repo/dao"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo/cache"
+	"github.com/XDWow/DouyinMall/backend/internal/product/repo/dao"
 	"github.com/XDWow/DouyinMall/backend/internal/product/service"
 	"github.com/cloudwego/kitex/server"
 	"github.com/google/wire"
 )
 
-func InitApp() server.Server {
+func InitApp() *App {
 	wire.Build(
 		// 基础设施
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitRedis,
+		ioc.InitKafkaClient,
+		ioc.InitKafkaSyncProducer,
 
 		// DAO
 		dao.NewGORMProductDao,
@@ -35,8 +38,24 @@ func InitApp() server.Server {
 		// handler
 		handler.NewProductHandler,
 
+		// Producer
+		ioc.InitCanalProducer,
+
 		// gRPC Server
 		ioc.InitGRPCServer,
+
+		// App
+		newApp,
 	)
 	return nil
+}
+
+// newApp 组装 App
+func newApp(svr server.Server, p producer.Producer) *App {
+	return &App{
+		Server: svr,
+		Producers: []ProducerComponent{
+			&producerWrapper{Producer: p},
+		},
+	}
 }

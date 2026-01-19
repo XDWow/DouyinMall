@@ -25,8 +25,7 @@ message Product {
     repeated string sliderImgs = 5; // 商品轮播图地址
     int64 price = 6; // 商品价格
     repeated string categories = 7; // 商品分类
-    int64 stock = 8; // 商品库存
-
+    bool in_stock = 8; // 是否有货（用于搜索等场景，不显示具体库存数量）
     int64 merchantID = 9; // 商品所属商家ID
     string merchantName = 10; // 商品所属商家名称
 }

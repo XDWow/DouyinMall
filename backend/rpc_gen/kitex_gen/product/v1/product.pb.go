@@ -16,7 +16,7 @@ type Product struct {
 	SliderImgs   []string `protobuf:"bytes,5,rep,name=sliderImgs" json:"sliderImgs,omitempty"`      // 商品轮播图地址
 	Price        int64    `protobuf:"varint,6,opt,name=price" json:"price,omitempty"`               // 商品价格
 	Categories   []string `protobuf:"bytes,7,rep,name=categories" json:"categories,omitempty"`      // 商品分类
-	Stock        int64    `protobuf:"varint,8,opt,name=stock" json:"stock,omitempty"`               // 商品库存
+	InStock      bool     `protobuf:"varint,8,opt,name=in_stock" json:"in_stock,omitempty"`         // 是否有货（用于搜索等场景，不显示具体库存数量）
 	MerchantID   int64    `protobuf:"varint,9,opt,name=merchantID" json:"merchantID,omitempty"`     // 商品所属商家ID
 	MerchantName string   `protobuf:"bytes,10,opt,name=merchantName" json:"merchantName,omitempty"` // 商品所属商家名称
 }
@@ -76,11 +76,11 @@ func (x *Product) GetCategories() []string {
 	return nil
 }
 
-func (x *Product) GetStock() int64 {
+func (x *Product) GetInStock() bool {
 	if x != nil {
-		return x.Stock
+		return x.InStock
 	}
-	return 0
+	return false
 }
 
 func (x *Product) GetMerchantID() int64 {

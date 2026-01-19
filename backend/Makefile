@@ -14,6 +14,15 @@ build-user:
 gen-product:
 	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/product.proto
 
+gen-search:
+	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/search.proto
+
+gen-cart:
+	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/cart.proto
+
+gen-merchant:
+	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/merchant.proto
+
 # ==================== 测试 ====================
 # 运行所有单元测试
 test:
@@ -23,6 +32,14 @@ test:
 test-coverage:
 	go test ./internal/user/... -coverprofile=coverage.out
 	go tool cover -html=coverage.out
+
+# 运行 search 服务的集成测试（需要 Docker）
+test-integration-search:
+	go test -tags=integration ./internal/search/integration/... -v
+
+# 运行所有集成测试
+test-integration:
+	go test -tags=integration ./internal/... -v
 
 # ==================== Docker Compose ====================
 # 启动所有服务（基础设施 + 微服务）- 用于集成测试和生产

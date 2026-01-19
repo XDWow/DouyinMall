@@ -1,0 +1,250 @@
+syntax = "proto3";
+
+package search;
+
+option go_package="search/v1;searchv1";
+
+service SearchService {
+    // 商品搜索（支持关键字、筛选、排序、分页）
+    rpc SearchProducts(SearchProductsReq) returns (SearchProductsResp) {}
+    
+    // 获取商品搜索聚合统计（分类、价格区间分布）
+    rpc GetSearchAggregations(SearchProductsReq) returns (SearchAggregationsResp) {}
+        
+    // 商家搜索（支持关键字、地区、评分筛选）
+    rpc SearchMerchants(SearchMerchantsReq) returns (SearchMerchantsResp) {}
+        
+    // 搜索建议（自动补全，包含商品和商家）
+    rpc SearchSuggest(SearchSuggestReq) returns (SearchSuggestResp) {}
+        
+    // 同步商品�?ES（Canal 消费者调用）
+    rpc SyncProduct(SyncProductReq) returns (SyncProductResp) {}
+    
+    // 批量同步商品（初始化/全量同步�?    rpc BatchSyncProducts(BatchSyncProductsReq) returns (BatchSyncProductsResp) {}
+    
+    // 删除商品索引
+    rpc DeleteProduct(DeleteProductReq) returns (DeleteProductResp) {}
+    
+    // 同步商家�?ES（Canal 消费者调用）
+    rpc SyncMerchant(SyncMerchantReq) returns (SyncMerchantResp) {}
+    
+    // 删除商家索引
+    rpc DeleteMerchant(DeleteMerchantReq) returns (DeleteMerchantResp) {}
+}
+
+message SearchProductsReq {
+    string keyword = 1;
+    int64 page = 2;
+    int64 page_size = 3;
+    
+    // 筛选条�?    repeated string categories = 4;  // 分类筛选（多选）
+    int64 min_price = 5;             // 最低价格（分）
+    int64 max_price = 6;             // 最高价格（分）
+    int64 merchant_id = 7;           // 商家 ID
+    
+    SortType sort_by = 8;            // 排序方式
+    
+    // 高级选项
+    bool enable_highlight = 9;      // 是否启用高亮
+}
+
+// 排序类型
+enum SortType {
+    RELEVANCE = 0;      // 相关性（默认�?    PRICE_ASC = 1;      // 价格从低到高
+    PRICE_DESC = 2;     // 价格从高到低
+    SALES_DESC = 3;     // 销量从高到低（预留�?    NEW_ARRIVAL = 4;    // 新品优先（预留）
+}
+
+message SearchProductsResp {
+    repeated ProductSearchResult products = 1;
+    int64 total = 2;
+    int64 page = 3;
+    int64 page_size = 4;
+}
+
+message ProductSearchResult {
+    int64 id = 1;
+    string name = 2;
+    string description = 3;
+    string picture = 4;
+    repeated string slider_imgs = 5;
+    int64 price = 6;                            // 价格（分�?    repeated string categories = 7;             // 分类列表
+    bool in_stock = 8;                          // 是否有货（搜索结果不显示具体库存数量�?    int64 merchant_id = 9;
+    string merchant_name = 10;
+    
+    // 搜索相关字段
+    float score = 11;                           // 相关性评�?    string name_highlight = 12;                 // 名称高亮片段
+    string description_highlight = 13;          // 描述高亮片段
+}
+
+message SearchSuggestReq {
+    string keyword = 1;              // 输入关键�?    int64 limit = 2;                 // 返回数量，默�?10
+    SuggestType type = 3;            // 建议类型（商�?商家�?}
+
+// 建议类型
+enum SuggestType {
+    PRODUCT = 0;   // 商品建议
+    MERCHANT = 1;  // 商家建议
+}
+
+message SearchSuggestResp {
+    repeated SearchSuggestion suggestions = 1;
+}
+
+// 搜索建议�?message SearchSuggestion {
+    string keyword = 1;              // 建议的关键字
+    SuggestSource source = 2;        // 来源（历�?热门/名称匹配�?    int64 count = 3;                 // 搜索次数（热门度，可选）
+}
+
+// 建议来源
+enum SuggestSource {
+    HISTORY = 0;                     // 历史搜索
+    HOT = 1;                         // 热门搜索
+    NAME_MATCH = 2;                  // 名称匹配（商品名或商家名�?}
+
+message SearchAggregationsResp {
+    repeated CategoryAggregation categories = 1;    // 分类聚合
+    repeated PriceRangeAggregation price_ranges = 2; // 价格区间聚合
+}
+
+message CategoryAggregation {
+    string category = 1;             // 分类名称
+    int64 count = 2;                 // 该分类下的商品数�?}
+
+message PriceRangeAggregation {
+    int64 min_price = 1;             // 区间最低价（分�?    int64 max_price = 2;             // 区间最高价（分�?    int64 count = 3;                 // 该区间的商品数量
+    string label = 4;                // 显示标签，如 "0-100�?
+}
+
+// 索引同步（内部接口）
+
+// 同步单个商品请求
+message SyncProductReq {
+    SyncAction action = 1;           // 操作类型
+    ProductDocument product = 2;     // 商品文档
+}
+
+enum SyncAction {
+    CREATE = 0;
+    UPDATE = 1;
+    DELETE = 2;
+}
+
+// ES 中的商品文档结构
+message ProductDocument {
+    int64 id = 1;
+    string name = 2;
+    string description = 3;
+    string picture = 4;
+    repeated string slider_imgs = 5;
+    int64 price = 6;
+    repeated string categories = 7;
+    bool in_stock = 8;              // 是否有货（用于筛�?只显示有货商�?�?    int64 merchant_id = 9;
+    string merchant_name = 10;
+    
+    // ES 专用字段
+    int64 created_at = 11;           // 创建时间戳（秒）
+    int64 updated_at = 12;           // 更新时间戳（秒）
+}
+
+message SyncProductResp {
+    bool success = 1;
+    string message = 2;
+}
+
+// 批量同步请求
+message BatchSyncProductsReq {
+    repeated ProductDocument products = 1;
+}
+
+message BatchSyncProductsResp {
+    int64 success_count = 1;
+    int64 failed_count = 2;
+    repeated string errors = 3;
+}
+
+// 删除商品索引请求
+message DeleteProductReq {
+    int64 product_id = 1;
+}
+
+message DeleteProductResp {
+    bool success = 1;
+    string message = 2;
+}
+
+// ---------------------------- 商家部分 -----------------------
+
+// 商家搜索请求
+message SearchMerchantsReq {
+    string keyword = 1;              // 搜索关键字（商家名称�?    int64 page = 2;                  // 页码，从 1 开�?    int64 page_size = 3;             // 每页数量
+    
+    // 筛选条�?    string region = 4;               // 地区筛选（�?"北京"�?上海"�?    float min_rating = 5;            // 最低评分（0-5�?    bool verified_only = 6;          // 只看认证商家
+    
+    // 排序
+    MerchantSortType sort_by = 7;     // 排序方式
+}
+
+// 商家排序类型
+enum MerchantSortType {
+    MERCHANT_RELEVANCE = 0;          // 相关性（默认�?    MERCHANT_SALES_DESC = 1;         // 销量从高到�?    MERCHANT_RATING_DESC = 2;        // 评分从高到低
+    MERCHANT_NEW_ARRIVAL = 3;        // 新入驻优�?}
+
+// 商家搜索响应
+message SearchMerchantsResp {
+    repeated MerchantSearchResult merchants = 1;  // 商家列表
+    int64 total = 2;                              // 总数
+    int64 page = 3;                               // 当前�?    int64 page_size = 4;                          // 每页数量
+}
+
+// 商家搜索结果
+message MerchantSearchResult {
+    int64 id = 1;
+    string name = 2;                 // 商家名称
+    string description = 3;           // 商家描述
+    string logo = 4;                  // 商家 Logo
+    string region = 5;                // 所在地�?    float rating = 6;                 // 评分�?-5�?    int64 sales_count = 7;            // 销�?    int64 product_count = 8;          // 商品数量
+    bool verified = 9;                // 是否认证
+    
+    // 搜索相关字段
+    float score = 10;                 // 相关性评�?    string name_highlight = 11;        // 名称高亮片段
+}
+
+// 同步商家请求
+message SyncMerchantReq {
+    SyncAction action = 1;            // 操作类型
+    MerchantDocument merchant = 2;    // 商家文档
+}
+
+// ES 中的商家文档结构
+message MerchantDocument {
+    int64 id = 1;
+    string name = 2;
+    string description = 3;
+    string logo = 4;
+    string region = 5;
+    float rating = 6;
+    int64 sales_count = 7;
+    int64 product_count = 8;
+    bool verified = 9;
+    
+    // ES 专用字段
+    int64 created_at = 10;            // 创建时间戳（秒）
+    int64 updated_at = 11;             // 更新时间戳（秒）
+}
+
+message SyncMerchantResp {
+    bool success = 1;
+    string message = 2;
+}
+
+// 删除商家索引请求
+message DeleteMerchantReq {
+    int64 merchant_id = 1;
+}
+
+message DeleteMerchantResp {
+    bool success = 1;
+    string message = 2;
+}
+

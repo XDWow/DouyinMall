@@ -57,10 +57,10 @@ func TestProductRepo_GetProduct(t *testing.T) {
 				basicData, _ := json.Marshal(basicProduct)
 				c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(basicData, nil)
 
-				// 价格/库存缓存命中
-				ps := PriceStock{Price: 9900, Stock: 100}
+				// 价格/库存状态缓存命中
+				ps := PriceInStock{Price: 9900, InStock: true}
 				psData, _ := json.Marshal(ps)
-				c.EXPECT().Get(gomock.Any(), PriceStockKey(1)).Return(psData, nil)
+				c.EXPECT().Get(gomock.Any(), PriceInStockKey(1)).Return(psData, nil)
 
 				// 不应该查数据库
 				return d, c
@@ -83,14 +83,14 @@ func TestProductRepo_GetProduct(t *testing.T) {
 				basicData, _ := json.Marshal(basicProduct)
 				c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(basicData, nil)
 
-				// 价格/库存缓存未命中
-				c.EXPECT().Get(gomock.Any(), PriceStockKey(1)).Return(nil, errors.New("not found"))
+				// 价格/库存状态缓存未命中
+				c.EXPECT().Get(gomock.Any(), PriceInStockKey(1)).Return(nil, errors.New("not found"))
 
-				// 只查价格/库存（精准查询优化）
-				d.EXPECT().FindPriceStock(gomock.Any(), int64(1)).Return(int64(8800), int64(50), nil)
+				// 只查价格/库存状态（精准查询优化）
+				d.EXPECT().FindPriceInStock(gomock.Any(), int64(1)).Return(int64(8800), true, nil)
 
-				// 回填价格/库存缓存
-				c.EXPECT().SetWithTTL(gomock.Any(), PriceStockKey(1), gomock.Any(), gomock.Any()).Return(nil)
+				// 回填价格/库存状态缓存
+				c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(1), gomock.Any(), gomock.Any()).Return(nil)
 
 				return d, c
 			},
@@ -106,19 +106,19 @@ func TestProductRepo_GetProduct(t *testing.T) {
 
 				// 缓存都未命中
 				c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(nil, errors.New("not found"))
-				c.EXPECT().Get(gomock.Any(), PriceStockKey(1)).Return(nil, errors.New("not found"))
+				c.EXPECT().Get(gomock.Any(), PriceInStockKey(1)).Return(nil, errors.New("not found"))
 
 				// 查库
 				d.EXPECT().FindByID(gomock.Any(), int64(1)).Return(dao.Product{
-					ID:    1,
-					Name:  "测试商品",
-					Price: 7700,
-					Stock: 30,
+					ID:      1,
+					Name:    "测试商品",
+					Price:   7700,
+					InStock: true,
 				}, nil)
 
 				// 回填两个缓存
 				c.EXPECT().SetWithTTL(gomock.Any(), DetailBasicKey(1), gomock.Any(), gomock.Any()).Return(nil)
-				c.EXPECT().SetWithTTL(gomock.Any(), PriceStockKey(1), gomock.Any(), gomock.Any()).Return(nil)
+				c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(1), gomock.Any(), gomock.Any()).Return(nil)
 
 				return d, c
 			},
@@ -133,7 +133,7 @@ func TestProductRepo_GetProduct(t *testing.T) {
 				c := cachemocks.NewMockProductCache(ctrl)
 
 				c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(nil, errors.New("not found"))
-				c.EXPECT().Get(gomock.Any(), PriceStockKey(1)).Return(nil, errors.New("not found"))
+				c.EXPECT().Get(gomock.Any(), PriceInStockKey(1)).Return(nil, errors.New("not found"))
 
 				d.EXPECT().FindByID(gomock.Any(), int64(1)).Return(dao.Product{}, errors.New("db error"))
 
@@ -178,9 +178,9 @@ func TestProductRepo_CreateProduct(t *testing.T) {
 		{
 			name: "创建成功_回填缓存",
 			product: domain.Product{
-				Name:  "新商品",
-				Price: 9900,
-				Stock: 100,
+				Name:    "新商品",
+				Price:   9900,
+				InStock: true,
 			},
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
@@ -190,7 +190,7 @@ func TestProductRepo_CreateProduct(t *testing.T) {
 
 				// 回填缓存
 				c.EXPECT().SetWithTTL(gomock.Any(), DetailBasicKey(123), gomock.Any(), gomock.Any()).Return(nil)
-				c.EXPECT().SetWithTTL(gomock.Any(), PriceStockKey(123), gomock.Any(), gomock.Any()).Return(nil)
+				c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(123), gomock.Any(), gomock.Any()).Return(nil)
 
 				return d, c
 			},
@@ -260,11 +260,11 @@ func TestProductRepo_UpdateProduct(t *testing.T) {
 
 				// 第一次删除（立即）
 				c.EXPECT().Delete(gomock.Any(), DetailBasicKey(1)).Return(nil)
-				c.EXPECT().Delete(gomock.Any(), PriceStockKey(1)).Return(nil)
+				c.EXPECT().Delete(gomock.Any(), PriceInStockKey(1)).Return(nil)
 
 				// 第二次删除（延迟，异步）- 使用 AnyTimes 因为是异步的
 				c.EXPECT().Delete(gomock.Any(), DetailBasicKey(1)).Return(nil).AnyTimes()
-				c.EXPECT().Delete(gomock.Any(), PriceStockKey(1)).Return(nil).AnyTimes()
+				c.EXPECT().Delete(gomock.Any(), PriceInStockKey(1)).Return(nil).AnyTimes()
 
 				return d, c
 			},
@@ -334,11 +334,11 @@ func TestProductRepo_DeleteProduct(t *testing.T) {
 
 				// 删缓存
 				c.EXPECT().Delete(gomock.Any(), DetailBasicKey(1)).Return(nil)
-				c.EXPECT().Delete(gomock.Any(), PriceStockKey(1)).Return(nil)
+				c.EXPECT().Delete(gomock.Any(), PriceInStockKey(1)).Return(nil)
 
 				// 延迟双删
 				c.EXPECT().Delete(gomock.Any(), DetailBasicKey(1)).Return(nil).AnyTimes()
-				c.EXPECT().Delete(gomock.Any(), PriceStockKey(1)).Return(nil).AnyTimes()
+				c.EXPECT().Delete(gomock.Any(), PriceInStockKey(1)).Return(nil).AnyTimes()
 
 				return d, c
 			},

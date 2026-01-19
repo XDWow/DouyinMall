@@ -60,29 +60,118 @@ services:
       timeout: 5s
       retries: 5
 
-  # ==================== 微服务 ====================
-  # UserService
-  user-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/user/Dockerfile
-    container_name: user-service
+  kafka:
+    image: 'bitnami/kafka:3.6.0'
+    container_name: douyinmall-kafka
     restart: unless-stopped
     ports:
-      - "8081:8081"
+      - '9092:9092'
+      - '9094:9094'
     environment:
-      - DB_DSN=root:root@tcp(mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local
-      - REDIS_ADDR=redis:6379
-      - ETCD_ENDPOINTS=etcd:2379
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      etcd:
-        condition: service_healthy
+      - KAFKA_CFG_NODE_ID=0
+      #      - 三个分区
+      - KAFKA_CREATE_TOPICS=DouyinMall_binlog:3:1
+      #      - 允许自动创建 topic，线上不要开启
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://:9093,EXTERNAL://0.0.0.0:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+    volumes:
+      - kafka-data:/bitnami/kafka
     networks:
       - douyinmall-net
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  elasticsearch:
+    build:
+      context: ./docker/elasticsearch
+      dockerfile: Dockerfile
+    container_name: douyinmall-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - "xpack.security.enabled=false"
+      - "ES_JAVA_OPTS=-Xms256m -Xmx512m"
+      - TZ=Asia/Shanghai
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - douyinmall-net
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      # 如果需要自定义 IK 词典，取消注释并创建对应的词典文件目录
+      # - ./docker/elasticsearch/ik-dict:/usr/share/elasticsearch/config/analysis-ik
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # canal:
+  #   image: canal/canal-server:latest
+  #   container_name: douyinmall-canal
+  #   restart: unless-stopped
+  #   environment:
+  #     - CANAL_IP=canal
+  #     - CANAL_PORT=11111
+  #     - CANAL_DESTINATIONS=DouyinMall
+  #     - TZ=Asia/Shanghai
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     kafka:
+  #       condition: service_healthy
+  #   ports:
+  #     # 暴露了 canal 的端口，一般用于监控和调试，生产环境可以移除
+  #     - "11111:11111"
+  #     - "8089:8089"  # Canal Admin Web UI（如果启用）
+  #   volumes:
+  #     # 注意：配置文件路径，确保文件存在
+  #     - ./scripts/canal/DouyinMall/instance.properties:/home/admin/canal-server/conf/DouyinMall/instance.properties:ro
+  #     - ./scripts/canal/canal.properties:/home/admin/canal-server/conf/canal.properties:ro
+  #     - canal-logs:/home/admin/canal-server/logs
+  #   networks:
+  #     - douyinmall-net
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "nc -z localhost 11111 || exit 1"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 90s
+  # ==================== 微服务 ====================
+  # 暂时注释掉，先启动基础容器
+  # UserService
+  # user-service:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: cmd/user/Dockerfile
+  #   container_name: user-service
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     - DB_DSN=root:root@tcp(mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local
+  #     - REDIS_ADDR=redis:6379
+  #     - ETCD_ENDPOINTS=etcd:2379
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     etcd:
+  #       condition: service_healthy
+  #   networks:
+  #     - douyinmall-net
 
   # 未来可以添加其他微服务
   # product-service:
@@ -110,6 +199,12 @@ volumes:
     driver: local
   etcd-data:
     driver: local
+  kafka-data:
+    driver: local
+  es-data:
+    driver: local
+  # canal-logs:
+  #   driver: local
 
 networks:
   douyinmall-net:

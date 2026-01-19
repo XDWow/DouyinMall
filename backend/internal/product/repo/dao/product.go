@@ -13,7 +13,7 @@ var ErrDataNotFound = gorm.ErrRecordNotFound
 type ProductDao interface {
 	ListProducts(ctx context.Context, page, pageSize int64, category string) (products []Product, err error)
 	FindByID(ctx context.Context, id int64) (product Product, err error)
-	FindPriceStock(ctx context.Context, id int64) (price, stock int64, err error)
+	FindPriceInStock(ctx context.Context, id int64) (price int64, inStock bool, err error)
 	Insert(ctx context.Context, product Product) (id int64, err error)
 	Update(ctx context.Context, product Product) (err error)
 	Delete(ctx context.Context, id, userID int64) (err error)
@@ -32,6 +32,9 @@ func NewGORMProductDao(db *gorm.DB) ProductDao {
 func (d *GORMProductDao) ListProducts(ctx context.Context, page, pageSize int64, category string) (products []Product, err error) {
 	query := d.db.WithContext(ctx).Model(&Product{})
 
+	// 只看有货
+	query = query.Where("in_stock = ?", true)
+
 	if category != "" {
 		query = query.Where("JSON_CONTAINS(categories, ?)", `"`+category+`"`)
 	}
@@ -48,17 +51,17 @@ func (d *GORMProductDao) FindByID(ctx context.Context, id int64) (product Produc
 	return product, err
 }
 
-func (d *GORMProductDao) FindPriceStock(ctx context.Context, id int64) (price, stock int64, err error) {
+func (d *GORMProductDao) FindPriceInStock(ctx context.Context, id int64) (price int64, inStock bool, err error) {
 	var result struct {
-		Price int64
-		Stock int64
+		Price   int64
+		InStock bool
 	}
 	err = d.db.WithContext(ctx).
 		Model(&Product{}).
-		Select("price, stock").
+		Select("price, in_stock").
 		Where("id = ?", id).
 		First(&result).Error
-	return result.Price, result.Stock, err
+	return result.Price, result.InStock, err
 }
 
 func (d *GORMProductDao) Insert(ctx context.Context, product Product) (id int64, err error) {
@@ -90,7 +93,7 @@ type Product struct {
 
 	Name       string `gorm:"type:varchar(255);not null;index;comment:商品名称"`
 	Price      int64  `gorm:"type:bigint;not null;default:0;comment:商品价格(分)"`
-	Stock      int64  `gorm:"type:bigint;not null;default:0;comment:商品库存"`
+	InStock    bool   `gorm:"type:boolean;not null;default:true;comment:是否有货(来自库存服务事件)"`
 	MerchantID int64  `gorm:"type:bigint;not null;index;comment:商家ID"`
 
 	Description  sql.NullString `gorm:"type:text;comment:商品描述"`

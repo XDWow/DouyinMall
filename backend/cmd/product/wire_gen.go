@@ -9,6 +9,7 @@ package main
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/product/handler"
 	"github.com/XDWow/DouyinMall/backend/internal/product/ioc"
+	"github.com/XDWow/DouyinMall/backend/internal/product/producer"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo/dao"
@@ -18,7 +19,7 @@ import (
 
 // Injectors from wire.go:
 
-func InitApp() server.Server {
+func InitApp() *App {
 	db := ioc.InitDB()
 	productDao := dao.NewGORMProductDao(db)
 	cmdable := ioc.InitRedis()
@@ -27,6 +28,22 @@ func InitApp() server.Server {
 	productRepo := repo.NewCachedProductRepo(productDao, productCache, loggerV1)
 	productService := service.NewProductService(productRepo, loggerV1)
 	productHandler := handler.NewProductHandler(productService)
-	serverServer := ioc.InitGRPCServer(productHandler)
-	return serverServer
+	server := ioc.InitGRPCServer(productHandler)
+	client := ioc.InitKafkaClient()
+	syncProducer := ioc.InitKafkaSyncProducer(client)
+	producer := ioc.InitCanalProducer(syncProducer, loggerV1, db)
+	app := newApp(server, producer)
+	return app
+}
+
+// wire.go:
+
+// newApp 组装 App
+func newApp(svr server.Server, p producer.Producer) *App {
+	return &App{
+		Server: svr,
+		Producers: []ProducerComponent{
+			&producerWrapper{Producer: p},
+		},
+	}
 }

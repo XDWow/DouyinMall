@@ -1,20 +1,36 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
+
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"log"
 )
 
 func main() {
 	initViperWatch()
 
-	svr := InitApp()
-	
+	app := InitApp()
+
 	port := viper.GetInt("grpc.server.port")
-	log.Printf("User service starting on port %d...", port)
-	if err := svr.Run(); err != nil {
+	log.Printf("Product service starting on port %d...", port)
+
+	// 启动所有 Producers
+	ctx := context.Background()
+	for i, p := range app.Producers {
+		producer := p // 避免闭包问题
+		go func(idx int) {
+			if err := producer.Start(ctx); err != nil {
+				log.Fatalf("Producer %d 启动失败: %v", idx+1, err)
+			}
+		}(i)
+		log.Printf("Producer %d 已启动", i+1)
+	}
+
+	// 启动 gRPC Server（阻塞）
+	if err := app.Server.Run(); err != nil {
 		log.Fatalf("server run error: %v", err)
 	}
 }
