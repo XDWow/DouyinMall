@@ -10,7 +10,9 @@ service CartService {
     rpc GetCart(GetCartReq) returns (GetCartResp) {}
     rpc EmptyCart(EmptyCartReq) returns (EmptyCartResp) {}
     rpc ChangeQty(ChangeQtyReq) returns (ChangeQtyResp){}
-    
+    // 原子性增减数量，避免并发问题
+    rpc IncrementQty(IncrementQtyReq) returns (IncrementQtyResp) {}
+    rpc DecrementQty(DecrementQtyReq) returns (DecrementQtyResp) {}
 }
 
 message CartItem {
@@ -57,3 +59,22 @@ message ChangeQtyReq{
 }
 
 message ChangeQtyResp{}
+
+message IncrementQtyReq {
+    int64 user_id = 1;
+    int64 product_id = 2;
+}
+
+message IncrementQtyResp {
+    int64 new_quantity = 1;
+}
+
+message DecrementQtyReq {
+    int64 user_id = 1;
+    int64 product_id = 2;
+    int64 old_quantity = 3;
+}
+
+message DecrementQtyResp {
+    int64 new_quantity = 1;
+}

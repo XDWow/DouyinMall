@@ -220,10 +220,104 @@ func (x *ChangeQtyResp) Marshal(in []byte) ([]byte, error) { return prutal.Marsh
 
 func (x *ChangeQtyResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
 
+type IncrementQtyReq struct {
+	UserId    int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	ProductId int64 `protobuf:"varint,2,opt,name=product_id" json:"product_id,omitempty"`
+}
+
+func (x *IncrementQtyReq) Reset() { *x = IncrementQtyReq{} }
+
+func (x *IncrementQtyReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *IncrementQtyReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *IncrementQtyReq) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *IncrementQtyReq) GetProductId() int64 {
+	if x != nil {
+		return x.ProductId
+	}
+	return 0
+}
+
+type IncrementQtyResp struct {
+	NewQuantity int64 `protobuf:"varint,1,opt,name=new_quantity" json:"new_quantity,omitempty"`
+}
+
+func (x *IncrementQtyResp) Reset() { *x = IncrementQtyResp{} }
+
+func (x *IncrementQtyResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *IncrementQtyResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *IncrementQtyResp) GetNewQuantity() int64 {
+	if x != nil {
+		return x.NewQuantity
+	}
+	return 0
+}
+
+type DecrementQtyReq struct {
+	UserId      int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	ProductId   int64 `protobuf:"varint,2,opt,name=product_id" json:"product_id,omitempty"`
+	OldQuantity int64 `protobuf:"varint,3,opt,name=old_quantity" json:"old_quantity,omitempty"`
+}
+
+func (x *DecrementQtyReq) Reset() { *x = DecrementQtyReq{} }
+
+func (x *DecrementQtyReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *DecrementQtyReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *DecrementQtyReq) GetUserId() int64 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *DecrementQtyReq) GetProductId() int64 {
+	if x != nil {
+		return x.ProductId
+	}
+	return 0
+}
+
+func (x *DecrementQtyReq) GetOldQuantity() int64 {
+	if x != nil {
+		return x.OldQuantity
+	}
+	return 0
+}
+
+type DecrementQtyResp struct {
+	NewQuantity int64 `protobuf:"varint,1,opt,name=new_quantity" json:"new_quantity,omitempty"`
+}
+
+func (x *DecrementQtyResp) Reset() { *x = DecrementQtyResp{} }
+
+func (x *DecrementQtyResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *DecrementQtyResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *DecrementQtyResp) GetNewQuantity() int64 {
+	if x != nil {
+		return x.NewQuantity
+	}
+	return 0
+}
+
 type CartService interface {
 	AddItem(ctx context.Context, req *AddItemReq) (res *AddItemResp, err error)
 	DeleteItem(ctx context.Context, req *DeleteItemReq) (res *DeleteItemResp, err error)
 	GetCart(ctx context.Context, req *GetCartReq) (res *GetCartResp, err error)
 	EmptyCart(ctx context.Context, req *EmptyCartReq) (res *EmptyCartResp, err error)
 	ChangeQty(ctx context.Context, req *ChangeQtyReq) (res *ChangeQtyResp, err error)
+	IncrementQty(ctx context.Context, req *IncrementQtyReq) (res *IncrementQtyResp, err error)
+	DecrementQty(ctx context.Context, req *DecrementQtyReq) (res *DecrementQtyResp, err error)
 }

@@ -16,6 +16,8 @@ type Client interface {
 	GetCart(ctx context.Context, Req *v1.GetCartReq, callOptions ...callopt.Option) (r *v1.GetCartResp, err error)
 	EmptyCart(ctx context.Context, Req *v1.EmptyCartReq, callOptions ...callopt.Option) (r *v1.EmptyCartResp, err error)
 	ChangeQty(ctx context.Context, Req *v1.ChangeQtyReq, callOptions ...callopt.Option) (r *v1.ChangeQtyResp, err error)
+	IncrementQty(ctx context.Context, Req *v1.IncrementQtyReq, callOptions ...callopt.Option) (r *v1.IncrementQtyResp, err error)
+	DecrementQty(ctx context.Context, Req *v1.DecrementQtyReq, callOptions ...callopt.Option) (r *v1.DecrementQtyResp, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -70,4 +72,14 @@ func (p *kCartServiceClient) EmptyCart(ctx context.Context, Req *v1.EmptyCartReq
 func (p *kCartServiceClient) ChangeQty(ctx context.Context, Req *v1.ChangeQtyReq, callOptions ...callopt.Option) (r *v1.ChangeQtyResp, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ChangeQty(ctx, Req)
+}
+
+func (p *kCartServiceClient) IncrementQty(ctx context.Context, Req *v1.IncrementQtyReq, callOptions ...callopt.Option) (r *v1.IncrementQtyResp, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.IncrementQty(ctx, Req)
+}
+
+func (p *kCartServiceClient) DecrementQty(ctx context.Context, Req *v1.DecrementQtyReq, callOptions ...callopt.Option) (r *v1.DecrementQtyResp, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.DecrementQty(ctx, Req)
 }

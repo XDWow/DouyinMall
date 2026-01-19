@@ -2,17 +2,19 @@ package handler
 
 import (
 	"context"
-	"fmt"
+	"github.com/XDWow/DouyinMall/backend/internal/cart/domain"
+	"github.com/XDWow/DouyinMall/backend/internal/cart/service"
 	cartv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/cart/v1"
 )
 
 type CartHandler struct {
-	CartService cartservice.CartService
+	CartService service.CartService
 }
 
 func (h *CartHandler) AddItem(ctx context.Context, req *cartv1.AddItemReq) (res *cartv1.AddItemResp, err error) {
-	//TODO implement me
-	panic("implement me")
+	item := domain.CartItem{
+		ProductID: req.GetItem(),
+	}
 }
 
 func (h *CartHandler) DeleteItem(ctx context.Context, req *cartv1.DeleteItemReq) (res *cartv1.DeleteItemResp, err error) {
@@ -31,6 +33,16 @@ func (h *CartHandler) EmptyCart(ctx context.Context, req *cartv1.EmptyCartReq) (
 }
 
 func (h *CartHandler) ChangeQty(ctx context.Context, req *cartv1.ChangeQtyReq) (res *cartv1.ChangeQtyResp, err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (h *CartHandler) IncrementQty(ctx context.Context, req *cartv1.IncrementQtyReq) (res *cartv1.IncrementQtyResp, err error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (h *CartHandler) DecrementQty(ctx context.Context, req *cartv1.DecrementQtyReq) (res *cartv1.DecrementQtyResp, err error) {
 	//TODO implement me
 	panic("implement me")
 }

@@ -51,6 +51,20 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingUnary),
 	),
+	"IncrementQty": kitex.NewMethodInfo(
+		incrementQtyHandler,
+		newIncrementQtyArgs,
+		newIncrementQtyResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingUnary),
+	),
+	"DecrementQty": kitex.NewMethodInfo(
+		decrementQtyHandler,
+		newDecrementQtyArgs,
+		newDecrementQtyResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingUnary),
+	),
 }
 
 var (
@@ -672,6 +686,228 @@ func (p *ChangeQtyResult) GetResult() interface{} {
 	return p.Success
 }
 
+func incrementQtyHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	switch s := arg.(type) {
+	case *streaming.Args:
+		st := s.Stream
+		req := new(v1.IncrementQtyReq)
+		if err := st.RecvMsg(req); err != nil {
+			return err
+		}
+		resp, err := handler.(cartv1.CartService).IncrementQty(ctx, req)
+		if err != nil {
+			return err
+		}
+		return st.SendMsg(resp)
+	case *IncrementQtyArgs:
+		success, err := handler.(cartv1.CartService).IncrementQty(ctx, s.Req)
+		if err != nil {
+			return err
+		}
+		realResult := result.(*IncrementQtyResult)
+		realResult.Success = success
+		return nil
+	default:
+		return errInvalidMessageType
+	}
+}
+func newIncrementQtyArgs() interface{} {
+	return &IncrementQtyArgs{}
+}
+
+func newIncrementQtyResult() interface{} {
+	return &IncrementQtyResult{}
+}
+
+type IncrementQtyArgs struct {
+	Req *v1.IncrementQtyReq
+}
+
+func (p *IncrementQtyArgs) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetReq() {
+		return out, nil
+	}
+	return proto.Marshal(p.Req)
+}
+
+func (p *IncrementQtyArgs) Unmarshal(in []byte) error {
+	msg := new(v1.IncrementQtyReq)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Req = msg
+	return nil
+}
+
+var IncrementQtyArgs_Req_DEFAULT *v1.IncrementQtyReq
+
+func (p *IncrementQtyArgs) GetReq() *v1.IncrementQtyReq {
+	if !p.IsSetReq() {
+		return IncrementQtyArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+func (p *IncrementQtyArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *IncrementQtyArgs) GetFirstArgument() interface{} {
+	return p.Req
+}
+
+type IncrementQtyResult struct {
+	Success *v1.IncrementQtyResp
+}
+
+var IncrementQtyResult_Success_DEFAULT *v1.IncrementQtyResp
+
+func (p *IncrementQtyResult) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetSuccess() {
+		return out, nil
+	}
+	return proto.Marshal(p.Success)
+}
+
+func (p *IncrementQtyResult) Unmarshal(in []byte) error {
+	msg := new(v1.IncrementQtyResp)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Success = msg
+	return nil
+}
+
+func (p *IncrementQtyResult) GetSuccess() *v1.IncrementQtyResp {
+	if !p.IsSetSuccess() {
+		return IncrementQtyResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+func (p *IncrementQtyResult) SetSuccess(x interface{}) {
+	p.Success = x.(*v1.IncrementQtyResp)
+}
+
+func (p *IncrementQtyResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *IncrementQtyResult) GetResult() interface{} {
+	return p.Success
+}
+
+func decrementQtyHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	switch s := arg.(type) {
+	case *streaming.Args:
+		st := s.Stream
+		req := new(v1.DecrementQtyReq)
+		if err := st.RecvMsg(req); err != nil {
+			return err
+		}
+		resp, err := handler.(cartv1.CartService).DecrementQty(ctx, req)
+		if err != nil {
+			return err
+		}
+		return st.SendMsg(resp)
+	case *DecrementQtyArgs:
+		success, err := handler.(cartv1.CartService).DecrementQty(ctx, s.Req)
+		if err != nil {
+			return err
+		}
+		realResult := result.(*DecrementQtyResult)
+		realResult.Success = success
+		return nil
+	default:
+		return errInvalidMessageType
+	}
+}
+func newDecrementQtyArgs() interface{} {
+	return &DecrementQtyArgs{}
+}
+
+func newDecrementQtyResult() interface{} {
+	return &DecrementQtyResult{}
+}
+
+type DecrementQtyArgs struct {
+	Req *v1.DecrementQtyReq
+}
+
+func (p *DecrementQtyArgs) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetReq() {
+		return out, nil
+	}
+	return proto.Marshal(p.Req)
+}
+
+func (p *DecrementQtyArgs) Unmarshal(in []byte) error {
+	msg := new(v1.DecrementQtyReq)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Req = msg
+	return nil
+}
+
+var DecrementQtyArgs_Req_DEFAULT *v1.DecrementQtyReq
+
+func (p *DecrementQtyArgs) GetReq() *v1.DecrementQtyReq {
+	if !p.IsSetReq() {
+		return DecrementQtyArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+func (p *DecrementQtyArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *DecrementQtyArgs) GetFirstArgument() interface{} {
+	return p.Req
+}
+
+type DecrementQtyResult struct {
+	Success *v1.DecrementQtyResp
+}
+
+var DecrementQtyResult_Success_DEFAULT *v1.DecrementQtyResp
+
+func (p *DecrementQtyResult) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetSuccess() {
+		return out, nil
+	}
+	return proto.Marshal(p.Success)
+}
+
+func (p *DecrementQtyResult) Unmarshal(in []byte) error {
+	msg := new(v1.DecrementQtyResp)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Success = msg
+	return nil
+}
+
+func (p *DecrementQtyResult) GetSuccess() *v1.DecrementQtyResp {
+	if !p.IsSetSuccess() {
+		return DecrementQtyResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+func (p *DecrementQtyResult) SetSuccess(x interface{}) {
+	p.Success = x.(*v1.DecrementQtyResp)
+}
+
+func (p *DecrementQtyResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *DecrementQtyResult) GetResult() interface{} {
+	return p.Success
+}
+
 type kClient struct {
 	c client.Client
 }
@@ -727,6 +963,26 @@ func (p *kClient) ChangeQty(ctx context.Context, Req *v1.ChangeQtyReq) (r *v1.Ch
 	_args.Req = Req
 	var _result ChangeQtyResult
 	if err = p.c.Call(ctx, "ChangeQty", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) IncrementQty(ctx context.Context, Req *v1.IncrementQtyReq) (r *v1.IncrementQtyResp, err error) {
+	var _args IncrementQtyArgs
+	_args.Req = Req
+	var _result IncrementQtyResult
+	if err = p.c.Call(ctx, "IncrementQty", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) DecrementQty(ctx context.Context, Req *v1.DecrementQtyReq) (r *v1.DecrementQtyResp, err error) {
+	var _args DecrementQtyArgs
+	_args.Req = Req
+	var _result DecrementQtyResult
+	if err = p.c.Call(ctx, "DecrementQty", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

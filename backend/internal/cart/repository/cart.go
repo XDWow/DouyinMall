@@ -1,11 +1,11 @@
-package service
+package repository
 
 import (
 	"context"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/domain"
 )
 
-type CartService interface {
+type CartRepository interface {
 	AddItem(ctx context.Context, userID int64, item domain.CartItem) error
 	DeleteItem(ctx context.Context, userID, itemID int64) error
 	GetCart(ctx context.Context, userID int64) (domain.Cart, error)
@@ -15,5 +15,6 @@ type CartService interface {
 	DecreaseQty(ctx context.Context, userID, itemID int64) error
 }
 
-type cartService struct {
+type CachedCartRepository struct {
+	cache
 }
