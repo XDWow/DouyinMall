@@ -2,19 +2,17 @@ syntax = "proto3";
 
 package order;
 
-import "cart.proto";
-
-option go_package = "/order";
+option go_package="order/v1;orderv1";
 
 service OrderService {
-    rpc PlaceOrder(PlaceOrderReq) returns (PlaceOrderResp) {}
-    rpc ListOder(ListOrderReq) returns (ListOrderResp) {}
+    rpc CreateOrder(CreateOrderReq) returns (CreateOrderResp) {}
     rpc ChangeOrderStatus(ChangeOrderStatusReq) returns (ChangeOrderStatusResp) {}
+    rpc ListOrder(ListOrderReq) returns (ListOrderResp) {}
 }
 
 // 更改订单状态
 message ChangeOrderStatusReq {
-    string order_id = 1;
+    int64 order_id = 1;
     uint32 order_status = 2;
 }
 
@@ -28,40 +26,45 @@ message Address {
     string zip_code = 5;
 }
 
+// 订单项：只存储商品ID、数量、价格快照（目的是审计，不冗余存储商品详情，展示时从Product服务查询）
 message OrderItem {
-    cart.CartItem item = 1;
-    float cost = 2;
+    int64 product_id = 1;
+    int64 quantity = 2;
+    int64 snapshot_price = 3; // 商品原始单价快照
+    string snapshot_currency = 4;
+    int64 converted_price = 5; // 转换为支付货币类型的价格
 }
 
-message PlaceOrderReq {
-    uint32 user_id = 1;
-    string user_currency = 2;
+message CreateOrderReq {
+    int64 user_id = 1;
+    string currency = 2; // 用户选择的支付货币
     Address address = 3;
-    string email = 4;
+    string phone = 4;
     repeated OrderItem items = 5;
+    //  int64 total = 6; 本来还想直接算出total传过来，后面发现不对，正确订单服务的业务理解：
+    //  接收一组已定价的商品项，
+    //  根据订单业务规则，（可以扣税，优惠，减小数点）
+    //  生成唯一、不可变的订单金额事实，返回
 }
 
-message OrderResult {
-    string order_id = 1;
-}
-
-message PlaceOrderResp {
-    OrderResult order = 1;
+message CreateOrderResp {
+    int64 order_id = 1;
 }
 
 message ListOrderReq {
-    uint32 user_id = 1;
+    int64 user_id = 1;
 }
 
 message Order {
-    repeated OrderItem items = 1;
-    string order_id = 2;
-    uint32 user_id = 3;
-    uint32 order_status = 4; // 订单状态 0 - 创建订单待支付 1 - 支付成功 2 - 支付失败 3 - 取消订单
-    string user_currency = 5;
-    Address address = 6;
-    string email = 7;
-    int32 created_at = 8;
+    int64 order_id = 1;
+    int64 user_id = 2;
+    uint32 order_status = 3; // 订单状态 0 - 待支付 1 - 支付成功 2 - 支付失败 3 - 取消订单
+    repeated OrderItem items = 4;
+    int64 total_amount = 5;
+    string currency = 6; // 订单支付货币
+    Address address = 7;
+    string phone = 8;
+    int64 created_at = 9;
 }
 
 message ListOrderResp {

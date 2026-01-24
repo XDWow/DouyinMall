@@ -23,7 +23,8 @@ message Product {
     string description = 3; // 商品描述
     string picture = 4; // 商品图片地址
     repeated string sliderImgs = 5; // 商品轮播图地址
-    int64 price = 6; // 商品价格
+    int64 price = 6; // 商品价格（单位：分）
+    string currency = 11; // 商品货币（如 "CNY", "USD"）
     repeated string categories = 7; // 商品分类
     bool in_stock = 8; // 是否有货（用于搜索等场景，不显示具体库存数量）
     int64 merchantID = 9; // 商品所属商家ID

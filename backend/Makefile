@@ -23,6 +23,9 @@ gen-cart:
 gen-merchant:
 	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/merchant.proto
 
+gen-order:
+	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/order.proto
+
 # ==================== 测试 ====================
 # 运行所有单元测试
 test:

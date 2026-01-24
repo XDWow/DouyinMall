@@ -16,14 +16,24 @@ service CartService {
 }
 
 message CartItem {
+    // 跟购物车相关的字段
     int64 product_id = 1;
-    int64  quantity = 2;
+    int64 quantity = 2;
+
+//    // 商品详情，购物车这里不管了，Bff 去查 product 吧
+//    string  name = 3;
+//    string picture = 4;
+//    int64 price = 5;
+//    bool inStock = 6;
+//    string merchantName = 7;
 }
 
 message AddItemReq {
     int64 user_id = 1;
-    CartItem item = 2;
+    int64 product_id = 2;
 }
+
+message AddItemResp {}
 
 message DeleteItemReq {
     int64 user_id = 1;
@@ -31,8 +41,6 @@ message DeleteItemReq {
 }
 
 message DeleteItemResp {}
-
-message AddItemResp {}
 
 message GetCartReq {
     int64 user_id = 1;
@@ -72,7 +80,6 @@ message IncrementQtyResp {
 message DecrementQtyReq {
     int64 user_id = 1;
     int64 product_id = 2;
-    int64 old_quantity = 3;
 }
 
 message DecrementQtyResp {

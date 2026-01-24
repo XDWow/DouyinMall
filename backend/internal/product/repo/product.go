@@ -65,7 +65,7 @@ type CacheAsideProductRepo struct {
 	sf singleflight.Group
 }
 
-func NewCacheAsideProductRepo(dao dao.ProductDao, cache cache.ProductCache, l logger.LoggerV1) ProductRepo {
+func NewCachedProductRepo(dao dao.ProductDao, cache cache.ProductCache, l logger.LoggerV1) ProductRepo {
 	return &CacheAsideProductRepo{
 		dao:    dao,
 		cache:  cache,

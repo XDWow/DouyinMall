@@ -9,6 +9,7 @@ import (
 )
 
 type CartItem struct {
+	// 跟购物车相关的字段
 	ProductId int64 `protobuf:"varint,1,opt,name=product_id" json:"product_id,omitempty"`
 	Quantity  int64 `protobuf:"varint,2,opt,name=quantity" json:"quantity,omitempty"`
 }
@@ -34,8 +35,8 @@ func (x *CartItem) GetQuantity() int64 {
 }
 
 type AddItemReq struct {
-	UserId int64     `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	Item   *CartItem `protobuf:"bytes,2,opt,name=item" json:"item,omitempty"`
+	UserId    int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	ProductId int64 `protobuf:"varint,2,opt,name=product_id" json:"product_id,omitempty"`
 }
 
 func (x *AddItemReq) Reset() { *x = AddItemReq{} }
@@ -51,12 +52,21 @@ func (x *AddItemReq) GetUserId() int64 {
 	return 0
 }
 
-func (x *AddItemReq) GetItem() *CartItem {
+func (x *AddItemReq) GetProductId() int64 {
 	if x != nil {
-		return x.Item
+		return x.ProductId
 	}
-	return nil
+	return 0
 }
+
+type AddItemResp struct {
+}
+
+func (x *AddItemResp) Reset() { *x = AddItemResp{} }
+
+func (x *AddItemResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *AddItemResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
 
 type DeleteItemReq struct {
 	UserId    int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
@@ -91,15 +101,6 @@ func (x *DeleteItemResp) Reset() { *x = DeleteItemResp{} }
 func (x *DeleteItemResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
 
 func (x *DeleteItemResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
-
-type AddItemResp struct {
-}
-
-func (x *AddItemResp) Reset() { *x = AddItemResp{} }
-
-func (x *AddItemResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
-
-func (x *AddItemResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
 
 type GetCartReq struct {
 	UserId int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
@@ -263,9 +264,8 @@ func (x *IncrementQtyResp) GetNewQuantity() int64 {
 }
 
 type DecrementQtyReq struct {
-	UserId      int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	ProductId   int64 `protobuf:"varint,2,opt,name=product_id" json:"product_id,omitempty"`
-	OldQuantity int64 `protobuf:"varint,3,opt,name=old_quantity" json:"old_quantity,omitempty"`
+	UserId    int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	ProductId int64 `protobuf:"varint,2,opt,name=product_id" json:"product_id,omitempty"`
 }
 
 func (x *DecrementQtyReq) Reset() { *x = DecrementQtyReq{} }
@@ -284,13 +284,6 @@ func (x *DecrementQtyReq) GetUserId() int64 {
 func (x *DecrementQtyReq) GetProductId() int64 {
 	if x != nil {
 		return x.ProductId
-	}
-	return 0
-}
-
-func (x *DecrementQtyReq) GetOldQuantity() int64 {
-	if x != nil {
-		return x.OldQuantity
 	}
 	return 0
 }

@@ -1,0 +1,19 @@
+db:
+  dsn: "root:root@tcp(localhost:13316)/DouyinMall"
+
+redis:
+  addr: "localhost:6379"
+
+etcd:
+  endpoints:
+    - "localhost:12379"
+
+kafka:
+  brokers:
+    - "localhost:9092"
+
+grpc:
+  server:
+    name: search.service
+    port: 8093
+    etcdTTL: 60

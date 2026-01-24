@@ -9,15 +9,15 @@ import (
 func main() {
 	initViperWatch()
 
-	// app := InitApp()
-
-	// port := viper.GetInt("grpc.server.port")
-	// log.Printf("Search service starting on port %d...", port)
-
-	// // 启动 gRPC Server（阻塞）
-	// if err := app.Server.Run(); err != nil {
-	// 	log.Fatalf("server run error: %v", err)
-	// }
+	//app := InitApp()
+	//
+	//port := viper.GetInt("grpc.server.port")
+	//log.Printf("Search service starting on port %d...", port)
+	//
+	//// 启动 gRPC Server（阻塞）
+	//if err := app.Server.Run(); err != nil {
+	//	log.Fatalf("server run error: %v", err)
+	//}
 }
 
 func initViperWatch() {
