@@ -3,11 +3,11 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
-	"github.com/XDWow/DouyinMall/backend/internal/order/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"time"
 )
 
 const OrderStatusChanged = "order.status.changed"
@@ -16,7 +16,7 @@ type ChangeOrderStatusUseCase struct {
 	orderRepo  domain.OrderRepository
 	outboxRepo domain.OutboxRepository
 	producer   mq.SaramaProducer
-	tx         TxManager
+	tx         domain.TxManager
 	log        logger.LoggerV1
 }
 
@@ -24,7 +24,7 @@ func NewChangeOrderStatusUseCase(
 	orderRepo domain.OrderRepository,
 	outboxRepo domain.OutboxRepository,
 	producer mq.SaramaProducer,
-	tx TxManager,
+	tx domain.TxManager,
 	log logger.LoggerV1,
 ) *ChangeOrderStatusUseCase {
 	return &ChangeOrderStatusUseCase{
@@ -54,10 +54,10 @@ func (uc *ChangeOrderStatusUseCase) Execute(cmd ChangeOrderStatusCmd) error {
 	defer cancel()
 	// 需要执行结果，那就同步调用 rpc，否则异步MQ
 	// 这个比较重要，所以通过 outbox 把要发的消息变为数据库事实（慢路径兜底，保证生产者消息不丢），并且和状态修改同一个DB事务提交
-	err := uc.tx.WithTx(ctx, func(ctx context.Context) error {
+	err := uc.tx.Tx(ctx, func(ctx context.Context) error {
 		err := uc.orderRepo.UpdateStatus(ctx, &order)
 		if err != nil {
-			if errors.Is(err, repository.ErrRecordNotFound) {
+			if errors.Is(err, domain.ErrRecordNotFound) {
 				return errors.New("订单不存在或状态不能改变")
 			}
 			return err
@@ -81,8 +81,8 @@ func (uc *ChangeOrderStatusUseCase) Execute(cmd ChangeOrderStatusCmd) error {
 	go func() {
 		c, can := context.WithTimeout(context.Background(), 3*time.Second)
 		defer can()
-		e := uc.producer.SendMessage(c, domain.OrderStatusUpdateEvent{order.ID, order.Status})
-	if e != nil {
+		e := uc.producer.SendMessage(c, domain.OrderStatusUpdateEvent{OrderID: order.ID, Status: order.Status})
+		if e != nil {
 			uc.log.Error("订单状态变化事件发送失败", logger.Error(e))
 			_, e = uc.outboxRepo.IncreaseRetry(c, order.ID)
 			if e != nil {
@@ -94,7 +94,7 @@ func (uc *ChangeOrderStatusUseCase) Execute(cmd ChangeOrderStatusCmd) error {
 		if e != nil {
 			uc.log.Error("修改发件箱状态为已发送，失败", logger.Error(e))
 		}
-	}()	
+	}()
 
 	return nil
 }

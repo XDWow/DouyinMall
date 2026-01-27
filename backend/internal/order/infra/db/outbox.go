@@ -11,6 +11,10 @@ type OutboxEventModel struct {
 	CreatedAt  time.Time
 }
 
+func (OutboxEventModel) TableName() string {
+	return "outbox_events"
+}
+
 type EventStatus uint8
 
 const (

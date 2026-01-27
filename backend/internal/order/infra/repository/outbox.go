@@ -82,7 +82,7 @@ func (repo *outboxRepository) MarkSent(ctx context.Context, id int64) error {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+		return domain.ErrRecordNotFound
 	}
 	return nil
 }
@@ -110,7 +110,7 @@ func (repo *outboxRepository) MarkFailed(ctx context.Context, id int64) error {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		return gorm.ErrRecordNotFound
+		return domain.ErrRecordNotFound
 	}
 	return nil
 }

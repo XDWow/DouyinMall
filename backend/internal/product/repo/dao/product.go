@@ -8,6 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
+//go:generate mockgen -source=product.go -destination=mocks/product_dao_mock.go -package=mocks
+
 var ErrDataNotFound = gorm.ErrRecordNotFound
 
 type ProductDao interface {

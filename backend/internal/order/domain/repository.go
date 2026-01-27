@@ -17,7 +17,9 @@ type OrderRepository interface {
 	// 批量更新订单状态，现在只用于批量取消订单：pending -> canceled
 	BatchUpdateStatus(ctx context.Context, orderIDs []int64, fromStatus, toStatus OrderStatus) error
 
-	ListByUserID(ctx context.Context, userID int64, offset, limit int) ([]Order, error)
+	// Keyset分页：cursor为上一页最后的orderID，首次查询传0
+	// 返回值：orders列表 + nextCursor（用于下一页查询，0表示没有更多数据）
+	ListByUserID(ctx context.Context, userID int64, cursor int64, limit int) (orders []*Order, nextCursor int64, err error)
 }
 
 type OutboxRepository interface {

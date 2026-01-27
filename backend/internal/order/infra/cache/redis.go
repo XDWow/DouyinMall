@@ -2,11 +2,15 @@ package cache
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+//go:embed scripts/zadd_with_limit.lua
+var zaddWithLimitScript string
 
 type redisOrderCache struct {
 	client redis.Cmdable
@@ -26,6 +30,25 @@ func (c *redisOrderCache) Set(ctx context.Context, key string, value any, ttl ti
 
 func (c *redisOrderCache) Get(ctx context.Context, key string) (string, error) {
 	return c.client.Get(ctx, key).Result()
+}
+
+func (c *redisOrderCache) MGet(ctx context.Context, keys ...string) ([]*string, error) {
+	if len(keys) == 0 {
+		return []*string{}, nil
+	}
+	result, err := c.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	// 转换为[]*string切片，nil值保持nil
+	strings := make([]*string, len(result))
+	for i, v := range result {
+		if v != nil {
+			str := v.(string)
+			strings[i] = &str
+		}
+	}
+	return strings, nil
 }
 
 func (c *redisOrderCache) Del(ctx context.Context, keys ...string) error {
@@ -52,6 +75,22 @@ func (c *redisOrderCache) ZAdd(ctx context.Context, key string, members map[stri
 	}
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+// ZAddWithLimit: 原子性执行 ZADD + 裁剪 + TTL，保持ZSet固定大小
+func (c *redisOrderCache) ZAddWithLimit(ctx context.Context, key string, members map[string]float64, limit int64, ttl time.Duration) error {
+	if len(members) == 0 {
+		return nil
+	}
+
+	// 构造参数：ARGV = [limit, ttl_seconds, score1, member1, score2, member2, ...]
+	args := make([]interface{}, 0, 2+len(members)*2)
+	args = append(args, limit, int64(ttl.Seconds()))
+	for member, score := range members {
+		args = append(args, score, member)
+	}
+
+	return c.client.Eval(ctx, zaddWithLimitScript, []string{key}, args...).Err()
 }
 
 func (c *redisOrderCache) ZRange(ctx context.Context, key string, start, stop int64, reverse bool) ([]string, error) {

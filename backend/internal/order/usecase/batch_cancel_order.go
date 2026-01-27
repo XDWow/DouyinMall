@@ -14,7 +14,7 @@ type BatchCancelOrderUseCase struct {
 	orderRepo  domain.OrderRepository
 	outboxRepo domain.OutboxRepository
 	producer   mq.SaramaProducer
-	tx         TxManager
+	tx         domain.TxManager
 	log        logger.LoggerV1
 	maxRetry   int
 }
@@ -23,7 +23,7 @@ func NewBatchCancelOrderUseCase(
 	orderRepo domain.OrderRepository,
 	outboxRepo domain.OutboxRepository,
 	producer mq.SaramaProducer,
-	tx TxManager,
+	tx domain.TxManager,
 	log logger.LoggerV1,
 ) *BatchCancelOrderUseCase {
 	return &BatchCancelOrderUseCase{
@@ -56,8 +56,8 @@ func (uc *BatchCancelOrderUseCase) Execute(ctx context.Context, orders []*domain
 		})
 	}
 
-	err := uc.tx.WithTx(ctx, func(ctx context.Context) error {
-		err := uc.orderRepo.BatchUpdateStatus(ctx, orderIDs, domain.OrderStatusPending, domain.OrderStatusCanceled)
+	err := uc.tx.Tx(ctx, func(ctx context.Context) error {
+		err := uc.orderRepo.BatchUpdateStatus(ctx, orderIDs, domain.OrderStatusCreated, domain.OrderStatusCanceled)
 		if err != nil {
 			uc.log.Error("批量更新订单状态失败",
 				logger.Error(err),

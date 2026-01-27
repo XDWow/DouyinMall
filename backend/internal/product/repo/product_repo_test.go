@@ -26,7 +26,7 @@ import (
 // 创建测试用的 Repo（可切换实现）
 func newTestRepo(t *testing.T, dao dao.ProductDao, cache cache.ProductCache) ProductRepo {
 	// 切换实现：CacheAside 或 Canal
-	return NewCacheAsideProductRepo(dao, cache, logger.NewNopLogger())
+	return NewCachedProductRepo(dao, cache, logger.NewNopLogger())
 	// return NewCachedProductRepo(dao, cache, logger.NewNopLogger())
 }
 

@@ -42,9 +42,10 @@ func (s OrderStatus) AsUint8() uint8 {
 }
 
 const (
-	OrderStatusUnknown = iota
-	OrderStatusPending // 唯一的中间态
-	OrderStatusCompleted
+	OrderStatusUnknown  OrderStatus = iota
+	OrderStatusCreated              // 已创建，未支付
+	OrderStatusPaid
 	OrderStatusCanceled
+	// OrderStatusCompleted
 	// 后续再加等待发货，已发货什么的
 )

@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"gorm.io/gorm"
 )
 
@@ -12,11 +14,11 @@ type GormTxManager struct {
 	db *gorm.DB
 }
 
-func NewGormTxManager(db *gorm.DB) *GormTxManager {
+func NewGormTxManager(db *gorm.DB) domain.TxManager {
 	return &GormTxManager{db: db}
 }
 
-func (m *GormTxManager) WithTx(
+func (m *GormTxManager) Tx(
 	ctx context.Context,
 	fn func(ctx context.Context) error,
 ) error {

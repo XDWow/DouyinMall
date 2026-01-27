@@ -77,6 +77,7 @@ func orderDomainToCmd(cmd CreateOrderCmd) domain.Order {
 	return domain.Order{
 		UserID: cmd.UserID,
 		Phone:  cmd.Phone,
+		Status: domain.OrderStatusCreated,
 		Amt: domain.Amount{
 			Currency: cmd.Currency,
 		},

@@ -53,6 +53,8 @@ message CreateOrderResp {
 
 message ListOrderReq {
     int64 user_id = 1;
+    int64 cursor = 2;
+    int32 limit = 3;
 }
 
 message Order {

@@ -212,6 +212,8 @@ func (x *CreateOrderResp) GetOrderId() int64 {
 
 type ListOrderReq struct {
 	UserId int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	Cursor int64 `protobuf:"varint,2,opt,name=cursor" json:"cursor,omitempty"`
+	Limit  int32 `protobuf:"varint,3,opt,name=limit" json:"limit,omitempty"`
 }
 
 func (x *ListOrderReq) Reset() { *x = ListOrderReq{} }
@@ -223,6 +225,20 @@ func (x *ListOrderReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, 
 func (x *ListOrderReq) GetUserId() int64 {
 	if x != nil {
 		return x.UserId
+	}
+	return 0
+}
+
+func (x *ListOrderReq) GetCursor() int64 {
+	if x != nil {
+		return x.Cursor
+	}
+	return 0
+}
+
+func (x *ListOrderReq) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
 	}
 	return 0
 }

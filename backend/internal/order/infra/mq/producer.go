@@ -13,14 +13,10 @@ type SaramaProducer struct {
 	producer sarama.SyncProducer
 }
 
-func NewSaramaProducer(client sarama.Client, nodeID string) (*SaramaProducer, error) {
-	p, err := sarama.NewSyncProducerFromClient(client)
-	if err != nil {
-		return nil, err
+func NewSaramaProducer(syncProducer sarama.SyncProducer) SaramaProducer {
+	return SaramaProducer{
+		producer: syncProducer,
 	}
-	return &SaramaProducer{
-		producer: p,
-	}, nil
 }
 
 func (p *SaramaProducer) SendMessage(ctx context.Context, evt domain.OrderStatusUpdateEvent) error {

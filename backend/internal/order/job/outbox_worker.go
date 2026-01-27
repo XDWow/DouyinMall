@@ -13,7 +13,7 @@ import (
 // 这是慢路径的兜底机制，确保即使快路径失败，消息最终也能被发送（最终数据一致性）
 type OutboxWorkerJob struct {
 	outboxRepo domain.OutboxRepository
-	producer   *mq.SaramaProducer
+	producer   mq.SaramaProducer
 	l          logger.LoggerV1
 	batchSize  int
 	maxRetry   int
@@ -21,7 +21,7 @@ type OutboxWorkerJob struct {
 
 func NewOutboxWorkerJob(
 	outboxRepo domain.OutboxRepository,
-	producer *mq.SaramaProducer,
+	producer mq.SaramaProducer,
 	l logger.LoggerV1,
 ) *OutboxWorkerJob {
 	return &OutboxWorkerJob{
@@ -116,7 +116,7 @@ func (j *OutboxWorkerJob) processBatch(ctx context.Context, outboxEvents []domai
 					}
 					// 后续入死信队列+告警
 				}
-				
+
 			} else {
 				successIDs = append(successIDs, outboxEvents[i].ID)
 			}

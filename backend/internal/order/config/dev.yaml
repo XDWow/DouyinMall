@@ -1,0 +1,27 @@
+db:
+  dsn: "root:root@tcp(localhost:13316)/DouyinMall"
+
+redis:
+  addr: "localhost:6379"
+
+etcd:
+  endpoints:
+    - "localhost:12379"
+
+grpc:
+  server:
+    name: product.service
+    port: 8092
+    etcdTTL: 60
+
+kafka:
+  brokers:
+    - "localhost:9092"
+
+canal:
+  mysql:
+    host: "localhost"
+    port: 13316
+    user: "root"
+    password: "root"
+  server_id: 1234

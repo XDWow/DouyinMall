@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/XDWow/DouyinMall/backend/internal/cart/handler"
-	cartv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/cart/v1/cartservice"
+	"github.com/XDWow/DouyinMall/backend/internal/order/transport/grpc"
+	orderv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1/orderservice"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/server"
 	etcd "github.com/kitex-contrib/registry-etcd"
 	"github.com/spf13/viper"
 )
 
-func InitGRPCServer(cartHandler *handler.CartHandler) server.Server {
+func InitGRPCServer(orderHandler *grpc.OrderHandler) server.Server {
 	// 初始化 etcd 注册中心
 	endpoints := viper.GetStringSlice("etcd.endpoints")
 	// 如果从环境变量读取（字符串），转换为数组
@@ -32,14 +32,13 @@ func InitGRPCServer(cartHandler *handler.CartHandler) server.Server {
 	addr, _ := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
 
 	// 创建 Kitex 服务
-	svr := cartv1.NewServer(
-		cartHandler,
+	svr := orderv1.NewServer(
+		orderHandler,
 		server.WithRegistry(r),       // 注册到 etcd
 		server.WithServiceAddr(addr), // 服务地址
 		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{
 			ServiceName: serviceName,
 		}),
-		server.WithRegistry(r), // 服务注册
 	)
 
 	return svr

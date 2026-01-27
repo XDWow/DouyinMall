@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockSearchService � service.SearchService � mock 实现
 type MockSearchService struct {
 	SearchProductsFunc        func(ctx context.Context, req *domain.SearchProductsReq) (*domain.SearchProductsResp, error)
 	SearchMerchantsFunc       func(ctx context.Context, req *domain.SearchMerchantsReq) (*domain.SearchMerchantsResp, error)
@@ -195,117 +194,6 @@ func TestSearchHandler_SearchSuggest(t *testing.T) {
 				require.NoError(t, err)
 				assert.Len(t, resp.Suggestions, tc.wantCount)
 			}
-		})
-	}
-}
-
-// 注意：SyncProduct 和 BatchSyncProducts 的测试已删除
-// 这些 RPC 方法已被移除，数据同步现在通过内部 Kafka 消费者处理
-func _Deleted_TestSearchHandler_SyncProduct(t *testing.T) {
-	testCases := []struct {
-		name        string
-		req         *searchv1.SyncProductReq
-		mock        func() (*MockSearchService, *MockSyncService)
-		wantSuccess bool
-		wantErr     bool
-	}{
-		{
-			name: "成功同步商品",
-			req: &searchv1.SyncProductReq{
-				Action: searchv1.SyncAction_CREATE,
-				Product: &searchv1.ProductDocument{
-					Id:    1,
-					Name:  "iPhone 15",
-					Price: 599900,
-				},
-			},
-			mock: func() (*MockSearchService, *MockSyncService) {
-				syncSvc := &MockSyncService{
-					SyncFunc: func(ctx context.Context, event domain.SyncEvent) error {
-						assert.Equal(t, domain.EventTypeProduct, event.Type)
-						assert.Equal(t, domain.EventActionCreate, event.Action)
-						assert.Equal(t, int64(1), event.ID)
-						assert.NotNil(t, event.Product)
-						return nil
-					},
-				}
-				return &MockSearchService{}, syncSvc
-			},
-			wantSuccess: true,
-			wantErr:     false,
-		},
-		{
-			name: "同步失败",
-			req: &searchv1.SyncProductReq{
-				Action: searchv1.SyncAction_UPDATE,
-				Product: &searchv1.ProductDocument{
-					Id:   1,
-					Name: "iPhone 15 Pro",
-				},
-			},
-			mock: func() (*MockSearchService, *MockSyncService) {
-				syncSvc := &MockSyncService{
-					SyncFunc: func(ctx context.Context, event domain.SyncEvent) error {
-						return errors.New("ES sync error")
-					},
-				}
-				return &MockSearchService{}, syncSvc
-			},
-			wantSuccess: false,
-			wantErr:     false, // Handler 不返回错误，而是返回 Success=false 的响应
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			searchSvc, syncSvc := tc.mock()
-			h := NewSearchHandler(searchSvc, syncSvc, nil, nil)
-
-			// resp, err := h.SyncProduct(context.Background(), tc.req)
-			// 方法已删除
-		})
-	}
-}
-
-func _Deleted_TestSearchHandler_BatchSyncProducts(t *testing.T) {
-	testCases := []struct {
-		name        string
-		req         *searchv1.BatchSyncProductsReq
-		mock        func() (*MockSearchService, *MockSyncService)
-		wantSuccess int64
-		wantFailed  int64
-		wantErr     bool
-	}{
-		{
-			name: "批量同步成功",
-			req: &searchv1.BatchSyncProductsReq{
-				Products: []*searchv1.ProductDocument{
-					{Id: 1, Name: "iPhone 15"},
-					{Id: 2, Name: "iPhone 14"},
-				},
-			},
-			mock: func() (*MockSearchService, *MockSyncService) {
-				syncSvc := &MockSyncService{
-					BatchSyncFunc: func(ctx context.Context, events []domain.SyncEvent) (successCount, failedCount int64, errors []string) {
-						assert.Len(t, events, 2)
-						return 2, 0, nil
-					},
-				}
-				return &MockSearchService{}, syncSvc
-			},
-			wantSuccess: 2,
-			wantFailed:  0,
-			wantErr:     false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			searchSvc, syncSvc := tc.mock()
-			h := NewSearchHandler(searchSvc, syncSvc, nil, nil)
-
-			// resp, err := h.BatchSyncProducts(context.Background(), tc.req)
-			// 方法已删除
 		})
 	}
 }

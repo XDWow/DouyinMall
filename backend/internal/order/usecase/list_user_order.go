@@ -2,9 +2,10 @@ package usecase
 
 import (
 	"context"
+	"time"
+
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"time"
 )
 
 type ListUserOrderUseCase struct {
@@ -24,26 +25,34 @@ func NewListUserOrderUseCase(
 
 type ListUserOrderCmd struct {
 	UserID int64
-	Offset int
-	Limit  int
+	Cursor int64 // 上一页最后的orderID，首次查询传0
+	Limit  int32
 }
 
-func (uc *ListUserOrderUseCase) Execute(cmd ListUserOrderCmd) ([]domain.Order, error) {
+type ListUserOrderResult struct {
+	Orders     []*domain.Order
+	NextCursor int64 // 下一页的cursor，0表示没有更多数据
+}
+
+func (uc *ListUserOrderUseCase) Execute(cmd ListUserOrderCmd) (*ListUserOrderResult, error) {
 	// cmd不可信，参数校验
-	if cmd.UserID <= 0 || cmd.Offset < 0 || cmd.Limit <= 0 {
+	if cmd.UserID <= 0 || cmd.Cursor < 0 || cmd.Limit <= 0 {
 		return nil, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	orders, err := uc.orderRepo.ListByUserID(ctx, cmd.UserID, cmd.Offset, cmd.Limit)
+	orders, nextCursor, err := uc.orderRepo.ListByUserID(ctx, cmd.UserID, cmd.Cursor, int(cmd.Limit))
 	if err != nil {
 		uc.log.Error("查询用户订单列表失败",
 			logger.Int64("userID", cmd.UserID),
-			logger.Int("offset", cmd.Offset),
-			logger.Int("limit", cmd.Limit),
+			logger.Int64("cursor", cmd.Cursor),
+			logger.Int32("limit", cmd.Limit),
 			logger.Error(err))
 		return nil, err
 	}
-	return orders, nil
+	return &ListUserOrderResult{
+		Orders:     orders,
+		NextCursor: nextCursor,
+	}, nil
 }

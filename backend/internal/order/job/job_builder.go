@@ -19,8 +19,8 @@ type CronJobBuilder struct {
 
 func NewCronJobBuilder(l logger.LoggerV1) *CronJobBuilder {
 	p := prometheus.NewSummaryVec(prometheus.SummaryOpts{
-		Namespace: "basic_go",
-		Subsystem: "webook",
+		Namespace: "douyin_mall",
+		Subsystem: "order",
 		Help:      "统计定时任务的执行情况",
 		Name:      "cron_job",
 	}, []string{"name", "success"})
