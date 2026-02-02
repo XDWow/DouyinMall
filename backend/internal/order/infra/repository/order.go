@@ -85,6 +85,21 @@ func (repo *orderRepository) Save(ctx context.Context, order *domain.Order) erro
 	return nil
 }
 
+func (repo *orderRepository) FindByID(ctx context.Context, orderID int64) (domain.Order, error) {
+	var orderModel db.OrderModel
+	err := repo.db.WithContext(ctx).
+		Preload("Items"). // 预加载订单项
+		Where("id = ?", orderID).
+		First(&orderModel).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return domain.Order{}, domain.ErrRecordNotFound
+		}
+		return domain.Order{}, err
+	}
+	return *toDomainOrder(&orderModel), nil
+}
+
 func (repo *orderRepository) UpdateStatus(ctx context.Context, order *domain.Order) error {
 	res := repo.db.WithContext(ctx).
 		Model(&db.OrderModel{}).

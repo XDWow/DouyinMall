@@ -29,6 +29,7 @@ func InitApp() *App {
 		ioc.InitRedis,
 		ioc.InitKafkaClient,
 		ioc.InitKafkaSyncProducer,
+		ioc.InitInventoryClient, // 库存服务RPC客户端
 
 		// DB层
 		db.NewGormTxManager,

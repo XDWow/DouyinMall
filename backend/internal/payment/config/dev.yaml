@@ -1,0 +1,48 @@
+db:
+  dsn: "root:root@tcp(localhost:13306)/DouyinMall"
+
+redis:
+  addr: "localhost:6379"
+
+etcd:
+  endpoints:
+    - "localhost:12379"
+
+grpc:
+  server:
+    name: product.service
+    port: 8092
+    etcdTTL: 60
+
+http:
+  server:
+    port: 8093
+
+# 支付配置
+payment:
+  # 支付模式: mock=使用Mock服务(开发测试), real=真实微信支付(生产)
+  mode: "mock"
+
+wechat:
+  # Mock 模式：指向 Mock 微信支付服务
+  # Real 模式：使用真实的微信支付 API
+  api_base_url: "http://localhost:8888"            # Mock服务地址，真实环境改为 https://api.mch.weixin.qq.com
+  
+  app_id: "wx_mock_app_id"                         # 微信公众号/小程序 AppID
+  mch_id: "1234567890"                             # 微信支付商户号
+  cert_serial_no: "MOCK_CERT_SERIAL_NO"            # 商户API证书序列号（Mock模式下随意）
+  private_key_path: "./mock_key.pem"               # 商户私钥文件路径（Mock模式不验证）
+  api_v3_key: "mock_api_v3_key_32_characters!!"    # API v3密钥
+  notify_url: "http://localhost:8093/payment/wechat/callback"  # 支付回调地址
+
+kafka:
+  brokers:
+    - "localhost:9092"
+
+canal:
+  mysql:
+    host: "localhost"
+    port: 13316
+    user: "root"
+    password: "root"
+  server_id: 1234

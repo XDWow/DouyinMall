@@ -52,7 +52,7 @@ func (h *OrderHandler) ChangeOrderStatus(ctx context.Context, req *orderv1.Chang
 		OrderID:     req.GetOrderId(),
 		OrderStatus: domain.OrderStatus(req.GetOrderStatus()),
 	}
-	err = h.changeOrderStatusUC.Execute(cmd)
+	err = h.changeOrderStatusUC.Execute(ctx, cmd)
 	return &orderv1.ChangeOrderStatusResp{}, err
 }
 

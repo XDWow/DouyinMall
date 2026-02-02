@@ -10,6 +10,7 @@ import (
 // 这样业务层才能在没有数据库的情况下被完整建模和测试
 type OrderRepository interface {
 	Save(ctx context.Context, order *Order) error
+	FindByID(ctx context.Context, orderID int64) (Order, error)
 	UpdateStatus(ctx context.Context, order *Order) error
 	ListOrdersByStatus(ctx context.Context, userID int64, status string) ([]*Order, error)
 	// 查找超过30分钟未支付的待支付订单（过期）

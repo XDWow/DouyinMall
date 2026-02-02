@@ -397,7 +397,7 @@ func (s *OrderIntegrationSuite) TestChangeOrderStatus_WithOutbox() {
 		OrderID:     order.ID,
 		OrderStatus: domain.OrderStatusPaid,
 	}
-	err = s.changeOrderStatusUC.Execute(cmd)
+	err = s.changeOrderStatusUC.Execute(ctx, cmd)
 	require.NoError(s.T(), err)
 
 	// 验证数据库状态已更新

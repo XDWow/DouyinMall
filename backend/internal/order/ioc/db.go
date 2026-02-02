@@ -3,6 +3,7 @@ package ioc
 import (
 	"fmt"
 
+	"github.com/XDWow/DouyinMall/backend/internal/order/config"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/db"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
@@ -10,11 +11,8 @@ import (
 )
 
 func InitDB() *gorm.DB {
-	type Config struct {
-		DSN string `yaml:"dsn"`
-	}
 	// 默认配置兜底
-	c := Config{
+	c := config.DBConfig{
 		DSN: "root:root@tcp(localhost:3306)/mysql",
 	}
 	err := viper.UnmarshalKey("db", &c)
