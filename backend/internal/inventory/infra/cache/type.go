@@ -19,11 +19,9 @@ type InventoryCache interface {
 	// 用于：RefundStock 恢复Redis预库存
 	IncrBy(ctx context.Context, key string, delta int32) (int64, error)
 
-	// 获取字符串值
 	// 用于：CacheRepairJob 查询预库存
 	Get(ctx context.Context, key string) (string, error)
 
-	// 设置字符串值
 	// 用于：CacheRepairJob 修复预库存
 	Set(ctx context.Context, key string, value string, expiration time.Duration) (string, error)
 }

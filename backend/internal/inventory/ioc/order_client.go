@@ -1,26 +1,35 @@
 package ioc
 
 import (
+	"fmt"
+
+	"github.com/XDWow/DouyinMall/backend/internal/inventory/config"
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1/orderservice"
 	"github.com/cloudwego/kitex/client"
-	"github.com/cloudwego/kitex/pkg/klog"
 	etcd "github.com/kitex-contrib/registry-etcd"
+	"github.com/spf13/viper"
 )
 
-// 创建订单服务RPC客户端
-// 用于库存服务同步回调订单服务更新状态
-func NewOrderClient() orderservice.Client {
-	r, err := etcd.NewEtcdResolver([]string{"localhost:12379"})
+// 初始化订单服务客户端（用于同步调用更新订单状态）
+func InitOrderClient() orderservice.Client {
+	// etcd配置
+	etcdCfg := config.EtcdConfig{
+		Endpoints: []string{"localhost:12379"},
+	}
+	viper.UnmarshalKey("etcd", &etcdCfg)
+
+	r, err := etcd.NewEtcdResolver(etcdCfg.Endpoints)
 	if err != nil {
-		klog.Fatal("创建etcd resolver失败", err)
+		panic(fmt.Errorf("创建 etcd resolver 失败: %w", err))
 	}
 
+	// 创建订单服务客户端
 	cli, err := orderservice.NewClient(
-		"order",
+		"order.service",
 		client.WithResolver(r),
 	)
 	if err != nil {
-		klog.Fatal("创建order client失败", err)
+		panic(fmt.Errorf("创建订单服务客户端失败: %w", err))
 	}
 
 	return cli

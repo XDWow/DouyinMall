@@ -7,19 +7,20 @@ type Inventory struct {
 	ID        int64 `gorm:"primaryKey;autoIncrement"`
 	ProductID int64 `gorm:"uniqueIndex;not null"`
 	Stock     int64 `gorm:"not null"` // 当前可用库存
+	Sold      int64 `gorm:"not null;default:0"` // 已售出数量（累计，用于审计和数据分析）
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
 // InventoryOperation 库存操作记录表（商品级幂等 + 恢复）一定要记得有两个作用，老是忘
 type InventoryOperation struct {
-	ID          int64  `gorm:"primaryKey;autoIncrement"`
-	OperationID string `gorm:"uniqueIndex:idx_op_prod;size:128;not null"` // 业务幂等键（如：order:123:reserve）
-	ProductID   int64  `gorm:"uniqueIndex:idx_op_prod;index:idx_product;not null"`
-	Type        string `gorm:"index:idx_type;size:32;not null"` // 操作类型：commit/refund/adjust（方便统计）
-	Reason      string `gorm:"size:255"`                        // 原因（adjust 时需要，方便审计）
-	Quantity    int32  `gorm:"not null"`                        // 变动数量（正数=增加，负数=减少）
-	CreatedAt   time.Time
+	ID          int64     `gorm:"primaryKey;autoIncrement"`
+	OperationID string    `gorm:"uniqueIndex:idx_op_prod;size:128;not null"` // 业务幂等键（如：order:123:reserve）
+	ProductID   int64     `gorm:"uniqueIndex:idx_op_prod;index:idx_product;not null"`
+	Type        string    `gorm:"index;size:32;not null"` // 操作类型：commit/refund/adjust（方便统计）
+	Reason      string    `gorm:"size:255"`               // 原因（adjust 时需要，方便审计）
+	Quantity    int32     `gorm:"not null"`               // 变动数量（正数=增加，负数=减少）
+	CreatedAt   time.Time `gorm:"index"`
 
 	// 联合唯一索引：(operation_id, product_id) 保证商品级幂等，支持部分退款
 }

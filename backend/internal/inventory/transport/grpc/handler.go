@@ -20,7 +20,7 @@ func NewInventoryHandler(repo domain.InventoryRepository) *InventoryHandler {
 	}
 }
 
-// GetInventory 查询单个商品库存
+// 查询单个商品库存
 func (h *InventoryHandler) GetInventory(ctx context.Context, req *inventoryv1.GetInventoryReq) (*inventoryv1.GetInventoryResp, error) {
 	if req.GetProductId() <= 0 {
 		return nil, errors.New("product_id must be greater than 0")
@@ -40,9 +40,7 @@ func (h *InventoryHandler) GetInventory(ctx context.Context, req *inventoryv1.Ge
 
 	inv := inventories[0]
 	return &inventoryv1.GetInventoryResp{
-		ProductId:      inv.ProductID,
-		AvailableStock: int64(inv.Stock),
-		SoldStock:      0, // TODO: 需要从DB查询sold_stock字段
+		ProductId: inv.ProductID,
 	}, nil
 }
 

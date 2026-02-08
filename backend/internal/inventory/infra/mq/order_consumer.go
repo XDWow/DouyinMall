@@ -229,9 +229,19 @@ func (c *OrderConsumer) handleRefunded(ctx context.Context, evt OrderStatusUpdat
 		return c.refundStockUC.Execute(ctx, cmd)
 	})
 
-	if err == nil {
-		c.logger.Info("订单退款，已恢复库存", logger.Int64("orderID", evt.OrderID))
+	// 幂等命中：已处理过
+	if errors.Is(err, domain.ErrDuplicateOperation) {
+		c.logger.Info("RefundStock幂等命中，跳过", logger.Int64("orderID", evt.OrderID))
+		return
 	}
+
+	// 其他错误：已在executeWithRetry中处理
+	if err != nil {
+		return
+	}
+
+	// 成功
+	c.logger.Info("RefundStock成功", logger.Int64("orderID", evt.OrderID))
 }
 
 // 格式：order_{orderID}_{action}

@@ -11,7 +11,6 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/infra/mq"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/ioc"
-	"github.com/XDWow/DouyinMall/backend/internal/inventory/job"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/transport/grpc"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/usecase"
 	"github.com/cloudwego/kitex/server"
@@ -24,35 +23,33 @@ func InitApp() *App {
 	cmdable := ioc.InitRedis()
 	inventoryCache := cache.NewRedisInventoryCache(cmdable)
 	loggerV1 := ioc.InitLogger()
-	gormInventoryRepository := repository.NewGormInventoryRepository(db, inventoryCache, loggerV1)
-	inventoryHandler := grpc.NewInventoryHandler(gormInventoryRepository)
+	inventoryRepository := repository.NewGormInventoryRepository(db, inventoryCache, loggerV1)
+	inventoryHandler := grpc.NewInventoryHandler(inventoryRepository)
 	server := ioc.InitGRPCServer(inventoryHandler)
 	client := ioc.InitKafkaClient()
-	commitStockUseCase := usecase.NewCommitStockUseCase(gormInventoryRepository, loggerV1)
-	releaseStockUseCase := usecase.NewReleaseStockUseCase(gormInventoryRepository, loggerV1)
-	refundStockUseCase := usecase.NewRefundStockUseCase(gormInventoryRepository, loggerV1)
-	orderConsumer := mq.NewOrderConsumer(client, commitStockUseCase, releaseStockUseCase, refundStockUseCase, loggerV1)
-	cacheRepairJob := job.NewCacheRepairJob(db, inventoryCache, cmdable, loggerV1)
-	app := newApp(server, orderConsumer, cacheRepairJob)
+	syncProducer := ioc.InitKafkaSyncProducer(client)
+	commitStockUseCase := usecase.NewCommitStockUseCase(inventoryRepository, loggerV1)
+	releaseStockUseCase := usecase.NewReleaseStockUseCase(inventoryRepository, loggerV1)
+	refundStockUseCase := usecase.NewRefundStockUseCase(inventoryRepository, loggerV1)
+	orderserviceClient := ioc.InitOrderClient()
+	orderConsumer := mq.NewOrderConsumer(client, syncProducer, commitStockUseCase, releaseStockUseCase, refundStockUseCase, orderserviceClient, loggerV1)
+	app := newApp(server, orderConsumer)
 	return app
 }
 
 // wire.go:
 
 type App struct {
-	GRPCServer    server.Server       // gRPC 服务（其他微服务调用）
-	OrderConsumer *mq.OrderConsumer   // Kafka 消费者（订单状态变更）
-	CacheRepair   *job.CacheRepairJob // 缓存修复定时任务
+	GRPCServer    server.Server
+	OrderConsumer *mq.OrderConsumer
 }
 
 func newApp(
 	grpcServer server.Server,
 	orderConsumer *mq.OrderConsumer,
-	cacheRepair *job.CacheRepairJob,
 ) *App {
 	return &App{
 		GRPCServer:    grpcServer,
 		OrderConsumer: orderConsumer,
-		CacheRepair:   cacheRepair,
 	}
 }

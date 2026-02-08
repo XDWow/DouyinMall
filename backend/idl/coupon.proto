@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package coupon.v1;
+
+option go_package = "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/coupon/v1";
+
+service CouponService {
+  // 用户侧
+  // 查询优惠券列表
+  rpc ListUserCoupons(ListUserCouponsReq) returns (ListUserCouponsResp);
+  
+  // 查询订单可用的优惠券（结算页展示）
+  rpc ListAvailableCoupons(ListAvailableCouponsReq) returns (ListAvailableCouponsResp);
+  
+  // 核销流程（类似库存的 Reserve/Commit/Release）
+  // 预扣优惠券（创建订单时调用，锁定优惠券）
+  rpc ReserveCoupon(ReserveCouponReq) returns (ReserveCouponResp);
+  
+  // 确认核销（支付成功后调用）
+  rpc CommitCoupon(CommitCouponReq) returns (CommitCouponResp);
+  
+  // 释放预扣（订单取消时调用）
+  rpc ReleaseCoupon(ReleaseCouponReq) returns (ReleaseCouponResp);
+  
+  // 退还优惠券（订单退款时调用，已核销的券退回给用户）
+  rpc RefundCoupon(RefundCouponReq) returns (RefundCouponResp);
+  
+  // 管理侧
+  // 创建优惠券模板
+  rpc CreateCouponTemplate(CreateCouponTemplateReq) returns (CreateCouponTemplateResp);
+  
+  // 发放优惠券给用户
+  rpc IssueCoupon(IssueCouponReq) returns (IssueCouponResp);
+}
+
+
+// 优惠券类型
+enum CouponType {
+  COUPON_TYPE_UNSPECIFIED = 0;
+  COUPON_TYPE_AMOUNT = 1;      // 满减券
+  COUPON_TYPE_PERCENT = 2;     // 折扣券
+  COUPON_TYPE_FIXED = 3;       // 立减券，无门槛
+}
+
+// 优惠券状态
+enum UserCouponStatus {
+  USER_COUPON_STATUS_UNSPECIFIED = 0;
+  USER_COUPON_STATUS_UNUSED = 1;      // 未使用
+  USER_COUPON_STATUS_LOCKED = 2;      // 已锁定（预扣中），实例通过状态预扣，防止超卖
+  USER_COUPON_STATUS_USED = 3;        // 已使用
+  USER_COUPON_STATUS_EXPIRED = 4;     // 已过期
+}
+
+// 优惠券模板（管理员创建的券规则）
+message CouponTemplate {
+  int64 id = 1;
+  string name = 2;                    // 券名称
+  CouponType type = 3;                // 券类型
+  int64 threshold = 4;                // 使用门槛（分），0表示无门槛
+  int64 discount_value = 5;           // 优惠值：满减/立减是金额（分），折扣是百分比（80表示8折）
+  int64 max_discount = 6;             // 折扣券最大优惠金额（分），0表示不限
+  int64 valid_days = 7;               // 领取后有效天数（0表示使用固定时间）
+  int64 valid_start_time = 8;         // 固定生效开始时间（unix秒）
+  int64 valid_end_time = 9;           // 固定生效结束时间（unix秒）
+  int32 total_count = 10;             // 发行总量（-1表示不限）
+  int32 issued_count = 11;            // 已发放数量
+  int32 per_user_limit = 12;          // 每人限领数量
+  repeated int64 product_ids = 13;    // 适用商品ID（空表示全场通用）
+  repeated int64 category_ids = 14;   // 适用分类ID（空表示全场通用）
+  bool enabled = 15;                  // 是否启用
+  int64 created_at = 16;
+  int64 updated_at = 17;
+}
+
+// 用户优惠券（用户领取的券实例）
+message UserCoupon {
+  int64 id = 1;                       // 用户券ID（唯一）
+  int64 user_id = 2;
+  int64 template_id = 3;
+  CouponTemplate template = 4;        // 券模板详情（冗余，方便展示）
+  UserCouponStatus status = 5;
+  int64 locked_order_id = 6;          // 锁定的订单ID（预扣时设置）
+  int64 used_order_id = 7;            // 使用的订单ID（核销时设置）
+  int64 valid_start_time = 8;         // 生效开始时间
+  int64 valid_end_time = 9;           // 生效结束时间
+  int64 created_at = 10;
+  int64 used_at = 11;
+}
+
+// 订单商品
+message OrderItem {
+  int64 product_id = 1;
+  int64 category_id = 2;
+  int64 price = 3;                    // 单价（分）
+  int32 quantity = 4;
+}
+
+// ==================== 请求/响应 ====================
+
+// 查询用户优惠券列表
+message ListUserCouponsReq {
+  int64 user_id = 1;
+  UserCouponStatus status = 2;        // 筛选状态（0表示全部）
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message ListUserCouponsResp {
+  repeated UserCoupon coupons = 1;
+  int32 total = 2;
+}
+
+// 查询订单可用优惠券
+message ListAvailableCouponsReq {
+  int64 user_id = 1;
+  repeated OrderItem items = 2;       // 订单商品列表
+}
+
+message ListAvailableCouponsResp {
+  repeated UserCoupon coupons = 1;    // 可用的券，给用户选择，这里不做自动计算最优惠策略了吧
+}
+
+// 预扣优惠券（状态机保证幂等：Unused->Locked，重复调用会检查status和order_id）
+// 这是起点，会插入orderID，后续根据orderID找到优惠券，修改状态
+message ReserveCouponReq {
+  int64 user_id = 1;
+  int64 user_coupon_id = 2;           // 用户券ID
+  int64 order_id = 3;                 // 订单ID
+  repeated OrderItem items = 4;       // 订单商品（用于校验适用性）
+}
+
+message ReserveCouponResp {
+  bool success = 1;
+  string message = 2;
+}
+
+// 确认核销（状态机保证幂等：Locked->Used）
+message CommitCouponReq {
+  int64 order_id = 1;
+}
+
+message CommitCouponResp {
+  bool success = 1;
+}
+
+// 释放预扣（状态机保证幂等：Locked->Unused）
+message ReleaseCouponReq {
+  int64 order_id = 1;
+}
+
+message ReleaseCouponResp {
+  bool success = 1;
+}
+
+// 退还优惠券（状态机保证幂等：Used->Unused）
+message RefundCouponReq {
+  int64 order_id = 1;
+}
+
+message RefundCouponResp {
+  bool success = 1;
+}
+
+// 创建优惠券模板
+message CreateCouponTemplateReq {
+  string name = 1;
+  CouponType type = 2;
+  int64 threshold = 3;
+  int64 discount_value = 4;
+  int64 max_discount = 5;
+  int64 valid_days = 6;
+  int64 valid_start_time = 7;
+  int64 valid_end_time = 8;
+  int32 total_count = 9;
+  int32 per_user_limit = 10;
+  repeated int64 product_ids = 11;
+  repeated int64 category_ids = 12;
+}
+
+message CreateCouponTemplateResp {
+  int64 template_id = 1;
+}
+
+// 发放优惠券，这里不搞数量，实现会简单很多，那边才能用状态机，搞数量就和库存一样了
+// 发放优惠券仍然需要operation_id，避免重试导致错误发多张
+message IssueCouponReq {
+  string operation_id = 1;            // 幂等ID（如：coupon:issue:user_123_template_456_20260204）
+  int64 user_id = 2;
+  int64 template_id = 3;
+  string source = 4;                  // 发放来源（如：new_user, activity_123）
+}
+
+message IssueCouponResp {
+  bool success = 1;                   // 是否成功
+  int64 user_coupon_id = 2;           // 发放的用户券ID
+  string message = 3;                 // 失败原因（如：已领取过、库存不足）
+}

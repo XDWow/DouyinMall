@@ -7,33 +7,42 @@ import (
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/infra/cache"
-	"github.com/XDWow/DouyinMall/backend/internal/inventory/infra/db"
+	"github.com/XDWow/DouyinMall/backend/internal/inventory/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 /*
-大厂级定时任务设计：
-
-核心原则：
-1. Redis预库存 = DB库存 - 正在预扣中的量（这是正常状态）
-2. 定时任务要区分"正常预扣差异" vs "真实不一致"
-3. 只修复真实不一致，不破坏正常预扣
-
-修复策略：
-- 增量修复（hourly）：检查最近操作过的商品，计算预扣量后对比
-- 全量对账（daily/3AM）：扫描所有活跃商品，全量校验
-- 分布式锁：防止多实例并发执行
-- 分批处理：每批100个商品，避免内存爆炸
-- 监控告警：差异超过阈值（>10个商品或>5%库存）触发P1
+	兜底搞不了，库存兜底不是在线修复问题，而是事故处理流程
+	通过冻结库存写入，强制推进订单到终态，再以 DB 为唯一事实源重建redis数据
 */
 
-// CacheRepairJob Redis缓存一致性修复定时任务
+/*
+定时任务设计：
+
+核心原则：
+1. Redis预库存 = DB库存 - 正在预扣中的量
+2. 扫描 Redis 中有库存缓存的商品，检查是否正确
+
+对账策略：
+- 频率：每天凌晨3点
+- 范围：扫描 Redis 所有 stock:* keys（有缓存的商品）
+- 分布式锁：防止多实例并发执行
+- 分批处理：SCAN 每次100个key，避免阻塞 Redis
+- 监控告警：修复商品数 > 5% 触发告警
+
+为什么扫描 Redis 而不是查 DB 操作表：
+- DB 操作表只记录 CommitStock/RefundStock
+- ReserveStock/ReleaseStock 不写 DB，只操作 Redis
+- 所以预扣/释放失败导致的不一致，查 DB 操作表发现不了
+*/
+
+// Redis缓存对账任务（每日凌晨执行）
 type CacheRepairJob struct {
 	db          *gorm.DB
 	cache       cache.InventoryCache
-	redisClient redis.Cmdable // 需要原生client执行SCAN等命令
+	redisClient redis.Cmdable // 需要原生client执行SCAN命令
 	logger      logger.LoggerV1
 }
 
@@ -46,77 +55,7 @@ func NewCacheRepairJob(db *gorm.DB, cache cache.InventoryCache, redisClient redi
 	}
 }
 
-// RunHourly 每小时增量修复：只检查最近1小时有操作的商品
-func (j *CacheRepairJob) RunHourly() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
-
-	// 分布式锁：防止多实例并发执行
-	lockKey := "lock:cache_repair:hourly"
-	locked, err := j.redisClient.SetNX(ctx, lockKey, "1", 10*time.Minute).Result()
-	if err != nil || !locked {
-		j.logger.Info("Redis缓存修复任务已在其他实例执行，跳过")
-		return nil
-	}
-	defer j.redisClient.Del(ctx, lockKey)
-
-	j.logger.Info("开始执行Redis缓存增量修复（hourly）")
-
-	// 1. 查询最近1小时有操作的商品ID（去重）
-	var productIDs []int64
-	err = j.db.WithContext(ctx).
-		Model(&db.InventoryOperation{}).
-		Distinct("product_id").
-		Where("created_at > ?", time.Now().Add(-1*time.Hour)).
-		Pluck("product_id", &productIDs).Error
-	if err != nil {
-		j.logger.Error("查询活跃商品失败", logger.Error(err))
-		return err
-	}
-
-	if len(productIDs) == 0 {
-		j.logger.Info("无需修复：最近1小时无库存操作")
-		return nil
-	}
-
-	j.logger.Info("开始增量修复", logger.Int("productCount", len(productIDs)))
-
-	// 2. 分批检查修复（每批100个）
-	repairCount := 0
-	var repairErrors []string
-
-	for i := 0; i < len(productIDs); i += 100 {
-		end := i + 100
-		if end > len(productIDs) {
-			end = len(productIDs)
-		}
-		batch := productIDs[i:end]
-
-		for _, productID := range batch {
-			if err := j.repairProduct(ctx, productID); err != nil {
-				repairErrors = append(repairErrors, fmt.Sprintf("productID:%d error:%v", productID, err))
-			} else if err == nil {
-				repairCount++ // repairProduct返回nil表示修复了
-			}
-		}
-	}
-
-	// 3. 记录结果
-	if len(repairErrors) > 0 {
-		j.logger.Warn("增量修复完成（有失败）",
-			logger.Int("repairCount", repairCount),
-			logger.Int("errorCount", len(repairErrors)))
-	} else if repairCount > 0 {
-		j.logger.Info("增量修复完成", logger.Int("repairCount", repairCount))
-	} else {
-		j.logger.Info("增量检查通过，无需修复")
-	}
-
-	return nil
-}
-
-// RunDaily 每日全量对账（凌晨3点执行）
-func (j *CacheRepairJob) RunDaily() error {
+func (j *CacheRepairJob) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Minute)
 	defer cancel()
 
@@ -124,59 +63,61 @@ func (j *CacheRepairJob) RunDaily() error {
 	lockKey := "lock:cache_repair:daily"
 	locked, err := j.redisClient.SetNX(ctx, lockKey, "1", 60*time.Minute).Result()
 	if err != nil || !locked {
-		j.logger.Info("每日对账任务已在其他实例执行，跳过")
+		j.logger.Info("对账任务已在其他实例执行，跳过")
 		return nil
 	}
 	defer j.redisClient.Del(ctx, lockKey)
 
-	j.logger.Info("开始执行每日全量Redis对账")
+	j.logger.Info("开始执行Redis对账")
 
-	// 1. 查询所有有操作记录的商品（最近30天）
-	var productIDs []int64
-	err = j.db.WithContext(ctx).
-		Model(&db.InventoryOperation{}).
-		Distinct("product_id").
-		Where("created_at > ?", time.Now().AddDate(0, 0, -30)).
-		Pluck("product_id", &productIDs).Error
+	// 1. 一次性扫描所有 reserve:* keys，构建预扣量 map
+	// 避免每个商品都全量扫描，O(N) → O(1) 查询
+	reservedMap, err := j.buildReservedMap(ctx)
 	if err != nil {
-		j.logger.Error("查询活跃商品失败", logger.Error(err))
+		j.logger.Error("构建预扣量map失败", logger.Error(err))
+		return err
+	}
+	j.logger.Info("预扣记录扫描完成", logger.Int("reserveKeyCount", len(reservedMap)))
+
+	// 2. 扫描 Redis 所有 stock:* keys，收集有缓存的商品ID
+	productIDs, err := j.scanStockKeys(ctx)
+	if err != nil {
+		j.logger.Error("扫描Redis stock keys失败", logger.Error(err))
 		return err
 	}
 
-	j.logger.Info("开始全量对账", logger.Int("productCount", len(productIDs)))
+	if len(productIDs) == 0 {
+		j.logger.Info("无需对账：Redis中无库存缓存")
+		return nil
+	}
 
-	// 2. 分批处理（每批100个）
+	j.logger.Info("开始对账", logger.Int("productCount", len(productIDs)))
+
+	// 3. 逐个检查修复（预扣量直接从 map 查，O(1)）
 	repairCount := 0
 	var repairErrors []string
 
-	for i := 0; i < len(productIDs); i += 100 {
-		end := i + 100
-		if end > len(productIDs) {
-			end = len(productIDs)
-		}
-		batch := productIDs[i:end]
-
-		for _, productID := range batch {
-			if err := j.repairProduct(ctx, productID); err != nil {
-				repairErrors = append(repairErrors, fmt.Sprintf("productID:%d error:%v", productID, err))
-			} else if err == nil {
-				repairCount++
-			}
+	for _, productID := range productIDs {
+		if err := j.repairProduct(ctx, productID, reservedMap); err != nil {
+			repairErrors = append(repairErrors, fmt.Sprintf("productID:%d error:%v", productID, err))
+		} else {
+			repairCount++
 		}
 	}
 
 	// 3. 结果统计
-	if repairCount > 10 || float64(repairCount)/float64(len(productIDs)) > 0.05 {
-		// 大量差异（>10个或>5%），可能系统性问题，触发P1告警
+	if len(productIDs) > 0 {
 		repairRate := float64(repairCount) / float64(len(productIDs)) * 100
-		j.logger.Error("每日对账发现大量差异，请人工介入",
-			logger.Int("repairCount", repairCount),
-			logger.Int("totalProducts", len(productIDs)),
-			logger.String("repairRate", fmt.Sprintf("%.2f%%", repairRate)))
-	} else if repairCount > 0 {
-		j.logger.Warn("每日对账完成", logger.Int("repairCount", repairCount))
-	} else {
-		j.logger.Info("每日对账通过，Redis与DB一致")
+		if repairRate > 5 { // 修复率>5%，可能系统性问题，触发告警
+			j.logger.Error("对账发现大量差异，请人工介入",
+				logger.Int("repairCount", repairCount),
+				logger.Int("totalProducts", len(productIDs)),
+				logger.String("repairRate", fmt.Sprintf("%.2f%%", repairRate)))
+		} else if repairCount > 0 {
+			j.logger.Warn("对账完成", logger.Int("repairCount", repairCount))
+		} else {
+			j.logger.Info("对账通过，Redis与DB一致")
+		}
 	}
 
 	if len(repairErrors) > 0 {
@@ -186,91 +127,26 @@ func (j *CacheRepairJob) RunDaily() error {
 	return nil
 }
 
-// repairProduct 修复单个商品的Redis预库存
-// 返回 nil 表示修复了，返回 error 表示失败，返回特殊值表示无需修复
-func (j *CacheRepairJob) repairProduct(ctx context.Context, productID int64) error {
-	// 1. 查询DB库存（真实库存）
-	var inventory db.Inventory
-	err := j.db.WithContext(ctx).Where("product_id = ?", productID).First(&inventory).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("skip") // 商品已删除，跳过
-		}
-		return fmt.Errorf("查询DB失败: %w", err)
-	}
-
-	// 2. 查询Redis预库存
-	redisStockStr, err := j.cache.Get(ctx, fmt.Sprintf("stock:%d", productID))
-	if err != nil {
-		// Redis没数据很正常（可能从未预扣过），跳过
-		return fmt.Errorf("skip")
-	}
-	redisStock, _ := strconv.ParseInt(redisStockStr, 10, 64)
-
-	// 3. 计算正在预扣中的量（扫描所有 reserve:* keys）
-	// 大厂优化：这里可以用Bloom Filter预过滤，避免SCAN所有keys
-	reservedQty, err := j.calculateReservedQuantity(ctx, productID)
-	if err != nil {
-		return fmt.Errorf("计算预扣量失败: %w", err)
-	}
-
-	// 4. 计算期望的Redis预库存
-	expectedRedisStock := inventory.Stock - reservedQty
-
-	// 5. 对比差异
-	diff := abs64(redisStock - expectedRedisStock)
-	threshold := max64(int64(float64(inventory.Stock)*0.05), 10) // 5%或10，取大值
-
-	if diff <= threshold {
-		// 差异在合理范围内，无需修复
-		return fmt.Errorf("skip")
-	}
-
-	// 6. 差异超过阈值，修复Redis
-	_, err = j.cache.Set(ctx, fmt.Sprintf("stock:%d", productID), strconv.FormatInt(expectedRedisStock, 10), 30*time.Minute)
-	if err != nil {
-		return fmt.Errorf("修复Redis失败: %w", err)
-	}
-
-	j.logger.Warn("检测到Redis预库存差异，已修复",
-		logger.Int64("productID", productID),
-		logger.Int64("dbStock", inventory.Stock),
-		logger.Int64("reservedQty", reservedQty),
-		logger.Int64("expectedRedis", expectedRedisStock),
-		logger.Int64("actualRedis", redisStock),
-		logger.Int64("diff", diff))
-
-	return nil // 返回nil表示修复成功
-}
-
-// calculateReservedQuantity 计算商品的预扣总量
-// 扫描所有 reserve:* keys，累加该商品的预扣数量
-func (j *CacheRepairJob) calculateReservedQuantity(ctx context.Context, productID int64) (int64, error) {
-	var totalReserved int64
-	productIDStr := strconv.FormatInt(productID, 10)
-
-	// 使用SCAN命令遍历所有预扣记录（大厂优化：可以维护一个set存储活跃的reserveID）
+// 扫描 Redis 所有 stock:* keys，返回商品ID列表
+func (j *CacheRepairJob) scanStockKeys(ctx context.Context) ([]int64, error) {
+	var productIDs []int64
 	var cursor uint64
+
 	for {
-		// 每次扫描100个key
-		keys, nextCursor, err := j.redisClient.Scan(ctx, cursor, "reserve:*", 100).Result()
+		// SCAN 每次100个key，避免阻塞 Redis
+		keys, nextCursor, err := j.redisClient.Scan(ctx, cursor, "stock:*", 100).Result()
 		if err != nil {
-			return 0, fmt.Errorf("SCAN失败: %w", err)
+			return nil, fmt.Errorf("SCAN失败: %w", err)
 		}
 
-		// 批量查询这些预扣记录中该商品的数量
+		// 从 key 中提取商品ID（格式：stock:{productID}）
 		for _, key := range keys {
-			qtyStr, err := j.redisClient.HGet(ctx, key, productIDStr).Result()
-			if err != nil {
-				if err == redis.Nil {
-					continue // 该预扣记录不包含此商品
+			// key = "stock:123" → productID = 123
+			if len(key) > 6 { // len("stock:") = 6
+				if id, err := strconv.ParseInt(key[6:], 10, 64); err == nil {
+					productIDs = append(productIDs, id)
 				}
-				j.logger.Warn("查询预扣记录失败", logger.String("key", key), logger.Error(err))
-				continue
 			}
-
-			qty, _ := strconv.ParseInt(qtyStr, 10, 64)
-			totalReserved += abs64(qty) // 预扣记录存的是负数，取绝对值
 		}
 
 		cursor = nextCursor
@@ -279,7 +155,120 @@ func (j *CacheRepairJob) calculateReservedQuantity(ctx context.Context, productI
 		}
 	}
 
-	return totalReserved, nil
+	return productIDs, nil
+}
+
+// 修复单个商品的Redis预库存
+// reservedMap: 预先构建的 productID → 预扣总量 映射
+func (j *CacheRepairJob) repairProduct(ctx context.Context, productID int64, reservedMap map[int64]int64) error {
+	// 1. 查询Redis当前预库存
+	// SCAN 扫到 key 后，Get 仍可能失败（竞态条件：key 被删除/过期）
+	redisStockStr, err := j.cache.Get(ctx, repository.StockKey(productID))
+	if err != nil {
+		// key 可能在扫描后被删除/过期，属于正常情况，跳过
+		j.logger.Debug("Redis key已不存在，跳过",
+			logger.Int64("productID", productID),
+			logger.Error(err))
+		return nil
+	}
+	redisStock, _ := strconv.ParseInt(redisStockStr, 10, 64)
+
+	// 2. 查询DB库存（真实库存）
+	var dbStock int64
+	err = j.db.WithContext(ctx).
+		Table("inventories").
+		Where("product_id = ?", productID).
+		Pluck("stock", &dbStock).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// 商品已删除，但Redis还有数据 → 删除Redis
+			j.redisClient.Del(ctx, repository.StockKey(productID))
+			return nil
+		}
+		return fmt.Errorf("查询DB失败: %w", err)
+	}
+
+	// 3. 从 map 获取预扣量（O(1)）
+	reservedQty := reservedMap[productID]
+
+	// 4. 计算期望的Redis预库存 = DB库存 - 预扣中的量
+	expectedRedisStock := dbStock - reservedQty
+
+	// 5. 检查是否一致
+	if redisStock == expectedRedisStock {
+		return nil // 一致，无需修复
+	}
+
+	// 6. 修复：写入正确的值
+	j.logger.Warn("Redis预库存不一致，正在修复",
+		logger.Int64("productID", productID),
+		logger.Int64("dbStock", dbStock),
+		logger.Int64("reservedQty", reservedQty),
+		logger.Int64("expectedRedis", expectedRedisStock),
+		logger.Int64("actualRedis", redisStock))
+	_, err = j.cache.Set(ctx, repository.StockKey(productID), strconv.FormatInt(expectedRedisStock, 10), 0)
+	if err != nil {
+		return fmt.Errorf("修复Redis失败: %w", err)
+	}
+
+	return nil
+}
+
+// 一次性扫描所有 reserve:* keys，构建 productID → 预扣总量 映射
+// 注意：已释放的预扣记录要排除（检查对应的 release key 是否存在）
+func (j *CacheRepairJob) buildReservedMap(ctx context.Context) (map[int64]int64, error) {
+	reservedMap := make(map[int64]int64)
+
+	var cursor uint64
+	for {
+		// SCAN 每次100个 key，避免阻塞 Redis
+		keys, nextCursor, err := j.redisClient.Scan(ctx, cursor, "reserve:*", 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("SCAN失败: %w", err)
+		}
+
+		// 对每个 reserve key，获取其中所有商品的预扣量
+		for _, key := range keys {
+			// 检查是否已释放：reserve:xxx → 检查 release:xxx 是否存在
+			// key 格式: "reserve:{operationID}"
+			operationID := key[8:] // len("reserve:") = 8
+			releaseKey := "release:" + operationID
+
+			exists, err := j.redisClient.Exists(ctx, releaseKey).Result()
+			if err != nil {
+				j.logger.Warn("检查release key失败", logger.String("releaseKey", releaseKey), logger.Error(err))
+				continue
+			}
+			if exists > 0 {
+				// 已释放，跳过这个预扣记录
+				continue
+			}
+
+			// HGETALL 获取该预扣记录的所有 productID → quantity
+			result, err := j.redisClient.HGetAll(ctx, key).Result()
+			if err != nil {
+				j.logger.Warn("读取预扣记录失败", logger.String("key", key), logger.Error(err))
+				continue
+			}
+
+			// 累加到 map
+			for productIDStr, qtyStr := range result {
+				productID, err := strconv.ParseInt(productIDStr, 10, 64)
+				if err != nil {
+					continue
+				}
+				qty, _ := strconv.ParseInt(qtyStr, 10, 64)
+				reservedMap[productID] += abs64(qty) // 预扣量存的是负数，取绝对值
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return reservedMap, nil
 }
 
 func abs64(x int64) int64 {
@@ -287,11 +276,4 @@ func abs64(x int64) int64 {
 		return -x
 	}
 	return x
-}
-
-func max64(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }

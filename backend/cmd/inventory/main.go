@@ -6,40 +6,24 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 )
 
 func main() {
-	// 初始化配置
 	initViper()
 
-	// 初始化应用
 	app := InitApp()
 
-	// 启动 Kafka 消费者
+	// 启动消费者
 	if err := app.OrderConsumer.Start(); err != nil {
 		fmt.Printf("警告: Kafka消费者启动失败: %v，继续运行\n", err)
 	} else {
 		fmt.Println("Kafka消费者已启动")
 	}
 
-	// 启动定时任务
-	c := cron.New()
-	c.AddFunc("0 * * * *", func() { // 每小时整点
-		if err := app.CacheRepair.RunHourly(); err != nil {
-			fmt.Printf("小时缓存修复失败: %v\n", err)
-		}
-	})
-	c.AddFunc("0 3 * * *", func() { // 每日凌暨3点
-		if err := app.CacheRepair.RunDaily(); err != nil {
-			fmt.Printf("每日缓存修复失败: %v\n", err)
-		}
-	})
-	c.Start()
-	fmt.Println("定时任务已启动")
+	// 定时对账任务暂不启用（Redis非ACID，无法准确计算预扣量，可能修复出错误值）
+	// 当前依靠：Lua脚本保证原子性 + 幂等机制 + MQ重试 + TTL兜底
 
-	// 启动 gRPC 服务
 	go func() {
 		fmt.Printf("Inventory gRPC服务启动在: %d\n", viper.GetInt("grpc.server.port"))
 		if err := app.GRPCServer.Run(); err != nil {
@@ -53,7 +37,6 @@ func main() {
 	<-quit
 
 	fmt.Println("正在关闭Inventory服务...")
-	c.Stop()
 	if err := app.GRPCServer.Stop(); err != nil {
 		fmt.Printf("gRPC服务关闭失败: %v\n", err)
 	}
@@ -66,7 +49,6 @@ func initViper() {
 	viper.AddConfigPath("./internal/inventory/config")
 	viper.AddConfigPath(".")
 
-	// 环境变量支持
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {

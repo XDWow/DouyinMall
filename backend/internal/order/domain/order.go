@@ -3,14 +3,19 @@ package domain
 import "time"
 
 type Order struct {
-	ID         int64
-	UserID     int64
-	Phone      string
-	Status     OrderStatus
-	Amt        Amount
-	Addr       Address
-	CreatedAt  time.Time
-	ExpireAt   time.Time // 用来控制订单创建30分钟未支付自动取消，属于业务层面，出现在domain, usecase
+	ID        int64
+	UserID    int64
+	Phone     string
+	Addr      Address
+	Status    OrderStatus
+	CreatedAt time.Time
+	ExpireAt  time.Time // 用来控制订单创建30分钟未支付自动取消，属于业务层面，出现在domain, usecase
+
+	//Amt        Amount   // 原来实现，加入优惠券后变下面
+	TotalAmount    Amount // 商品原价合计
+	PayableAmount  Amount // 实付金额
+	DiscountAmount Amount // 优惠总额
+
 	OrderItems []OrderItem
 }
 
@@ -19,7 +24,7 @@ type OrderItem struct {
 	Quantity         int64
 	SnapshotPrice    int64
 	SnapshotCurrency string
-	Price            int64 // 真正需要支付的价格，随币种变化
+	Price            int64 // 最终真正需要支付的价格，随币种变化
 }
 
 type Address struct {

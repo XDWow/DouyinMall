@@ -7,16 +7,16 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-type ReserveStockUc struct {
+type ReserveStockUsecase struct {
 	repo domain.InventoryRepository
 	l    logger.LoggerV1
 }
 
-func NewReserveStockUc(repo domain.InventoryRepository, l logger.LoggerV1) *ReserveStockUc {
-	return &ReserveStockUc{repo, l}
+func NewReserveStockUsecase(repo domain.InventoryRepository, l logger.LoggerV1) *ReserveStockUsecase {
+	return &ReserveStockUsecase{repo, l}
 }
 
-func (uc *ReserveStockUc) Execute(ctx context.Context, cmd ReserveStockCommand) error {
+func (uc *ReserveStockUsecase) Execute(ctx context.Context, cmd ReserveStockCommand) error {
 	if cmd.OperationID == "" {
 		return errors.New("OperationID is empty")
 	}
