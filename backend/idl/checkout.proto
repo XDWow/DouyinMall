@@ -1,34 +1,109 @@
 syntax = "proto3";
 
-package checkout;
+package checkout.v1;
 
-import "payment.proto";
-
-option go_package = "/checkout";
+option go_package = "checkout/v1;checkoutv1";
 
 service CheckoutService {
-    rpc Checkout(CheckoutReq) returns (CheckoutResp) {}
+    // Step 1: 结算预览（只读，无副作用）
+    // 触发时机：进入结算页、切换优惠券
+    // 调用链（三者并行）：
+    //   ① Product.GetProducts          → 商品名称、当前价格、是否在售
+    //   ② Inventory.BatchGetInventory  → 当前库存数量（只读查询，不预扣）
+    //   ③ Coupon.ListAvailableCoupons  → 该用户对该订单可用的优惠券
+    // available = product.in_stock && inventory.available_stock > 0
+    // 注意：available 只是当前快照，不保证 PlaceOrder 时库存仍然充足
+    rpc PreviewOrder(PreviewOrderReq) returns (PreviewOrderResp);
+    
+    // Step 2: 提交订单（有副作用，Saga补偿）
+    // 触发时机：用户点击"提交订单"
+    // 调用链：Product.GetProduct(查当前价格，与expected_amount对比，不一致则报错)
+    //        → Inventory.ReserveStock(预扣库存)
+    //        → Coupon.ReserveCoupon(锁定优惠券)
+    //        → 计算最终金额
+    //        → Order.CreateOrder(创建订单)
+    //        → Payment.NativePrepay(创建支付单)
+    //        → Cart.DeleteItem(异步删除已下单的商品，非清空整个购物车)
+    rpc PlaceOrder(PlaceOrderReq) returns (PlaceOrderResp);
 }
 
+// ==================== 公共消息 ====================
+
+// 商品项（前端传入，只需要商品ID和数量）
+message CheckoutItem {
+    int64 product_id = 1;
+    int64 quantity = 2;
+}
+
+// 收货地址
 message Address {
-    string street_address = 1;
-    string city = 2;
-    string state = 3;
-    string country = 4;
-    string zip_code = 5;
+    string receiver_name = 1;     // 收货人姓名
+    string phone = 2;             // 收货人电话
+    string province = 3;          // 省
+    string city = 4;              // 市
+    string district = 5;          // 区
+    string street = 6;            // 详细地址
+    string zip_code = 7;          // 邮编
 }
 
-message CheckoutReq {
-    uint32 user_id = 1;
-    string firstname = 2;
-    string lastname = 3;
-    string email = 4;
-    string payment_method = 5; // 支付方式 card-银行卡 alipay-支付宝
-    Address address = 6;
-    payment.CreditCardInfo credit_card = 7;
+// ==================== Step 1: 结算预览 ====================
+
+message PreviewOrderReq {
+    int64 user_id = 1;
+    repeated CheckoutItem items = 2;    // 商品列表（前端传入）
+    // 不传 coupon_ids：前端拿每张券的 discount_amount 自己做加减法
 }
 
-message CheckoutResp {
-    string order_id = 1;
-    string transaction_id = 2;
+message PreviewOrderResp {
+    // 商品明细（含单价、小计、是否可购买）
+    // 前端自行 sum(products[i].subtotal where available) 得到商品总价
+    repeated ProductDetail products = 1;
+
+    // 可用优惠券列表（每张券含对每个商品行的优惠分配，前端直接展示）
+    repeated CouponItem available_coupons = 3;
+}
+
+// 商品明细（Checkout从Product服务查出来，返回给前端展示）
+message ProductDetail {
+    int64 product_id = 1;
+    string name = 2;
+    string picture = 3;
+    int64 price = 4;                    // 当前单价（分）
+    string currency = 5;
+    int64 quantity = 6;                 // 购买数量
+    int64 subtotal = 7;                 // 小计（分） = price * quantity
+    bool available = 8;                 // 是否可购买（在售+有库存）
+    string unavailable_reason = 9;      // 不可购买原因
+}
+
+// 优惠券信息
+message CouponItem {
+    int64 coupon_id = 1;                // 用户券ID
+    string name = 2;                    // 券名称
+    string description = 3;             // 券描述（如"满100减20"）
+    int64 discount_amount = 4;          // 总优惠金额（分）= sum(per_line_discounts)
+    bool usable = 5;                    // 是否可用于本订单
+    string unusable_reason = 6;         // 不可用原因（如"未达到使用门槛"）
+    map<int64, int64> per_line_discounts = 7; // key: product_id, value: 该行优惠金额（分）
+}
+
+// ==================== Step 2: 提交订单 ====================
+
+message PlaceOrderReq {
+    int64 user_id = 1;
+    repeated CheckoutItem items = 2;    // 商品列表
+    repeated int64 coupon_ids = 3;      // 使用的优惠券ID列表
+    Address address = 4;                // 收货地址
+    string payment_method = 5;          // 支付方式：wechat / alipay / card
+    string currency = 6;                // 支付货币（如 "CNY"）
+    string remark = 7;                  // 订单备注
+    int64 expected_amount = 8;          // 用户在结算页看到的应付金额（分）
+                                        // 后端重新计算后如不一致，返回 PRICE_CHANGED 错误，让用户重新确认
+}
+
+message PlaceOrderResp {
+    int64 order_id = 1;                 // 订单ID
+    string payment_url = 2;             // 支付链接（前端跳转去支付）
+    int64 total_amount = 3;             // 应付金额（分）
+    int64 expire_at = 4;                // 支付过期时间（Unix秒）
 }

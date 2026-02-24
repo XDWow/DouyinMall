@@ -36,17 +36,41 @@ func (c *RedisCache) HSet(ctx context.Context, key, field string, value int64) e
 	return c.client.Expire(ctx, key, c.ttl).Err()
 }
 
-func (c *RedisCache) HIncrBy(ctx context.Context, key, field string, incr int64) (int64, error) {
-	newVal, err := c.client.HIncrBy(ctx, key, field, incr).Result()
-	if err != nil {
-		return 0, err
+// HIncrBy 通过 Pipeline 对一个或多个 field 执行 HINCRBY +1，只需一次网络往返
+func (c *RedisCache) HIncrBy(ctx context.Context, key string, fields ...string) ([]int64, error) {
+	pipe := c.client.Pipeline()
+	cmds := make([]*redis.IntCmd, len(fields))
+	for i, field := range fields {
+		cmds[i] = pipe.HIncrBy(ctx, key, field, 1)
 	}
-	c.client.Expire(ctx, key, c.ttl)
-	return newVal, nil
+	pipe.Expire(ctx, key, c.ttl)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, err
+	}
+	result := make([]int64, len(fields))
+	for i, cmd := range cmds {
+		result[i] = cmd.Val()
+	}
+	return result, nil
 }
 
-func (c *RedisCache) HDel(ctx context.Context, key, field string) error {
-	return c.client.HDel(ctx, key, field).Err()
+// HSetBatch 通过单条 HSET 命令批量写入多个 field-value（Redis 3.0+ 支持可变参数）
+func (c *RedisCache) HSetBatch(ctx context.Context, key string, fieldValues map[string]int64) error {
+	if len(fieldValues) == 0 {
+		return nil
+	}
+	args := make([]interface{}, 0, len(fieldValues)*2)
+	for f, v := range fieldValues {
+		args = append(args, f, v)
+	}
+	if err := c.client.HSet(ctx, key, args...).Err(); err != nil {
+		return err
+	}
+	return c.client.Expire(ctx, key, c.ttl).Err()
+}
+
+func (c *RedisCache) HDel(ctx context.Context, key string, fields ...string) error {
+	return c.client.HDel(ctx, key, fields...).Err()
 }
 
 func (c *RedisCache) Del(ctx context.Context, key string) error {

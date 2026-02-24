@@ -7,8 +7,8 @@ option go_package="product/v1;productv1";
 service ProductService {
     // 获取商品列表
     rpc ListProducts(ListProductsReq) returns (ListProductsResp) {}
-    // 获取商品详情
-    rpc GetProduct(GetProductReq) returns (GetProductResp) {}
+    // 获取商品详情，修改了一下，同时支持单个和批量查询
+    rpc GetProducts(GetProductsReq) returns (GetProductsResp) {}
     // 添加新商品
     rpc CreateProduct(CreateProductReq) returns (CreateProductResp) {}
     // 修改商品
@@ -65,10 +65,10 @@ message ListProductsResp {
     repeated Product products = 1;
 }
 
-message GetProductReq {
-    int64 id = 1;
+message GetProductsReq {
+    repeated int64 id = 1;
 }
 
-message GetProductResp {
-    Product product = 1;
+message GetProductsResp {
+    repeated Product product = 1;
 }

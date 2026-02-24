@@ -27,6 +27,10 @@ const (
 // 优惠券状态
 type CouponStatus uint8
 
+func (c CouponStatus) AsUint8() uint8 {
+	return uint8(c)
+}
+
 const (
 	UserCouponStatusUnspecified CouponStatus = iota
 	UserCouponStatusUnused                   // 未使用
@@ -97,12 +101,11 @@ type Coupon struct {
 	TemplateID     int64
 	Template       *CouponTemplate // 关联的模板
 	Status         CouponStatus
-	LockedOrderID  int64 // 锁定的订单
-	UsedOrderID    int64 // 使用的订单
-	ValidStartTime int64
-	ValidEndTime   int64
-	CreatedAt      int64
-	UsedAt         int64
+	OrderID        int64
+	ValidStartTime time.Time
+	ValidEndTime   time.Time
+	CreatedAt      time.Time
+	UsedAt         time.Time
 }
 
 // DDD:Tell, Don't Ask，告诉我你要做什么，我来规约，我觉得哪些状态可以转移，你告诉我你要做什么
@@ -113,7 +116,7 @@ func (c *Coupon) Reserve(orderID int64) error {
 		return ErrCouponNotAvailable
 	}
 	c.Status = UserCouponStatusLocked
-	c.LockedOrderID = orderID
+	c.OrderID = orderID
 	return nil
 }
 
@@ -123,7 +126,6 @@ func (c *Coupon) Commit() error {
 		return ErrCouponNotLocked
 	}
 	c.Status = UserCouponStatusUsed
-	c.UsedOrderID = c.LockedOrderID
 	return nil
 }
 
@@ -133,7 +135,7 @@ func (c *Coupon) Release() error {
 		return ErrCouponNotLocked
 	}
 	c.Status = UserCouponStatusUnused
-	c.LockedOrderID = 0
+	c.OrderID = 0
 	return nil
 }
 

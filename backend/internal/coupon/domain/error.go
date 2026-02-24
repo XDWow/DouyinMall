@@ -13,7 +13,7 @@ var (
 	ErrThresholdNotMet        = errors.New("未达到使用门槛")
 	ErrOrderNotApplicable     = errors.New("订单中无适用商品")
 	ErrDuplicateOperation     = errors.New("重复操作")
-	ErrOperationDuplicate     = errors.New("操作已存在")
+	ErrOperationNotFound      = errors.New("操作记录不存在")
 	ErrIssueLimitExceeded     = errors.New("已达领取上限")
 	ErrCouponLimitExceeded    = errors.New("已达领取上限")
 	ErrTemplateStockOut       = errors.New("优惠券已发完")

@@ -120,18 +120,25 @@ message ListAvailableCouponsResp {
   repeated UserCoupon coupons = 1;    // 可用的券，给用户选择，这里不做自动计算最优惠策略了吧
 }
 
-// 预扣优惠券（状态机保证幂等：Unused->Locked，重复调用会检查status和order_id）
-// 这是起点，会插入orderID，后续根据orderID找到优惠券，修改状态
+// 批量预扣优惠券（事务内批量更新，全部成功或全部失败）
+// 状态机保证幂等：Unused->Locked，重复调用检查 status 和 order_id
 message ReserveCouponReq {
   int64 user_id = 1;
-  int64 user_coupon_id = 2;           // 用户券ID
+  repeated int64 user_coupon_ids = 2; // 用户券ID列表（批量）
   int64 order_id = 3;                 // 订单ID
   repeated OrderItem items = 4;       // 订单商品（用于校验适用性）
 }
 
 message ReserveCouponResp {
-  bool success = 1;
-  string message = 2;
+  bool success = 1;                   // 全部成功为 true
+  string message = 2;                 // 概要信息
+  repeated CouponFailure failures = 3; // 失败明细（全部成功时为空）
+}
+
+// 单张券预扣失败的原因
+message CouponFailure {
+  int64 user_coupon_id = 1;
+  string reason = 2;                  // 如 "优惠券已过期"、"不满足使用条件"
 }
 
 // 确认核销（状态机保证幂等：Locked->Used）

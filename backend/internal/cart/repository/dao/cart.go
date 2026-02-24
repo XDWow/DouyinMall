@@ -12,8 +12,10 @@ type CartDAO interface {
 	FindCartByUserID(ctx context.Context, userID int64) ([]CartItem, error)
 	FindCartItemByUserIDAndProductID(ctx context.Context, userID, productID int64) (CartItem, error)
 	UpsertIncrement(ctx context.Context, userID, productID int64) error
+	UpsertIncrementBatch(ctx context.Context, userID int64, productIDs []int64) error // 批量 INSERT ON CONFLICT +1
 	Upsert(ctx context.Context, item CartItem) error
 	Delete(ctx context.Context, userID, productID int64) error
+	DeleteByProductIDs(ctx context.Context, userID int64, productIDs []int64) error // 批量 DELETE WHERE product_id IN
 	DeleteByUserID(ctx context.Context, userID int64) error
 	IncrementQuantity(ctx context.Context, userID, productID int64) error
 	DecrementQuantity(ctx context.Context, userID, productID int64) error
@@ -71,6 +73,24 @@ func (d *GORMCartDAO) UpsertIncrement(ctx context.Context, userID, productID int
 	}).Error
 }
 
+// UpsertIncrementBatch 批量插入，已存在则数量+1，一条 SQL 完成
+func (d *GORMCartDAO) UpsertIncrementBatch(ctx context.Context, userID int64, productIDs []int64) error {
+	if len(productIDs) == 0 {
+		return nil
+	}
+	items := make([]CartItem, len(productIDs))
+	for i, pid := range productIDs {
+		items[i] = CartItem{UserID: userID, ProductID: pid, Quantity: 1}
+	}
+	return d.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "product_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"quantity":   gorm.Expr("quantity + ?", 1),
+			"updated_at": time.Now(),
+		}),
+	}).Create(&items).Error
+}
+
 func (d *GORMCartDAO) Upsert(ctx context.Context, item CartItem) error {
 	if item.Quantity <= 0 {
 		return gorm.ErrInvalidData
@@ -84,6 +104,16 @@ func (d *GORMCartDAO) Upsert(ctx context.Context, item CartItem) error {
 func (d *GORMCartDAO) Delete(ctx context.Context, userID, productID int64) error {
 	return d.db.WithContext(ctx).
 		Where("user_id = ? AND product_id = ?", userID, productID).
+		Delete(&CartItem{}).Error
+}
+
+// DeleteByProductIDs 批量删除，用 IN 子句一条 SQL 搞定
+func (d *GORMCartDAO) DeleteByProductIDs(ctx context.Context, userID int64, productIDs []int64) error {
+	if len(productIDs) == 0 {
+		return nil
+	}
+	return d.db.WithContext(ctx).
+		Where("user_id = ? AND product_id IN ?", userID, productIDs).
 		Delete(&CartItem{}).Error
 }
 

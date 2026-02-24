@@ -331,8 +331,8 @@ func toOrderModel(order *domain.Order) *db.OrderModel {
 		UserID:    order.UserID,
 		Phone:     order.Phone,
 		Status:    uint8(order.Status),
-		Currency:  order.Amt.Currency,
-		Total:     order.Amt.Total,
+		Currency:  order.PayableAmount.Currency,
+		Total:     order.PayableAmount.Total,
 		Street:    order.Addr.Street,
 		City:      order.Addr.City,
 		State:     order.Addr.State,
@@ -362,7 +362,7 @@ func toDomainOrder(model *db.OrderModel) *domain.Order {
 		Status:    domain.OrderStatus(model.Status),
 		CreatedAt: model.CreatedAt,
 		ExpireAt:  model.ExpiredAt,
-		Amt: domain.Amount{
+		PayableAmount: domain.Amount{
 			Currency: model.Currency,
 			Total:    model.Total,
 		},

@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"errors"
+
 	"github.com/XDWow/DouyinMall/backend/internal/coupon/domain"
 )
 
@@ -21,11 +23,16 @@ type ListUserCouponsInput struct {
 }
 
 type ListUserCouponsOutput struct {
-	Coupons []domain.Coupon
+	Coupons []*domain.Coupon
 	Total   int32
 }
 
 func (uc *ListUserCouponsUseCase) Execute(ctx context.Context, input ListUserCouponsInput) (*ListUserCouponsOutput, error) {
+	// 校验参数
+	if input.UserID <= 0 {
+		return nil, errors.New("invalid user_id")
+	}
+
 	coupons, total, err := uc.couponRepo.ListByUserID(ctx, input.UserID, input.Status, input.Page, input.PageSize)
 	if err != nil {
 		return nil, err
@@ -35,4 +42,3 @@ func (uc *ListUserCouponsUseCase) Execute(ctx context.Context, input ListUserCou
 		Total:   total,
 	}, nil
 }
-

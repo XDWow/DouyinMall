@@ -150,6 +150,7 @@ type CreateOrderReq struct {
 	Address  *Address     `protobuf:"bytes,3,opt,name=address" json:"address,omitempty"`
 	Phone    string       `protobuf:"bytes,4,opt,name=phone" json:"phone,omitempty"`
 	Items    []*OrderItem `protobuf:"bytes,5,rep,name=items" json:"items,omitempty"`
+	OrderId  int64        `protobuf:"varint,6,opt,name=order_id" json:"order_id,omitempty"` // checkout 预生成的订单ID
 }
 
 func (x *CreateOrderReq) Reset() { *x = CreateOrderReq{} }
@@ -191,6 +192,13 @@ func (x *CreateOrderReq) GetItems() []*OrderItem {
 		return x.Items
 	}
 	return nil
+}
+
+func (x *CreateOrderReq) GetOrderId() int64 {
+	if x != nil {
+		return x.OrderId
+	}
+	return 0
 }
 
 type CreateOrderResp struct {

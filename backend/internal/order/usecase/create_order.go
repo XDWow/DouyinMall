@@ -38,6 +38,7 @@ type CreateOrderUseCase struct {
 // 所有校验和决策（业务相关）都集中在 usecase
 // domain 只承载已经成立的业务事实
 type CreateOrderCmd struct {
+	OrderID  int64 // checkout 预生成的雪花ID，为0则由DB自增
 	UserID   int64
 	Currency string
 	Phone    string
@@ -75,10 +76,11 @@ func (uc *CreateOrderUseCase) Execute(
 
 func orderDomainToCmd(cmd CreateOrderCmd) domain.Order {
 	return domain.Order{
+		ID:     cmd.OrderID,
 		UserID: cmd.UserID,
 		Phone:  cmd.Phone,
 		Status: domain.OrderStatusCreated,
-		Amt: domain.Amount{
+		PayableAmount: domain.Amount{
 			Currency: cmd.Currency,
 		},
 		Addr:       cmd.Address,

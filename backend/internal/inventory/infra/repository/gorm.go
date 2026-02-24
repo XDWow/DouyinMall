@@ -86,18 +86,38 @@ func (repo *GormInventoryRepository) ReserveStock(ctx context.Context, reserveID
 		return fmt.Errorf("预扣失败: %w", err)
 	}
 
-	code := result.(int64)
-	switch code {
-	case 0:
-		return nil // 重复操作，幂等返回成功
-	case 1:
-		return nil // 预扣成功
-	case -1:
-		return fmt.Errorf("商品不存在")
-	case -2:
-		return fmt.Errorf("库存不足")
+	// Lua 返回 int64 表示状态码，返回 []interface{} 表示库存不足明细
+	switch v := result.(type) {
+	case int64:
+		switch v {
+		case 0:
+			return nil // 重复操作，幂等返回成功
+		case 1:
+			return nil // 预扣成功
+		case -1:
+			return domain.ErrProductNotFound
+		default:
+			return fmt.Errorf("未知错误: %d", v)
+		}
+	case []interface{}:
+		// Lua table 返回: [productID1, requested1, available1, ...]
+		if len(v)%3 != 0 {
+			return fmt.Errorf("库存不足，但返回数据异常")
+		}
+		items := make([]domain.InsufficientStockItem, 0, len(v)/3)
+		for i := 0; i < len(v); i += 3 {
+			pid, _ := strconv.ParseInt(v[i].(string), 10, 64)
+			req := v[i+1].(int64)
+			avail := v[i+2].(int64)
+			items = append(items, domain.InsufficientStockItem{
+				ProductID: pid,
+				Requested: req,
+				Available: avail,
+			})
+		}
+		return &domain.InsufficientStockError{Items: items}
 	default:
-		return fmt.Errorf("未知错误: %d", code)
+		return fmt.Errorf("未知返回类型: %T", result)
 	}
 }
 

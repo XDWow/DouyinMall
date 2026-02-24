@@ -113,12 +113,14 @@ func (uc *ChangeOrderStatusUseCase) updateStatusAndPublish(ctx context.Context, 
 
 	// CommitStock需要Items，先查询订单
 	var eventItems []domain.OrderEventItem
+	var userID int64
 	if status == domain.OrderStatusPaid {
 		fullOrder, err := uc.orderRepo.FindByID(ctx, orderID)
 		if err != nil {
 			uc.log.Error("查询订单失败", logger.Error(err), logger.Int64("orderID", orderID))
 			return err
 		}
+		userID = fullOrder.UserID
 		eventItems = make([]domain.OrderEventItem, len(fullOrder.OrderItems))
 		for i, item := range fullOrder.OrderItems {
 			eventItems[i] = domain.OrderEventItem{
@@ -140,6 +142,7 @@ func (uc *ChangeOrderStatusUseCase) updateStatusAndPublish(ctx context.Context, 
 		}
 		event := domain.OrderStatusUpdateEvent{
 			OrderID: order.ID,
+			UserID:  userID, // 支付成功时有值，用于清购物车
 			Status:  order.Status,
 			Items:   eventItems, // 状态为Paid时有值，其他状态为nil
 		}
@@ -160,6 +163,7 @@ func (uc *ChangeOrderStatusUseCase) updateStatusAndPublish(ctx context.Context, 
 		defer can()
 		e := uc.producer.SendMessage(c, domain.OrderStatusUpdateEvent{
 			OrderID: order.ID,
+			UserID:  userID,
 			Status:  order.Status,
 			Items:   eventItems,
 		})

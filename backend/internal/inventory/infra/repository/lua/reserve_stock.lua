@@ -3,6 +3,12 @@
 -- ARGV[1] = expireTime (秒，订单30分钟超时 + 5分钟缓冲 = 35分钟 = 2100秒)
 -- ARGV[2..n] = productID1, quantity1, productID2, quantity2, ...
 -- 
+-- 返回值：
+--   0 = 幂等，已预扣过
+--   1 = 预扣成功
+--  -1 = 商品不存在（stock key 缺失）
+--  {productID1, requested1, available1, ...} = 库存不足明细（table）
+--
 -- 为什么要比订单超时长？
 -- 避免边界case：订单刚好30分钟时取消，但Redis记录已过期，导致ReleaseStock找不到记录
 -- 
@@ -17,8 +23,10 @@ if redis.call('EXISTS', reserveKey) == 1 then
     return 0  -- 已存在，幂等返回成功
 end
 
--- 2. 检查所有商品库存是否充足
+-- 2. 检查所有商品库存是否充足，收集不足明细
 local productCount = (#ARGV - 1) / 2
+local insufficientItems = {}
+
 for i = 1, productCount do
     local productID = ARGV[i * 2]
     local quantity = tonumber(ARGV[i * 2 + 1])  -- 带符号（负数表示扣减）
@@ -31,9 +39,18 @@ for i = 1, productCount do
     
     -- quantity是负数（如-5），需要扣减的数量是其绝对值
     local requiredStock = -quantity
-    if tonumber(stock) < requiredStock then
-        return -2  -- 库存不足
+    local availableStock = tonumber(stock)
+    if availableStock < requiredStock then
+        -- 记录：productID, 请求数量, 可用库存
+        table.insert(insufficientItems, productID)
+        table.insert(insufficientItems, requiredStock)
+        table.insert(insufficientItems, availableStock)
     end
+end
+
+-- 有任意商品库存不足，整体失败，返回所有不足明细
+if #insufficientItems > 0 then
+    return insufficientItems
 end
 
 -- 3. 扣减库存 + 保存预扣记录

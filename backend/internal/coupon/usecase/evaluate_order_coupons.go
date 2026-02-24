@@ -18,7 +18,7 @@ type EvaluateOrderCouponsOutput struct {
 
 // 结算页优惠券评估结果
 type EvaluatedCoupon struct {
-	Coupon domain.Coupon
+	Coupon *domain.Coupon
 	Usable bool
 	Reason string // 不可用原因
 }
@@ -68,7 +68,7 @@ func (uc *EvaluateOrderCouponsUseCase) Execute(
 // 把逻辑放 domain 层，因为"判断券能否用于订单"是优惠券模板的固有职责
 // 符合 DDD 领域驱动设计，业务规则由领域对象负责
 func (uc *EvaluateOrderCouponsUseCase) evaluateCoupon(
-	c domain.Coupon,
+	c *domain.Coupon,
 	input EvaluateOrderCouponsInput,
 ) (bool, string) {
 	tpl := c.Template

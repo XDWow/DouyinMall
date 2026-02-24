@@ -2,6 +2,7 @@ package domain
 
 type OrderStatusUpdateEvent struct {
 	OrderID int64            `json:"order_id"`
+	UserID  int64            `json:"user_id,omitempty"` // 支付成功清购物车需要
 	Status  OrderStatus      `json:"status"`
 	Items   []OrderEventItem `json:"items,omitempty"` // CommitStock需要，其他操作可为空
 }

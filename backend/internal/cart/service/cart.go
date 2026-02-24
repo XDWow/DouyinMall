@@ -8,8 +8,8 @@ import (
 )
 
 type CartService interface {
-	AddItem(ctx context.Context, userID int64, item domain.CartItem) error
-	DeleteItem(ctx context.Context, userID int64, item domain.CartItem) error
+	AddItems(ctx context.Context, userID int64, items []domain.CartItem) error
+	DeleteItems(ctx context.Context, userID int64, productIDs []int64) error
 	GetCart(ctx context.Context, userID int64) (domain.Cart, error)
 	EmptyCart(ctx context.Context, userID int64) error
 	ChangeQty(ctx context.Context, userID int64, item domain.CartItem) error
@@ -27,12 +27,12 @@ func NewCartService(repo repository.CartRepository) CartService {
 	}
 }
 
-func (s *cartService) AddItem(ctx context.Context, userID int64, item domain.CartItem) error {
-	return s.repo.AddItem(ctx, userID, item)
+func (s *cartService) AddItems(ctx context.Context, userID int64, items []domain.CartItem) error {
+	return s.repo.AddItems(ctx, userID, items)
 }
 
-func (s *cartService) DeleteItem(ctx context.Context, userID int64, item domain.CartItem) error {
-	return s.repo.DeleteItem(ctx, userID, item)
+func (s *cartService) DeleteItems(ctx context.Context, userID int64, productIDs []int64) error {
+	return s.repo.DeleteItems(ctx, userID, productIDs)
 }
 
 func (s *cartService) GetCart(ctx context.Context, userID int64) (domain.Cart, error) {

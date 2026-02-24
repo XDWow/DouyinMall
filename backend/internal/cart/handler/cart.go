@@ -17,23 +17,18 @@ func NewCartHandler(cartService service.CartService) *CartHandler {
 }
 
 func (h *CartHandler) AddItem(ctx context.Context, req *cartv1.AddItemReq) (*cartv1.AddItemResp, error) {
-	item := domain.CartItem{
-		ProductID: req.GetProductId(),
-		Quantity:  1,
+	items := make([]domain.CartItem, len(req.GetProductIds()))
+	for i, pid := range req.GetProductIds() {
+		items[i] = domain.CartItem{ProductID: pid, Quantity: 1}
 	}
-	err := h.CartService.AddItem(ctx, req.GetUserId(), item)
-	if err != nil {
+	if err := h.CartService.AddItems(ctx, req.GetUserId(), items); err != nil {
 		return nil, err
 	}
 	return &cartv1.AddItemResp{}, nil
 }
 
 func (h *CartHandler) DeleteItem(ctx context.Context, req *cartv1.DeleteItemReq) (*cartv1.DeleteItemResp, error) {
-	item := domain.CartItem{
-		ProductID: req.GetProductId(),
-	}
-	err := h.CartService.DeleteItem(ctx, req.GetUserId(), item)
-	if err != nil {
+	if err := h.CartService.DeleteItems(ctx, req.GetUserId(), req.GetProductIds()); err != nil {
 		return nil, err
 	}
 	return &cartv1.DeleteItemResp{}, nil

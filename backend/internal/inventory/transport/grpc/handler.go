@@ -96,6 +96,23 @@ func (h *InventoryHandler) ReserveStock(ctx context.Context, req *inventoryv1.Re
 	// 调用Repository
 	err := h.repo.ReserveStock(ctx, req.OperationId, changes, req.ExpireTime)
 	if err != nil {
+		// 库存不足：返回明细
+		var stockErr *domain.InsufficientStockError
+		if errors.As(err, &stockErr) {
+			insufficient := make([]*inventoryv1.InsufficientItem, len(stockErr.Items))
+			for i, item := range stockErr.Items {
+				insufficient[i] = &inventoryv1.InsufficientItem{
+					ProductId: item.ProductID,
+					Requested: int32(item.Requested),
+					Available: item.Available,
+				}
+			}
+			return &inventoryv1.InventoryOpResp{
+				StatusCode:        -2,
+				StatusMsg:         stockErr.Error(),
+				InsufficientItems: insufficient,
+			}, fmt.Errorf("%w", stockErr)
+		}
 		return &inventoryv1.InventoryOpResp{
 			StatusCode: -1,
 			StatusMsg:  err.Error(),

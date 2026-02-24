@@ -73,7 +73,7 @@ func (s *CartIntegrationSuite) SetupSuite() {
 	require.NoError(s.T(), err)
 
 	dsn := "root:root@tcp(" + mysqlHost + ":" + mysqlPort.Port() + ")/douyinmall_test?charset=utf8mb4&parseTime=True&loc=Local"
-	
+
 	// 添加重试逻辑，确保连接成功
 	var db *gorm.DB
 	for i := 0; i < 5; i++ {
@@ -151,8 +151,8 @@ func (s *CartIntegrationSuite) TestAddItem() {
 	ctx := context.Background()
 
 	req := &cartv1.AddItemReq{
-		UserId:    1001,
-		ProductId: 2001,
+		UserId:     1001,
+		ProductIds: []int64{2001},
 	}
 
 	resp, err := s.cartHandler.AddItem(ctx, req)
@@ -179,8 +179,8 @@ func (s *CartIntegrationSuite) TestAddItem_Duplicate() {
 	ctx := context.Background()
 
 	req := &cartv1.AddItemReq{
-		UserId:    1001,
-		ProductId: 2001,
+		UserId:     1001,
+		ProductIds: []int64{2001},
 	}
 
 	// 第一次添加
@@ -210,8 +210,8 @@ func (s *CartIntegrationSuite) TestGetCart() {
 	ctx := context.Background()
 
 	// 先添加几个商品
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2002})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2002}})
 	time.Sleep(100 * time.Millisecond)
 
 	req := &cartv1.GetCartReq{
@@ -250,13 +250,13 @@ func (s *CartIntegrationSuite) TestDeleteItem() {
 	ctx := context.Background()
 
 	// 先添加商品
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
 	// 删除商品
 	req := &cartv1.DeleteItemReq{
-		UserId:    1001,
-		ProductId: 2001,
+		UserId:     1001,
+		ProductIds: []int64{2001},
 	}
 
 	resp, err := s.cartHandler.DeleteItem(ctx, req)
@@ -282,7 +282,7 @@ func (s *CartIntegrationSuite) TestChangeQty() {
 	ctx := context.Background()
 
 	// 先添加商品
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
 	// 修改数量为 5
@@ -317,7 +317,7 @@ func (s *CartIntegrationSuite) TestIncrementQty() {
 	ctx := context.Background()
 
 	// 先添加商品
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
 	// 增加数量
@@ -345,9 +345,9 @@ func (s *CartIntegrationSuite) TestDecrementQty() {
 	ctx := context.Background()
 
 	// 先添加商品，数量设为 3
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
 	// 减少数量
@@ -375,7 +375,7 @@ func (s *CartIntegrationSuite) TestDecrementQty_MinQuantity() {
 	ctx := context.Background()
 
 	// 先添加商品（数量为 1）
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
 	// 尝试减少数量（应该失败）
@@ -394,8 +394,8 @@ func (s *CartIntegrationSuite) TestEmptyCart() {
 	ctx := context.Background()
 
 	// 先添加几个商品
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2001})
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductId: 2002})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2002}})
 	time.Sleep(100 * time.Millisecond)
 
 	// 清空购物车

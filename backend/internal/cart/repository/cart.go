@@ -13,8 +13,8 @@ import (
 )
 
 type CartRepository interface {
-	AddItem(ctx context.Context, userID int64, item domain.CartItem) error
-	DeleteItem(ctx context.Context, userID int64, item domain.CartItem) error
+	AddItems(ctx context.Context, userID int64, items []domain.CartItem) error
+	DeleteItems(ctx context.Context, userID int64, productIDs []int64) error
 	GetCart(ctx context.Context, userID int64) (domain.Cart, error)
 	EmptyCart(ctx context.Context, userID int64) error
 	ChangeQty(ctx context.Context, userID int64, item domain.CartItem) error
@@ -45,31 +45,34 @@ func (r *cachedCartRepository) productField(productID int64) string {
 }
 
 // 业务性能比数据一致性，正确性重要，也就是容忍一些数据错误，选择 write-behind
-func (r *cachedCartRepository) AddItem(ctx context.Context, userID int64, item domain.CartItem) error {
+func (r *cachedCartRepository) AddItems(ctx context.Context, userID int64, items []domain.CartItem) error {
 	key := r.cartKey(userID)
-	field := r.productField(item.ProductID)
-
-	_, err := r.cache.HIncrBy(ctx, key, field, 1)
-	if err != nil {
+	fields := make([]string, len(items))
+	for i, item := range items {
+		fields[i] = r.productField(item.ProductID)
+	}
+	if _, err := r.cache.HIncrBy(ctx, key, fields...); err != nil {
 		return err
 	}
-
-	go r.asyncInsertOrIncrementToMySQL(userID, item.ProductID)
-
+	productIDs := make([]int64, len(items))
+	for i, item := range items {
+		productIDs[i] = item.ProductID
+	}
+	// 单条 INSERT ... ON CONFLICT 批量写 MySQL
+	go r.asyncUpsertIncrementBatch(userID, productIDs)
 	return nil
 }
 
-func (r *cachedCartRepository) DeleteItem(ctx context.Context, userID int64, item domain.CartItem) error {
+func (r *cachedCartRepository) DeleteItems(ctx context.Context, userID int64, productIDs []int64) error {
 	key := r.cartKey(userID)
-	field := r.productField(item.ProductID)
-
-	err := r.cache.HDel(ctx, key, field)
-	if err != nil {
+	fields := make([]string, len(productIDs))
+	for i, pid := range productIDs {
+		fields[i] = r.productField(pid)
+	}
+	if err := r.cache.HDel(ctx, key, fields...); err != nil {
 		return err
 	}
-
-	go r.asyncDeleteFromMySQL(userID, item.ProductID)
-
+	go r.asyncDeleteByProductIDs(userID, productIDs)
 	return nil
 }
 
@@ -136,7 +139,11 @@ func (r *cachedCartRepository) IncrementQty(ctx context.Context, userID, product
 	key := r.cartKey(userID)
 	field := r.productField(productID)
 
-	newQty, err := r.cache.HIncrBy(ctx, key, field, 1)
+	qtys, err := r.cache.HIncrBy(ctx, key, field)
+	if err != nil {
+		return 0, err
+	}
+	newQty := qtys[0]
 	if err != nil {
 		return 0, err
 	}
@@ -195,13 +202,19 @@ func (r *cachedCartRepository) asyncWriteToMySQL(userID int64, item domain.CartI
 	}
 }
 
-func (r *cachedCartRepository) asyncInsertOrIncrementToMySQL(userID, productID int64) {
+func (r *cachedCartRepository) asyncUpsertIncrementBatch(userID int64, productIDs []int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
+	if err := r.dao.UpsertIncrementBatch(ctx, userID, productIDs); err != nil {
+		r.logger.Error("异步批量累加 MySQL 失败", logger.Int64("user_id", userID), logger.Error(err))
+	}
+}
 
-	err := r.dao.UpsertIncrement(ctx, userID, productID)
-	if err != nil {
-		r.logger.Error("异步累加 MySQL 失败", logger.Int64("user_id", userID), logger.Int64("product_id", productID), logger.Error(err))
+func (r *cachedCartRepository) asyncDeleteByProductIDs(userID int64, productIDs []int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := r.dao.DeleteByProductIDs(ctx, userID, productIDs); err != nil {
+		r.logger.Error("异步批量删除 MySQL 失败", logger.Int64("user_id", userID), logger.Error(err))
 	}
 }
 
@@ -225,16 +238,6 @@ func (r *cachedCartRepository) asyncDecrementToMySQL(userID, productID int64) {
 	}
 }
 
-func (r *cachedCartRepository) asyncDeleteFromMySQL(userID, productID int64) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	err := r.dao.Delete(ctx, userID, productID)
-	if err != nil {
-		r.logger.Error("异步删除 MySQL 失败", logger.Int64("user_id", userID), logger.Int64("product_id", productID), logger.Error(err))
-	}
-}
-
 func (r *cachedCartRepository) asyncEmptyCart(userID int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -250,11 +253,11 @@ func (r *cachedCartRepository) asyncWriteBackToRedis(userID int64, daoItems []da
 	defer cancel()
 
 	key := r.cartKey(userID)
+	fieldValues := make(map[string]int64, len(daoItems))
 	for _, item := range daoItems {
-		field := r.productField(item.ProductID)
-		err := r.cache.HSet(ctx, key, field, item.Quantity)
-		if err != nil {
-			r.logger.Error("回写 Redis 失败", logger.Int64("user_id", userID), logger.Int64("product_id", item.ProductID), logger.Error(err))
-		}
+		fieldValues[r.productField(item.ProductID)] = item.Quantity
+	}
+	if err := r.cache.HSetBatch(ctx, key, fieldValues); err != nil {
+		r.logger.Error("批量回写 Redis 失败", logger.Int64("user_id", userID), logger.Error(err))
 	}
 }

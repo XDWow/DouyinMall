@@ -8,6 +8,7 @@ package main
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/cart/handler"
+	"github.com/XDWow/DouyinMall/backend/internal/cart/infra/mq"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/repository/cache"
@@ -19,22 +20,24 @@ import (
 // Injectors from wire.go:
 
 func InitApp() *App {
+	loggerV1 := ioc.InitLogger()
 	cmdable := ioc.InitRedis()
 	cartCache := cache.NewRedisCache(cmdable)
 	db := ioc.InitDB()
 	cartDAO := dao.NewGORMCartDAO(db)
-	loggerV1 := ioc.InitLogger()
 	cartRepository := repository.NewCachedCartRepository(cartCache, cartDAO, loggerV1)
 	cartService := service.NewCartService(cartRepository)
 	cartHandler := handler.NewCartHandler(cartService)
-	server := ioc.InitGRPCServer(cartHandler)
-	app := newApp(server)
+	grpcServer := ioc.InitGRPCServer(cartHandler)
+	kafkaClient := ioc.InitKafkaClient()
+	orderConsumer := mq.NewOrderConsumer(kafkaClient, cartService, loggerV1)
+	app := newApp(grpcServer, orderConsumer)
 	return app
 }
 
 // wire.go:
 
 // newApp 组装 App
-func newApp(svr server.Server) *App {
-	return &App{Server: svr}
+func newApp(svr server.Server, consumer *mq.OrderConsumer) *App {
+	return &App{Server: svr, OrderConsumer: consumer}
 }

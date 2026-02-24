@@ -1,0 +1,11 @@
+etcd:
+  endpoints:
+    - "127.0.0.1:2379"
+
+grpc:
+  server:
+    port: 8086
+    name: checkout.service
+
+snowflake:
+  node_id: 1

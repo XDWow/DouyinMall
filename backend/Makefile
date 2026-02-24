@@ -29,6 +29,9 @@ gen-order:
 go-payment:
 	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/payment.proto
 
+go-checkout:
+	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/checkout.proto
+
 # ==================== 测试 ====================
 # 运行所有单元测试
 test:

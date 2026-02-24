@@ -41,6 +41,7 @@ message CreateOrderReq {
     Address address = 3;
     string phone = 4;
     repeated OrderItem items = 5;
+    int64 order_id = 6; // 由 checkout 服务预生成的订单ID（雪花ID），非0时使用此ID
     //  int64 total = 6; 本来还想直接算出total传过来，后面发现不对，正确订单服务的业务理解：
     //  接收一组已定价的商品项，
     //  根据订单业务规则，（可以扣税，优惠，减小数点）

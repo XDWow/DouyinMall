@@ -28,6 +28,7 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 		})
 	}
 	cmd := usecase.CreateOrderCmd{
+		OrderID:  req.GetOrderId(),
 		UserID:   req.GetUserId(),
 		Currency: req.GetCurrency(),
 		Phone:    req.GetPhone(),
@@ -84,8 +85,8 @@ func (h *OrderHandler) ListOrder(ctx context.Context, req *orderv1.ListOrderReq)
 			UserId:      o.UserID,
 			OrderStatus: uint32(o.Status.AsUint8()),
 			Items:       items,
-			TotalAmount: o.Amt.Total,
-			Currency:    o.Amt.Currency,
+			TotalAmount: o.PayableAmount.Total,
+			Currency:    o.PayableAmount.Currency,
 			Address: &orderv1.Address{
 				StreetAddress: o.Addr.Street,
 				City:          o.Addr.City,

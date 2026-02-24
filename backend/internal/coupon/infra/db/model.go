@@ -76,3 +76,17 @@ type CouponTemplate struct {
 func (CouponTemplate) TableName() string {
 	return "coupon_templates"
 }
+
+// 优惠券操作记录（幂等）
+type CouponOperation struct {
+	ID             int64  `gorm:"primaryKey;autoIncrement"`
+	OperationID    string `gorm:"type:varchar(64);uniqueIndex:uk_operation_id;not null"`
+	UserCouponID   int64  `gorm:"not null;index:idx_user_coupon_id"`
+	OrderID        *int64 `gorm:"default:null;index:idx_order_id"`
+	OperationType  string `gorm:"type:varchar(16);not null"`
+	CreatedAt      time.Time
+}
+
+func (CouponOperation) TableName() string {
+	return "coupon_operations"
+}

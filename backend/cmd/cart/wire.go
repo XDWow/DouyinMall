@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/cart/handler"
+	"github.com/XDWow/DouyinMall/backend/internal/cart/infra/mq"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/repository/cache"
@@ -19,6 +20,7 @@ func InitApp() *App {
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitRedis,
+		ioc.InitKafkaClient,
 
 		// DAO
 		dao.NewGORMCartDAO,
@@ -35,6 +37,9 @@ func InitApp() *App {
 		// handler
 		handler.NewCartHandler,
 
+		// MQ Consumer
+		mq.NewOrderConsumer,
+
 		// gRPC Server
 		ioc.InitGRPCServer,
 
@@ -45,6 +50,6 @@ func InitApp() *App {
 }
 
 // newApp 组装 App
-func newApp(svr server.Server) *App {
-	return &App{Server: svr}
+func newApp(svr server.Server, consumer *mq.OrderConsumer) *App {
+	return &App{Server: svr, OrderConsumer: consumer}
 }

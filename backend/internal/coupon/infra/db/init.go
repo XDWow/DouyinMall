@@ -6,5 +6,6 @@ func InitTables(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&Coupon{},
 		&CouponTemplate{},
+		&CouponOperation{},
 	)
 }

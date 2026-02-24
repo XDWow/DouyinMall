@@ -32,6 +32,14 @@ order_id + ":" + action
 message InventoryOpResp {
   int32 status_code = 1;
   string status_msg = 2;
+  repeated InsufficientItem insufficient_items = 3; // 仅 ReserveStock 失败时有值
+}
+
+// ReserveStock 失败时返回的库存不足明细
+message InsufficientItem {
+  int64 product_id = 1;
+  int32 requested  = 2; // 请求预扣数量
+  int64 available  = 3; // 可用库存 = 实际库存 - Redis 已预扣库存
 }
 
 message GetInventoryReq {

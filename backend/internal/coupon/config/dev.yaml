@@ -1,0 +1,18 @@
+db:
+  dsn: "root:123456@tcp(localhost:13306)/coupon?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "localhost:16379"
+
+etcd:
+  endpoints:
+    - "localhost:12379"
+
+grpc:
+  server:
+    name: "coupon.service"
+    port: 8095
+
+kafka:
+  brokers:
+    - "localhost:19092"
