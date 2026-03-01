@@ -1,0 +1,144 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/persistence"
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/redis/go-redis/v9"
+)
+
+// SessionRepoImpl 组合 Redis 热层 + MySQL 冷层，实现 domain.SessionRepo
+type SessionRepoImpl struct {
+	cache  *cache.RedisSessionCache
+	dao    *persistence.AgentDAO
+	logger logger.LoggerV1
+}
+
+func NewSessionRepo(
+	cache *cache.RedisSessionCache,
+	dao *persistence.AgentDAO,
+	logger logger.LoggerV1,
+) domain.SessionRepo {
+	return &SessionRepoImpl{cache: cache, dao: dao, logger: logger}
+}
+
+// Load 优先 Redis，miss 回源 MySQL
+func (r *SessionRepoImpl) Load(ctx context.Context, sessionID string) (*domain.Session, error) {
+	// 1. 尝试 Redis
+	session, err := r.cache.LoadSession(ctx, sessionID)
+	if err == nil && session != nil {
+		// 加载消息窗口
+		msgs, _ := r.cache.LoadMessages(ctx, sessionID)
+		session.Messages = msgs
+		return session, nil
+	}
+	if err != nil && !errors.Is(err, redis.Nil) {
+		r.logger.Warn("Redis load session 异常，回源 MySQL", logger.Error(err))
+	}
+
+	// 2. 回源 MySQL
+	sessionDO, dbErr := r.dao.GetSession(ctx, sessionID)
+	if dbErr != nil {
+		return nil, fmt.Errorf("session not found: %w", dbErr)
+	}
+	session = persistence.ToDomainSession(sessionDO)
+
+	// 加载消息
+	msgDOs, _, _ := r.dao.GetMessages(ctx, sessionID, 20, 0)
+	for _, m := range msgDOs {
+		session.Messages = append(session.Messages, persistence.ToDomainMessage(&m))
+	}
+
+	// 3. 回填 Redis
+	go func() {
+		_ = r.cache.SaveSession(context.Background(), session)
+		for _, msg := range session.Messages {
+			_ = r.cache.AppendMessage(context.Background(), sessionID, msg)
+		}
+	}()
+
+	return session, nil
+}
+
+// Save 先写 Redis，异步落 MySQL
+func (r *SessionRepoImpl) Save(ctx context.Context, session *domain.Session) error {
+	// 写 Redis
+	if err := r.cache.SaveSession(ctx, session); err != nil {
+		r.logger.Error("Redis save session 失败", logger.Error(err))
+	}
+
+	// 追加最新的消息到 Redis
+	if len(session.Messages) > 0 {
+		for _, msg := range session.Messages[len(session.Messages)-2:] { // 最后两条：user + assistant
+			_ = r.cache.AppendMessage(ctx, session.ID, msg)
+		}
+	}
+
+	// 异步落 MySQL
+	go func() {
+		sessionDO := persistence.ToSessionDO(session)
+		if err := r.dao.UpdateSession(context.Background(), sessionDO); err != nil {
+			r.logger.Error("MySQL update session 失败", logger.Error(err))
+		}
+		// 落消息
+		if len(session.Messages) >= 2 {
+			msgs := session.Messages[len(session.Messages)-2:]
+			dos := make([]persistence.MessageDO, len(msgs))
+			for i, m := range msgs {
+				dos[i] = *persistence.ToMessageDO(m)
+			}
+			if err := r.dao.BatchCreateMessages(context.Background(), dos); err != nil {
+				r.logger.Error("MySQL batch create messages 失败", logger.Error(err))
+			}
+		}
+	}()
+
+	return nil
+}
+
+// Create 创建新会话
+func (r *SessionRepoImpl) Create(ctx context.Context, session *domain.Session) error {
+	sessionDO := persistence.ToSessionDO(session)
+	if err := r.dao.CreateSession(ctx, sessionDO); err != nil {
+		return fmt.Errorf("mysql create session: %w", err)
+	}
+	return r.cache.SaveSession(ctx, session)
+}
+
+// Clear 清空会话
+func (r *SessionRepoImpl) Clear(ctx context.Context, sessionID string) error {
+	_ = r.cache.DeleteSession(ctx, sessionID)
+	_ = r.dao.DeleteMessages(ctx, sessionID)
+	return nil
+}
+
+// ListByUser 分页查询（走 MySQL）
+func (r *SessionRepoImpl) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
+	dos, total, err := r.dao.ListSessionsByUser(ctx, uint64(userID), limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	sessions := make([]domain.Session, len(dos))
+	for i, do := range dos {
+		sessions[i] = *persistence.ToDomainSession(&do)
+	}
+	return sessions, int(total), nil
+}
+
+// FindActiveByUser 查找用户活跃会话
+func (r *SessionRepoImpl) FindActiveByUser(ctx context.Context, userID int64) (*domain.Session, error) {
+	// TODO: 可从 Redis agent:user:{uid}:active 快速查找
+	sessions, _, err := r.ListByUser(ctx, userID, 1, 0)
+	if err != nil || len(sessions) == 0 {
+		return nil, err
+	}
+	if sessions[0].Status == domain.SessionActive {
+		return &sessions[0], nil
+	}
+	return nil, nil
+}

@@ -17,3 +17,27 @@ grpc:
     name: search.service
     port: 8093
     etcdTTL: 60
+
+elasticsearch:
+  addresses:
+    - "http://localhost:9200"
+
+# LLM 对话模型（Query 理解、RAG 摘要）
+# 可选提供商（均为 OpenAI 兼容接口，只需换 base_url + api_key + model）：
+#   硅基流动：https://api.siliconflow.cn/v1    模型: Qwen/Qwen2.5-7B-Instruct
+#   心流开放平台：https://apis.iflow.cn/v1     模型: qwen3-vl-plus
+#   DeepSeek：https://api.deepseek.com/v1      模型: deepseek-chat
+#   Ollama本地：http://localhost:11434/v1       模型: qwen2.5:7b
+llm:
+  base_url: "https://apis.iflow.cn/v1"
+  api_key: "sk-15f547253ab9eca6ff1c8e73c82533de"
+  chat_model: "qwen3-vl-plus"
+  timeout_seconds: 30
+
+# Embedding 向量化模型（独立于 LLM，可不同提供商）
+# 注意：需要确认所选提供商支持 /v1/embeddings 接口及所用模型
+embedding:
+  base_url: "https://api.siliconflow.cn/v1"
+  api_key: ""
+  model: "BAAI/bge-large-zh-v1.5"             # 1024维中文向量模型
+  timeout_seconds: 30

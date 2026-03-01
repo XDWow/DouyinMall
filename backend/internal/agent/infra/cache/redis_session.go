@@ -1,0 +1,118 @@
+package cache
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	"github.com/redis/go-redis/v9"
+)
+
+const (
+	sessionKeyPrefix = "agent:session:"
+	msgsKeySuffix    = ":msgs"
+	activeKeyPrefix  = "agent:user:"
+	activeKeySuffix  = ":active"
+	rateKeyPrefix    = "agent:rate:"
+	sessionTTL       = 24 * time.Hour
+	rateTTL          = time.Minute
+	maxWindowMsgs    = 20
+)
+
+// RedisSessionCache Redis 会话热层
+// 实现 domain.SessionRepo 的 Redis 部分（Load/Save/Create/Clear）
+// MySQL 冷层由 persistence 包负责，通过组合实现完整的 SessionRepo
+type RedisSessionCache struct {
+	client redis.Cmdable
+}
+
+func NewRedisSessionCache(client redis.Cmdable) *RedisSessionCache {
+	return &RedisSessionCache{client: client}
+}
+
+// SaveSession 保存会话元信息到 Redis Hash
+func (c *RedisSessionCache) SaveSession(ctx context.Context, session *domain.Session) error {
+	key := sessionKeyPrefix + session.ID
+	data, err := json.Marshal(session)
+	if err != nil {
+		return fmt.Errorf("marshal session: %w", err)
+	}
+	pipe := c.client.Pipeline()
+	pipe.Set(ctx, key, data, sessionTTL)
+	// 更新用户活跃会话索引
+	activeKey := fmt.Sprintf("%s%d%s", activeKeyPrefix, session.UserID, activeKeySuffix)
+	pipe.Set(ctx, activeKey, session.ID, sessionTTL)
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+// LoadSession 从 Redis 加载会话
+func (c *RedisSessionCache) LoadSession(ctx context.Context, sessionID string) (*domain.Session, error) {
+	key := sessionKeyPrefix + sessionID
+	data, err := c.client.Get(ctx, key).Result()
+	if err != nil {
+		return nil, err // redis.Nil 表示 miss
+	}
+	var session domain.Session
+	if err := json.Unmarshal([]byte(data), &session); err != nil {
+		return nil, fmt.Errorf("unmarshal session: %w", err)
+	}
+	return &session, nil
+}
+
+// AppendMessage 追加消息到 Redis List（滑动窗口，保留最近 N 条）
+func (c *RedisSessionCache) AppendMessage(ctx context.Context, sessionID string, msg domain.Message) error {
+	key := sessionKeyPrefix + sessionID + msgsKeySuffix
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	pipe := c.client.Pipeline()
+	pipe.RPush(ctx, key, data)
+	pipe.LTrim(ctx, key, -maxWindowMsgs, -1) // 只保留最近 N 条
+	pipe.Expire(ctx, key, sessionTTL)
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+// LoadMessages 从 Redis 加载滑动窗口内的消息
+func (c *RedisSessionCache) LoadMessages(ctx context.Context, sessionID string) ([]domain.Message, error) {
+	key := sessionKeyPrefix + sessionID + msgsKeySuffix
+	results, err := c.client.LRange(ctx, key, 0, -1).Result()
+	if err != nil {
+		return nil, err
+	}
+	msgs := make([]domain.Message, 0, len(results))
+	for _, raw := range results {
+		var msg domain.Message
+		if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+			continue
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs, nil
+}
+
+// DeleteSession 删除会话缓存
+func (c *RedisSessionCache) DeleteSession(ctx context.Context, sessionID string) error {
+	keys := []string{
+		sessionKeyPrefix + sessionID,
+		sessionKeyPrefix + sessionID + msgsKeySuffix,
+	}
+	return c.client.Del(ctx, keys...).Err()
+}
+
+// CheckRateLimit 消息限频：1 分钟内是否超过 limit 条
+func (c *RedisSessionCache) CheckRateLimit(ctx context.Context, userID int64, limit int64) (bool, error) {
+	key := fmt.Sprintf("%s%d", rateKeyPrefix, userID)
+	count, err := c.client.Incr(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+	if count == 1 {
+		c.client.Expire(ctx, key, rateTTL)
+	}
+	return count > limit, nil
+}

@@ -8,37 +8,41 @@ package main
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/search/events"
-	"github.com/XDWow/DouyinMall/backend/internal/search/handler"
+	"github.com/XDWow/DouyinMall/backend/internal/search/infra/es"
 	"github.com/XDWow/DouyinMall/backend/internal/search/ioc"
-	"github.com/XDWow/DouyinMall/backend/internal/search/repo"
-	"github.com/XDWow/DouyinMall/backend/internal/search/service"
+	"github.com/XDWow/DouyinMall/backend/internal/search/transport/grpc"
+	"github.com/XDWow/DouyinMall/backend/internal/search/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
 	"github.com/cloudwego/kitex/server"
 )
 
 // Injectors from wire.go:
 
-// InitApp 初始化整个应用
 func InitApp() *App {
 	esClient := ioc.InitES()
 	loggerV1 := ioc.InitLogger()
-	productRepo := repo.NewProductRepo(esClient, loggerV1)
-	merchantRepo := repo.NewMerchantRepo(esClient, loggerV1)
-	searchService := service.NewSearchService(productRepo, merchantRepo, loggerV1)
-	syncService := service.NewSyncService(productRepo, merchantRepo, loggerV1)
+	productRepo := es.NewProductRepo(esClient, loggerV1)
+	searchProductsUseCase := usecase.NewSearchProductsUseCase(productRepo, loggerV1)
+	merchantRepo := es.NewMerchantRepo(esClient, loggerV1)
+	searchMerchantsUseCase := usecase.NewSearchMerchantsUseCase(merchantRepo, loggerV1)
+	suggestUseCase := usecase.NewSuggestUseCase(productRepo, merchantRepo)
+	aggregationsUseCase := usecase.NewAggregationsUseCase(productRepo)
+	llmClient := ioc.InitLLMClient()
+	embedder := ioc.InitEmbedder()
+	aiSearchUseCase := usecase.NewAISearchUseCase(llmClient, embedder, productRepo, loggerV1)
+	syncUseCase := usecase.NewSyncUseCase(productRepo, merchantRepo, embedder, loggerV1)
 	client := ioc.InitProductClient()
-	searchHandler := handler.NewSearchHandler(searchService, syncService, esClient, client)
+	searchHandler := grpc.NewSearchHandler(searchProductsUseCase, searchMerchantsUseCase, suggestUseCase, aggregationsUseCase, aiSearchUseCase, syncUseCase, esClient, client)
 	server := ioc.InitGRPCServer(searchHandler)
 	saramaClient := ioc.InitKafkaClient()
-	productConsumer := events.NewProductConsumer(saramaClient, loggerV1, syncService)
-	merchantConsumer := events.NewMerchantConsumer(saramaClient, loggerV1, syncService)
+	productConsumer := events.NewProductConsumer(saramaClient, loggerV1, syncUseCase)
+	merchantConsumer := events.NewMerchantConsumer(saramaClient, loggerV1, syncUseCase)
 	app := newApp(server, productConsumer, merchantConsumer)
 	return app
 }
 
 // wire.go:
 
-// newApp 组装 App
 func newApp(
 	svr server.Server,
 	productConsumer *events.ProductConsumer,

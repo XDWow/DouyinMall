@@ -4,51 +4,50 @@ package main
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/search/events"
-	"github.com/XDWow/DouyinMall/backend/internal/search/handler"
+	es "github.com/XDWow/DouyinMall/backend/internal/search/infra/es"
 	"github.com/XDWow/DouyinMall/backend/internal/search/ioc"
-	"github.com/XDWow/DouyinMall/backend/internal/search/repo"
-	"github.com/XDWow/DouyinMall/backend/internal/search/service"
+	transportgrpc "github.com/XDWow/DouyinMall/backend/internal/search/transport/grpc"
+	"github.com/XDWow/DouyinMall/backend/internal/search/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
 	"github.com/cloudwego/kitex/server"
 	"github.com/google/wire"
 )
 
-// InitApp 初始化整个应用
 func InitApp() *App {
 	wire.Build(
 		// 基础设施
 		ioc.InitLogger,
 		ioc.InitES,
 		ioc.InitKafkaClient,
-		
-		// RPC 客户端
 		ioc.InitProductClient,
+		ioc.InitLLMClient,
+		ioc.InitEmbedder,
 
-		// Repository
-		repo.NewProductRepo,
-		repo.NewMerchantRepo,
+		// 仓储
+		es.NewProductRepo,
+		es.NewMerchantRepo,
 
-		// Service
-		service.NewSearchService,
-		service.NewSyncService,
+		// 用例
+		usecase.NewSearchProductsUseCase,
+		usecase.NewSearchMerchantsUseCase,
+		usecase.NewSuggestUseCase,
+		usecase.NewAggregationsUseCase,
+		usecase.NewAISearchUseCase,
+		usecase.NewSyncUseCase,
 
-		// Handler
-		handler.NewSearchHandler,
+		// 传输层
+		transportgrpc.NewSearchHandler,
+		ioc.InitGRPCServer,
 
-		// Consumers
+		// Kafka 消费者
 		events.NewProductConsumer,
 		events.NewMerchantConsumer,
 
-		// gRPC Server
-		ioc.InitGRPCServer,
-
-		// App
 		newApp,
 	)
 	return nil
 }
 
-// newApp 组装 App
 func newApp(
 	svr server.Server,
 	productConsumer *events.ProductConsumer,

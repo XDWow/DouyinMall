@@ -1,0 +1,84 @@
+package domain
+
+import "time"
+
+// Session 会话聚合根
+// 一个用户同一时间只有一个活跃会话
+type Session struct {
+	ID         string
+	UserID     int64
+	Channel    string // web / app / miniprogram
+	Status     SessionStatus
+	Summary    string // 早期历史压缩摘要（滑动窗口淘汰后的内容）
+	TotalTurns int
+	Messages   []Message // 滑动窗口内的消息（最近 N 条）
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+// RecentMessages 返回最近 n 条消息（滑动窗口）
+func (s *Session) RecentMessages(n int) []Message {
+	if len(s.Messages) <= n {
+		return s.Messages
+	}
+	return s.Messages[len(s.Messages)-n:]
+}
+
+// LastMessagePreview 返回最后一条消息的预览（截取前 50 字符）
+func (s *Session) LastMessagePreview() string {
+	if len(s.Messages) == 0 {
+		return ""
+	}
+	last := s.Messages[len(s.Messages)-1].Content
+	if len([]rune(last)) > 50 {
+		return string([]rune(last)[:50]) + "..."
+	}
+	return last
+}
+
+type SessionStatus uint8
+
+const (
+	SessionActive SessionStatus = iota + 1
+	SessionClosed
+	SessionHuman // 已转人工
+)
+
+// Message 消息值对象
+type Message struct {
+	ID         string
+	SessionID  string
+	Role       Role
+	Content    string
+	Intent     IntentType
+	Confidence float32
+	TokensUsed int
+	LatencyMs  int64
+	CreatedAt  time.Time
+}
+
+type Role string
+
+const (
+	RoleUser      Role = "user"
+	RoleAssistant Role = "assistant"
+	RoleSystem    Role = "system"
+	RoleTool      Role = "tool"
+)
+
+// IntentType 用户意图
+type IntentType int32
+
+const (
+	IntentUnknown         IntentType = iota
+	IntentFAQ                        // 常见问题
+	IntentProductInquiry             // 商品咨询
+	IntentOrderInquiry               // 订单查询
+	IntentLogistics                  // 物流查询
+	IntentPayment                    // 支付问题
+	IntentReturn                     // 退货退款
+	IntentComplaint                  // 投诉建议
+	IntentPromotion                  // 营销活动
+	IntentChitchat                   // 闲聊
+	IntentTransferToHuman            // 转人工
+)

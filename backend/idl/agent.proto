@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package agent;
+
+option go_package = "agent/v1;agentv1";
+
+// AgentService AI 客服服务
+// 四阶段 Pipeline：会话加载 → 意图识别+Query改写 → RAG检索 → 回复生成
+service AgentService {
+  // SendMessage 处理用户消息，返回 AI 回复
+  rpc SendMessage(ChatRequest) returns (ChatResponse);
+
+  // GetChatHistory 获取某个会话的对话历史（分页）
+  rpc GetChatHistory(GetChatHistoryRequest) returns (GetChatHistoryResponse);
+
+  // CreateSession 创建新对话会话
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+
+  // ListSessions 获取用户的会话列表
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+
+  // ClearSession 清空会话（重新开始对话）
+  rpc ClearSession(ClearSessionRequest) returns (ClearSessionResponse);
+}
+
+// ==================== 核心对话 ====================
+
+message ChatRequest {
+  string session_id = 1;
+  int64  user_id    = 2;           // int64 与其他服务统一
+  string message    = 3;
+  string channel    = 4;           // web / app / miniprogram
+}
+
+message ChatResponse {
+  string                reply      = 1;  // AI 回复内容
+  IntentType            intent     = 2;  // 识别出的意图
+  float                 confidence = 3;  // 置信度 0-1
+  repeated KnowledgeRef knowledge  = 4;  // 命中的知识条目（透明可解释）
+  repeated ToolExec     tool_execs = 5;  // 本次触发的工具调用链（Phase 2）
+  PipelineDebug         debug      = 6;  // Pipeline 各阶段耗时（调试用）
+}
+
+// PipelineDebug 四阶段 Pipeline 可观测数据
+// 面试亮点：全链路耗时透视，直接返回给前端可视化
+message PipelineDebug {
+  int64 intent_ms       = 1;   // 意图识别耗时
+  int64 embed_ms        = 2;   // Embedding 耗时
+  int64 vector_search_ms = 3;  // Milvus 向量检索耗时
+  int64 rerank_ms       = 4;   // LLM 重排耗时
+  int64 generate_ms     = 5;   // 回复生成耗时
+  int64 tool_ms         = 6;   // 工具调用耗时（Phase 2）
+  int64 total_ms        = 7;   // 总耗时
+  int32 knowledge_hits  = 8;   // RAG 命中条数
+  bool  cache_hit       = 9;   // 是否命中语义缓存
+  string rewritten_query = 10; // Query 改写结果（调试用）
+}
+
+// ==================== 会话管理 ====================
+
+message CreateSessionRequest {
+  int64  user_id = 1;
+  string channel = 2;
+}
+
+message CreateSessionResponse {
+  string session_id = 1;
+}
+
+message ListSessionsRequest {
+  int64 user_id  = 1;
+  int32 limit    = 2;  // 默认 10
+  int32 offset   = 3;
+}
+
+message ListSessionsResponse {
+  repeated SessionBrief sessions = 1;
+  int32 total = 2;
+}
+
+// SessionBrief 会话摘要（列表展示用）
+message SessionBrief {
+  string        session_id   = 1;
+  string        last_message = 2;  // 最后一条消息预览
+  SessionStatus status       = 3;
+  string        created_at   = 4;
+  string        updated_at   = 5;
+  int32         total_turns  = 6;
+}
+
+message GetChatHistoryRequest {
+  string session_id = 1;
+  int32  limit      = 2;  // 默认 20
+  int32  offset     = 3;
+}
+
+message GetChatHistoryResponse {
+  repeated Message messages = 1;
+  int32 total = 2;
+}
+
+message ClearSessionRequest {
+  string session_id = 1;
+}
+
+message ClearSessionResponse {
+  bool success = 1;
+}
+
+// ==================== 数据模型 ====================
+
+message Message {
+  string      id         = 1;
+  string      session_id = 2;
+  MessageRole role       = 3;
+  string      content    = 4;
+  IntentType  intent     = 5;   // assistant 消息的识别意图
+  float       confidence = 6;   // assistant 消息的置信度
+  string      created_at = 7;
+}
+
+// KnowledgeRef RAG 命中的知识条目引用
+message KnowledgeRef {
+  string id        = 1;
+  string title     = 2;
+  string snippet   = 3;  // 内容摘要片段（非全文）
+  string category  = 4;  // faq / product / policy / promotion
+  float  relevance = 5;  // 相关性得分
+}
+
+// ToolExec 工具调用执行记录（Phase 2）
+message ToolExec {
+  string            tool_name  = 1;  // get_order / search_product / get_logistics
+  map<string,string> params    = 2;  // 调用参数
+  string            reasoning  = 3;  // LLM 给出的调用理由
+  bool              success    = 4;
+  string            result     = 5;  // 执行结果（JSON）
+  string            error      = 6;  // 失败原因
+  int64             latency_ms = 7;
+}
+
+// ==================== 枚举 ====================
+
+enum MessageRole {
+  ROLE_UNKNOWN   = 0;
+  ROLE_USER      = 1;
+  ROLE_ASSISTANT = 2;
+  ROLE_SYSTEM    = 3;  // 系统提示（不对用户展示）
+  ROLE_TOOL      = 4;  // 工具调用结果（Phase 2）
+}
+
+enum IntentType {
+  INTENT_UNKNOWN           = 0;
+  INTENT_FAQ               = 1;   // 常见问题
+  INTENT_PRODUCT_INQUIRY   = 2;   // 商品咨询
+  INTENT_ORDER_INQUIRY     = 3;   // 订单查询
+  INTENT_LOGISTICS         = 4;   // 物流查询
+  INTENT_PAYMENT           = 5;   // 支付问题
+  INTENT_RETURN            = 6;   // 退货退款
+  INTENT_COMPLAINT         = 7;   // 投诉建议
+  INTENT_PROMOTION         = 8;   // 营销活动
+  INTENT_CHITCHAT          = 9;   // 闲聊
+  INTENT_TRANSFER_TO_HUMAN = 10;  // 转人工
+}
+
+enum SessionStatus {
+  SESSION_ACTIVE    = 0;  // 活跃
+  SESSION_CLOSED    = 1;  // 已结束
+  SESSION_HUMAN     = 2;  // 已转人工
+}

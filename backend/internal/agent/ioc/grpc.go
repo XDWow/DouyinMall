@@ -4,19 +4,16 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/XDWow/DouyinMall/backend/internal/search/transport/grpc"
-	searchv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/search/v1/searchservice"
-	"github.com/cloudwego/kitex/pkg/registry"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/handler"
+	agentv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/agent/v1/agentservice"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/server"
 	etcd "github.com/kitex-contrib/registry-etcd"
 	"github.com/spf13/viper"
 )
 
-func InitGRPCServer(searchHandler *grpc.SearchHandler) server.Server {
-	// 初始化 etcd 注册中心
+func InitGRPCServer(agentHandler *handler.AgentHandler) server.Server {
 	endpoints := viper.GetStringSlice("etcd.endpoints")
-	// 如果从环境变量读取（字符串），转换为数组
 	if len(endpoints) == 0 {
 		if ep := viper.GetString("etcd.endpoints"); ep != "" {
 			endpoints = []string{ep}
@@ -27,21 +24,17 @@ func InitGRPCServer(searchHandler *grpc.SearchHandler) server.Server {
 		panic(fmt.Errorf("创建 etcd 注册中心失败: %w", err))
 	}
 
-	// 服务配置
 	port := viper.GetInt("grpc.server.port")
 	serviceName := viper.GetString("grpc.server.name")
 	addr, _ := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
 
-	// 创建 Kitex 服务
-	svr := searchv1.NewServer(
-		searchHandler,
-		server.WithRegistry(r),       // 注册到 etcd
-		server.WithServiceAddr(addr), // 服务地址
+	svr := agentv1.NewServer(
+		agentHandler,
+		server.WithRegistry(r),
+		server.WithServiceAddr(addr),
 		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{
 			ServiceName: serviceName,
 		}),
-		server.WithRegistry(r.(registry.Registry)), // 服务注册
 	)
-
 	return svr
 }

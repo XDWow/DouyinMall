@@ -5,18 +5,18 @@ package search;
 option go_package="search/v1;searchv1";
 
 service SearchService {
-    // 商品搜索（支持关键字、筛选、排序、分页）
+    // 商品搜索（关键字 + 筛选 + 排序）
     rpc SearchProducts(SearchProductsReq) returns (SearchProductsResp) {}
-    // 获取商品搜索聚合统计（分类、价格区间分布）
+    // 聚合统计（分类、价格区间）
     rpc GetSearchAggregations(SearchProductsReq) returns (SearchAggregationsResp) {}
-    // 商家搜索（支持关键字、地区、评分筛选）
+    // 商家搜索
     rpc SearchMerchants(SearchMerchantsReq) returns (SearchMerchantsResp) {}
-    // 搜索建议（自动补全，包含商品和商家）
+    // 搜索建议（自动补全）
     rpc SearchSuggest(SearchSuggestReq) returns (SearchSuggestResp) {}
-    
-    // 批量同步数据到 ES（用于系统初始化/全量同步）
-    // 注意：索引创建已在服务启动时自动执行，此接口主要用于批量导入数据
+    // ES 初始化 / 全量同步
     rpc InitES(InitESReq) returns (InitESResp) {}
+    // AI 搜索（Query理解 → 多路召回 → 融合排序 → RAG摘要）
+    rpc AISearchProducts(AISearchProductsReq) returns (AISearchProductsResp) {}
 }
 
 message SearchProductsReq {
@@ -197,6 +197,50 @@ message InitESResp {
     int64 merchants_synced = 6;       // 同步成功的商家数量
     int64 merchants_failed = 7;       // 同步失败的商家数量
     repeated string errors = 8;       // 错误信息列表
+}
+
+// ==================== AI 搜索 ====================
+
+message AISearchProductsReq {
+    string query = 1;               // 用户原始查询（自然语言）
+    int64 page = 2;
+    int64 page_size = 3;
+    bool enable_rag = 4;            // 是否生成 RAG 摘要
+    bool enable_highlight = 5;
+}
+
+message AISearchProductsResp {
+    repeated ProductSearchResult products = 1;
+    int64 total = 2;
+    int64 page = 3;
+    int64 page_size = 4;
+    QueryIntent query_intent = 5;   // LLM 解析的意图
+    string rag_summary = 6;         // RAG 生成的搜索摘要
+    PipelineMetrics metrics = 7;    // 管线各阶段耗时
+}
+
+// LLM 解析的查询意图
+message QueryIntent {
+    string rewritten_query = 1;     // 重写后的关键词
+    repeated string categories = 2; // 识别的类目
+    int64 min_price = 3;            // 价格下限（分）
+    int64 max_price = 4;            // 价格上限（分）
+    string sort_by = 5;             // 排序意图
+    string intent = 6;              // 意图描述
+    bool need_rag = 7;              // 是否需要 RAG
+}
+
+// 管线可观测性指标（各阶段耗时 ms）
+message PipelineMetrics {
+    int64 query_understanding_ms = 1;
+    int64 keyword_recall_ms = 2;
+    int64 vector_recall_ms = 3;
+    int64 ranking_ms = 4;
+    int64 fetch_ms = 5;
+    int64 rag_ms = 6;
+    int64 total_ms = 7;
+    int32 keyword_recall_count = 8;
+    int32 vector_recall_count = 9;
 }
 
 

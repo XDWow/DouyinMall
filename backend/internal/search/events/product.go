@@ -5,7 +5,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/XDWow/DouyinMall/backend/internal/search/domain"
-	"github.com/XDWow/DouyinMall/backend/internal/search/service"
+	"github.com/XDWow/DouyinMall/backend/internal/search/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
 )
@@ -13,16 +13,16 @@ import (
 const topicSyncProduct = "sync_product_event"
 
 type ProductConsumer struct {
-	syncSvc service.SyncService
-	client  sarama.Client
-	l       logger.LoggerV1
+	syncUC *usecase.SyncUseCase
+	client sarama.Client
+	l      logger.LoggerV1
 }
 
-func NewProductConsumer(client sarama.Client, l logger.LoggerV1, svc service.SyncService) *ProductConsumer {
+func NewProductConsumer(client sarama.Client, l logger.LoggerV1, syncUC *usecase.SyncUseCase) *ProductConsumer {
 	return &ProductConsumer{
-		syncSvc: svc,
-		client:  client,
-		l:       l,
+		syncUC: syncUC,
+		client: client,
+		l:      l,
 	}
 }
 
@@ -47,5 +47,5 @@ func (p *ProductConsumer) Consume(msg *sarama.ConsumerMessage, evt domain.SyncEv
 		return nil
 	}
 	ctx := context.Background()
-	return p.syncSvc.Sync(ctx, evt)
+	return p.syncUC.Sync(ctx, evt)
 }
