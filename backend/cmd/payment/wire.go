@@ -27,6 +27,7 @@ func InitApp() *App {
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitOrderClient,
+		ioc.InitWechatNativeApiService,
 		ioc.InitWechatNativeService,
 
 		// Repository

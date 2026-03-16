@@ -1,0 +1,22 @@
+# knowledge-init 在宿主机运行时使用的配置。
+# 所有端口均为 docker-compose 映射到宿主机的端口。
+
+db:
+  dsn: "root:root@tcp(localhost:13306)/douyinmall_agent?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "localhost:16379"
+
+embedding:
+  base_url: "http://localhost:11434/api/embed"
+  model: "qwen3-embedding:0.6b"
+  timeout_seconds: 10
+
+reranker:
+  base_url: "https://api.siliconflow.cn/v1/rerank"
+  api_key: "${SILICONFLOW_API_KEY}"
+  model: "BAAI/bge-reranker-v2-m3"
+  timeout_seconds: 10
+
+milvus:
+  addr: "localhost:19530"

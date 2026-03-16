@@ -27,14 +27,19 @@ func (h *ProductHandler) ListProducts(ctx context.Context, req *v1.ListProductsR
 	}, nil
 }
 
-func (h *ProductHandler) GetProduct(ctx context.Context, req *v1.GetProductReq) (*v1.GetProductResp, error) {
-	product, err := h.svc.GetProduct(ctx, req.GetId())
-	if err != nil {
-		return nil, err
+func (h *ProductHandler) GetProducts(ctx context.Context, req *v1.GetProductsReq) (*v1.GetProductsResp, error) {
+	ids := req.GetId()
+	products := make([]*v1.Product, 0, len(ids))
+	for _, id := range ids {
+		product, err := h.svc.GetProduct(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, toProto(product))
 	}
 
-	return &v1.GetProductResp{
-		Product: toProto(product),
+	return &v1.GetProductsResp{
+		Product: products,
 	}, nil
 }
 

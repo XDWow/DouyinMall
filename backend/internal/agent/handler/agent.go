@@ -2,14 +2,12 @@ package handler
 
 import (
 	"context"
-	"strconv"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/usecase"
 	agentv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/agent/v1"
 )
 
-// AgentHandler Kitex gRPC 处理器，映射 proto RPC → UseCase
 type AgentHandler struct {
 	chatUC    *usecase.ChatUseCase
 	sessionUC *usecase.SessionUseCase
@@ -19,13 +17,12 @@ func NewAgentHandler(chatUC *usecase.ChatUseCase, sessionUC *usecase.SessionUseC
 	return &AgentHandler{chatUC: chatUC, sessionUC: sessionUC}
 }
 
-// SendMessage 四阶段 Pipeline 入口
+// 四阶段 Pipeline 入口
 func (h *AgentHandler) SendMessage(ctx context.Context, req *agentv1.ChatRequest) (*agentv1.ChatResponse, error) {
-	resp, err := h.chatUC.Execute(ctx, &domain.ChatReq{
+	resp, err := h.chatUC.Execute(ctx, usecase.ChatInput{
 		SessionID: req.GetSessionId(),
 		UserID:    req.GetUserId(),
 		Message:   req.GetMessage(),
-		Channel:   req.GetChannel(),
 	})
 	if err != nil {
 		return nil, err
@@ -33,7 +30,26 @@ func (h *AgentHandler) SendMessage(ctx context.Context, req *agentv1.ChatRequest
 	return h.toChatResponse(resp), nil
 }
 
-// GetChatHistory 获取对话历史
+// 流式对话 RPC（gRPC Server-Side Streaming）
+// 推送时序：STAGE_UPDATE("cache") → STAGE_UPDATE("intent") → STAGE_UPDATE("retrieval")
+//
+//	→ STAGE_UPDATE("generating") → TEXT_DELTA × N → DONE
+func (h *AgentHandler) SendMessageStream(req *agentv1.ChatRequest, stream agentv1.AgentService_SendMessageStreamServer) error {
+	ctx := stream.Context()
+	chunkCh := h.chatUC.ExecuteStream(ctx, usecase.ChatInput{
+		SessionID: req.GetSessionId(),
+		UserID:    req.GetUserId(),
+		Message:   req.GetMessage(),
+	})
+	for chunk := range chunkCh {
+		if err := stream.Send(h.toStreamChunk(chunk)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// 获取对话历史
 func (h *AgentHandler) GetChatHistory(ctx context.Context, req *agentv1.GetChatHistoryRequest) (*agentv1.GetChatHistoryResponse, error) {
 	limit := int(req.GetLimit())
 	if limit <= 0 {
@@ -54,7 +70,7 @@ func (h *AgentHandler) GetChatHistory(ctx context.Context, req *agentv1.GetChatH
 	}, nil
 }
 
-// CreateSession 创建新会话
+// 创建新会话
 func (h *AgentHandler) CreateSession(ctx context.Context, req *agentv1.CreateSessionRequest) (*agentv1.CreateSessionResponse, error) {
 	session, err := h.sessionUC.Create(ctx, req.GetUserId(), req.GetChannel())
 	if err != nil {
@@ -65,7 +81,7 @@ func (h *AgentHandler) CreateSession(ctx context.Context, req *agentv1.CreateSes
 	}, nil
 }
 
-// ListSessions 获取用户会话列表
+// 获取用户会话列表
 func (h *AgentHandler) ListSessions(ctx context.Context, req *agentv1.ListSessionsRequest) (*agentv1.ListSessionsResponse, error) {
 	limit := int(req.GetLimit())
 	if limit <= 0 {
@@ -84,7 +100,6 @@ func (h *AgentHandler) ListSessions(ctx context.Context, req *agentv1.ListSessio
 			Status:      toProtoSessionStatus(s.Status),
 			CreatedAt:   s.CreatedAt.Format("2006-01-02 15:04:05"),
 			UpdatedAt:   s.UpdatedAt.Format("2006-01-02 15:04:05"),
-			TotalTurns:  int32(s.TotalTurns),
 		})
 	}
 	return &agentv1.ListSessionsResponse{
@@ -93,7 +108,7 @@ func (h *AgentHandler) ListSessions(ctx context.Context, req *agentv1.ListSessio
 	}, nil
 }
 
-// ClearSession 清空会话
+// 清空会话
 func (h *AgentHandler) ClearSession(ctx context.Context, req *agentv1.ClearSessionRequest) (*agentv1.ClearSessionResponse, error) {
 	err := h.sessionUC.Clear(ctx, req.GetSessionId())
 	if err != nil {
@@ -102,48 +117,48 @@ func (h *AgentHandler) ClearSession(ctx context.Context, req *agentv1.ClearSessi
 	return &agentv1.ClearSessionResponse{Success: true}, nil
 }
 
-// ==================== 转换函数 ====================
-
 func (h *AgentHandler) toChatResponse(resp *domain.ChatResp) *agentv1.ChatResponse {
 	pbResp := &agentv1.ChatResponse{
-		Reply:      resp.Reply,
-		Intent:     toProtoIntent(resp.Intent),
-		Confidence: resp.Confidence,
+		Reply:              resp.Reply,
+		Intent:             toProtoIntent(resp.Intent),
+		SuggestedQuestions: resp.SuggestedQuestions,
 	}
 
 	// 知识引用
-	for _, ref := range resp.References {
+	for _, ref := range resp.Knowledge {
 		pbResp.Knowledge = append(pbResp.Knowledge, &agentv1.KnowledgeRef{
 			Id:        ref.ID,
 			Title:     ref.Title,
-			Snippet:   ref.Snippet,
+			Content:   ref.Content,
 			Category:  ref.Category,
 			Relevance: ref.Relevance,
 		})
 	}
 
-	// Pipeline 调试信息
-	if resp.Debug != nil {
-		pbResp.Debug = &agentv1.PipelineDebug{
-			IntentMs:       resp.Debug.IntentMs,
-			EmbedMs:        resp.Debug.EmbedMs,
-			VectorSearchMs: resp.Debug.VectorMs,
-			RerankMs:       resp.Debug.RerankMs,
-			GenerateMs:     resp.Debug.GenerateMs,
-			ToolMs:         resp.Debug.ToolMs,
-			TotalMs:        resp.Debug.TotalMs,
-			KnowledgeHits:  int32(resp.Debug.KnowledgeHits),
-			CacheHit:       resp.Debug.CacheHit,
-			RewrittenQuery: resp.Debug.RewrittenQuery,
-		}
+	// Handoff Summary
+	if resp.HandoffSummary != nil {
+		pbResp.Handoff = toProtoHandoffSummary(resp.HandoffSummary)
 	}
 
 	return pbResp
 }
 
+func toProtoHandoffSummary(h *domain.HandoffSummary) *agentv1.HandoffSummary {
+	if h == nil {
+		return nil
+	}
+	return &agentv1.HandoffSummary{
+		CoreIssue:        h.CoreIssue,
+		AiActions:        h.AIActions,
+		EscalationReason: h.EscalationReason,
+		UserEmotion:      h.UserEmotion,
+		Entities:         h.Entities,
+	}
+}
+
 func (h *AgentHandler) toProtoMessage(m domain.Message) *agentv1.Message {
 	return &agentv1.Message{
-		Id:         strconv.FormatInt(m.ID, 10),
+		Id:         m.ID,
 		SessionId:  m.SessionID,
 		Role:       toProtoRole(m.Role),
 		Content:    m.Content,
@@ -173,7 +188,7 @@ func toProtoIntent(intent domain.IntentType) agentv1.IntentType {
 	return agentv1.IntentType_INTENT_UNKNOWN
 }
 
-func toProtoRole(role string) agentv1.MessageRole {
+func toProtoRole(role domain.Role) agentv1.MessageRole {
 	switch role {
 	case domain.RoleUser:
 		return agentv1.MessageRole_ROLE_USER
@@ -199,4 +214,24 @@ func toProtoSessionStatus(status domain.SessionStatus) agentv1.SessionStatus {
 	default:
 		return agentv1.SessionStatus_SESSION_ACTIVE
 	}
+}
+
+// 将 domain.StreamChunk 转为 proto ChatStreamChunk
+func (h *AgentHandler) toStreamChunk(chunk domain.StreamChunk) *agentv1.ChatStreamChunk {
+	pb := &agentv1.ChatStreamChunk{
+		Stage: chunk.Stage,
+		Text:  chunk.Text,
+	}
+	switch chunk.Type {
+	case domain.ChunkStageUpdate:
+		pb.Type = agentv1.ChunkType_STAGE_UPDATE
+	case domain.ChunkTextDelta:
+		pb.Type = agentv1.ChunkType_TEXT_DELTA
+	case domain.ChunkDone:
+		pb.Type = agentv1.ChunkType_DONE
+		if chunk.Final != nil {
+			pb.Final = h.toChatResponse(chunk.Final)
+		}
+	}
+	return pb
 }

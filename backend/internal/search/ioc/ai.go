@@ -3,13 +3,13 @@ package ioc
 import (
 	"time"
 
-	"github.com/XDWow/DouyinMall/backend/internal/search/infra/ai"
+	"github.com/XDWow/DouyinMall/backend/pkg/ai"
 	"github.com/spf13/viper"
 )
 
 // InitLLMClient 初始化 LLM 对话客户端（Query 理解、RAG 摘要）
 func InitLLMClient() ai.LLMClient {
-	return ai.NewChatClient(ai.ChatConfig{
+	return ai.NewOpenAIClient(ai.ChatConfig{
 		BaseURL: viper.GetString("llm.base_url"),
 		APIKey:  viper.GetString("llm.api_key"),
 		Model:   viper.GetString("llm.chat_model"),

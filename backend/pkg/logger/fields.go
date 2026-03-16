@@ -40,3 +40,10 @@ func Bool(key string, b bool) Field {
 		Value: b,
 	}
 }
+
+func Float64(key string, val float64) Field {
+	return Field{
+		Key:   key,
+		Value: val,
+	}
+}

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/search/domain"
-	"github.com/XDWow/DouyinMall/backend/internal/search/infra/ai"
+	"github.com/XDWow/DouyinMall/backend/pkg/ai"
 	es "github.com/XDWow/DouyinMall/backend/internal/search/infra/es"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )

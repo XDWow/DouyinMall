@@ -12,7 +12,8 @@ import (
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1/productservice"
 )
 
-// ==================== 结算预览用例 ====================
+// 结算预览用例
+// ai tool 那边只能到这一步，最后要用户看这个界面，选择优惠券，确定所有信息，点击支付
 
 type PreviewOrderUseCase struct {
 	productClient productservice.Client

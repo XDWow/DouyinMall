@@ -22,7 +22,8 @@ func InitApp() *App {
 	db := ioc.InitDB()
 	loggerV1 := ioc.InitLogger()
 	paymentRepository := repository.NewPaymentRepository(db, loggerV1)
-	nativeApiService := ioc.InitWechatNativeService()
+	nativeApiSdk := ioc.InitWechatNativeApiService()
+	nativeApiService := ioc.InitWechatNativeService(nativeApiSdk)
 	nativePrePaymentUC := ioc.InitNativePrePaymentUC(paymentRepository, loggerV1, nativeApiService)
 	getPaymentUC := usecase.NewGetPaymentUC(paymentRepository, loggerV1)
 	paymentHandler := grpc.NewPaymentHandler(nativePrePaymentUC, getPaymentUC)
@@ -30,7 +31,7 @@ func InitApp() *App {
 	client := ioc.InitOrderClient()
 	payCallbackUC := usecase.NewPayCallbackUC(paymentRepository, client)
 	ginxServer := ioc.InitHTTPServer(payCallbackUC, loggerV1)
-	syncWechatOrderUC := ioc.InitSyncWechatOrderUC(nativeApiService, payCallbackUC, loggerV1)
+	syncWechatOrderUC := ioc.InitSyncWechatOrderUC(nativeApiSdk, payCallbackUC, loggerV1)
 	syncWechatOrderJob := job.NewSyncWechatOrderJob(syncWechatOrderUC, paymentRepository, loggerV1)
 	app := newApp(server, ginxServer, syncWechatOrderJob)
 	return app

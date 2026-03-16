@@ -1,20 +1,16 @@
 package domain
 
-// KnowledgeItem 知识库条目
-type KnowledgeItem struct {
-	ID       string
-	Title    string
-	Content  string
-	Category string // faq / product / policy / promotion
-	VectorID string // Milvus 中的向量 ID
-	Status   int8   // 1-启用 0-禁用
-}
-
-// KnowledgeRef RAG 命中的知识引用（返回给调用方）
+// RAG 命中的知识引用（返回给调用方）
 type KnowledgeRef struct {
 	ID        string
 	Title     string
-	Snippet   string // 内容摘要片段
+	Content   string // chunk 完整内容（已分片，无需截断）
 	Category  string
 	Relevance float32 // 相关性得分
 }
+
+// 向量集合名（domain 定义，infra 使用，usecase 传参）
+const (
+	CollectionKnowledge = "agent_knowledge"
+	CollectionCache     = "agent_semantic_cache"
+)

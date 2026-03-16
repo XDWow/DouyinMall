@@ -1,5 +1,5 @@
 services:
-  # ==================== 基础设施 ====================
+
   mysql:
     image: mysql:8.0
     container_name: douyinmall-mysql
@@ -10,19 +10,13 @@ services:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: douyinmall
       TZ: Asia/Shanghai
-    volumes:
-      - mysql-data:/var/lib/mysql
-      - ./scripts/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
     networks:
       - douyinmall-net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -30,183 +24,193 @@ services:
     restart: unless-stopped
     ports:
       - "16379:6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis-data:/data
-    command: redis-server --appendonly yes
     networks:
       - douyinmall-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   etcd:
-    image: bitnami/etcd:3.5
+    image: quay.io/coreos/etcd:v3.5.12
     container_name: douyinmall-etcd
     restart: unless-stopped
     ports:
       - "12379:2379"
-    environment:
-      - ALLOW_NONE_AUTHENTICATION=yes
-      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+    command: >
+      etcd
+      --advertise-client-urls=http://0.0.0.0:2379
+      --listen-client-urls=http://0.0.0.0:2379
     volumes:
-      - etcd-data:/bitnami/etcd
+      - etcd-data:/etcd
     networks:
       - douyinmall-net
-    healthcheck:
-      test: ["CMD", "etcdctl", "endpoint", "health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   kafka:
-    image: 'bitnami/kafka:3.6.0'
+    image: apache/kafka:4.1.1
     container_name: douyinmall-kafka
     restart: unless-stopped
     ports:
-      - '9092:9092'
-      - '9094:9094'
+      - "9092:9092"
     environment:
-      - KAFKA_CFG_NODE_ID=0
-      #      - 三个分区
-      - KAFKA_CREATE_TOPICS=DouyinMall_binlog:3:1
-      #      - 允许自动创建 topic，线上不要开启
-      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
-      - KAFKA_CFG_PROCESS_ROLES=controller,broker
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://:9093,EXTERNAL://0.0.0.0:9094
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-    volumes:
-      - kafka-data:/bitnami/kafka
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
     networks:
       - douyinmall-net
-    healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
 
   elasticsearch:
-    build:
-      context: ./docker/elasticsearch
-      dockerfile: Dockerfile
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     container_name: douyinmall-elasticsearch
     restart: unless-stopped
     environment:
-      - discovery.type=single-node
-      - "xpack.security.enabled=false"
-      - "ES_JAVA_OPTS=-Xms256m -Xmx512m"
-      - TZ=Asia/Shanghai
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
     ports:
       - "9200:9200"
-      - "9300:9300"
-    networks:
-      - douyinmall-net
     volumes:
       - es-data:/usr/share/elasticsearch/data
-      # 如果需要自定义 IK 词典，取消注释并创建对应的词典文件目录
-      # - ./docker/elasticsearch/ik-dict:/usr/share/elasticsearch/config/analysis-ik
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+    networks:
+      - douyinmall-net
 
-  # canal:
-  #   image: canal/canal-server:latest
-  #   container_name: douyinmall-canal
-  #   restart: unless-stopped
-  #   environment:
-  #     - CANAL_IP=canal
-  #     - CANAL_PORT=11111
-  #     - CANAL_DESTINATIONS=DouyinMall
-  #     - TZ=Asia/Shanghai
-  #   depends_on:
-  #     mysql:
-  #       condition: service_healthy
-  #     kafka:
-  #       condition: service_healthy
-  #   ports:
-  #     # 暴露了 canal 的端口，一般用于监控和调试，生产环境可以移除
-  #     - "11111:11111"
-  #     - "8089:8089"  # Canal Admin Web UI（如果启用）
-  #   volumes:
-  #     # 注意：配置文件路径，确保文件存在
-  #     - ./scripts/canal/DouyinMall/instance.properties:/home/admin/canal-server/conf/DouyinMall/instance.properties:ro
-  #     - ./scripts/canal/canal.properties:/home/admin/canal-server/conf/canal.properties:ro
-  #     - canal-logs:/home/admin/canal-server/logs
-  #   networks:
-  #     - douyinmall-net
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "nc -z localhost 11111 || exit 1"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 5
-  #     start_period: 90s
-  # ==================== 微服务 ====================
-  # 暂时注释掉，先启动基础容器
-  # UserService
-  # user-service:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: cmd/user/Dockerfile
-  #   container_name: user-service
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8081:8081"
-  #   environment:
-  #     - DB_DSN=root:root@tcp(mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local
-  #     - REDIS_ADDR=redis:6379
-  #     - ETCD_ENDPOINTS=etcd:2379
-  #   depends_on:
-  #     mysql:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     etcd:
-  #       condition: service_healthy
-  #   networks:
-  #     - douyinmall-net
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    container_name: douyinmall-milvus-etcd
+    restart: unless-stopped
+    command: >
+      etcd
+      --advertise-client-urls=http://0.0.0.0:2379
+      --listen-client-urls=http://0.0.0.0:2379
+    volumes:
+      - milvus-etcd-data:/etcd
+    networks:
+      - douyinmall-net
 
-  # 未来可以添加其他微服务
-  # product-service:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: cmd/product/Dockerfile
-  #   container_name: product-service
-  #   ports:
-  #     - "8082:8082"
-  #   environment:
-  #     - DB_DSN=root:root@tcp(mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local
-  #     - REDIS_ADDR=redis:6379
-  #     - ETCD_ENDPOINTS=etcd:2379
-  #   depends_on:
-  #     - mysql
-  #     - redis
-  #     - etcd
-  #   networks:
-  #     - douyinmall-net
+  milvus-minio:
+    image: minio/minio:latest
+    container_name: douyinmall-milvus-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - milvus-minio-data:/data
+    networks:
+      - douyinmall-net
+
+  milvus:
+    image: milvusdb/milvus:v2.4.4
+    container_name: douyinmall-milvus
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus-data:/var/lib/milvus
+    depends_on:
+      - milvus-etcd
+      - milvus-minio
+    networks:
+      - douyinmall-net
+
+  mcpServer:
+    build:
+      context: ./backend
+      dockerfile: cmd/mcp-tools/Dockerfile
+    image: douyinmall-mcp-server
+    container_name: douyinmall-mcpServer
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - etcd
+    networks:
+      - douyinmall-net
+
+  user-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/user/Dockerfile
+    container_name: douyinmall-user
+    restart: unless-stopped
+    ports:
+      - "8091:8091"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - mysql
+      - redis
+      - etcd
+    networks:
+      - douyinmall-net
+
+  bff-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/bff/Dockerfile
+    container_name: douyinmall-bff
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - redis
+      - etcd
+      - user-service
+      - agent-service
+    networks:
+      - douyinmall-net
+
+  agent-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/agent/Dockerfile
+    container_name: douyinmall-agent
+    restart: unless-stopped
+    ports:
+      - "8087:8087"
+    environment:
+      TZ: Asia/Shanghai
+      LLM_API_KEY: ${LLM_API_KEY}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - mysql
+      - redis
+      - etcd
+      - kafka
+      - milvus
+      - mcpServer
+    networks:
+      - douyinmall-net
 
 volumes:
   mysql-data:
-    driver: local
   redis-data:
-    driver: local
   etcd-data:
-    driver: local
-  kafka-data:
-    driver: local
   es-data:
-    driver: local
-  # canal-logs:
-  #   driver: local
+  milvus-etcd-data:
+  milvus-minio-data:
+  milvus-data:
 
 networks:
   douyinmall-net:
     driver: bridge
-

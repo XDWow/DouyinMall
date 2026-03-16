@@ -3,15 +3,127 @@ syntax = "proto3";
 package frontend.agent;
 
 import "api.proto";
-import "frontend/common.proto";
 
 option go_package = "frontend/agent";
 
-// 聊天服务定义
+// AI 客服 BFF 接口
 service AgentService {
-    // 发送聊天消息
-    rpc HandleChat(common.Empty) returns (common.Empty) {
-        option (api.post) = "agent/api/chat";
+    // 发送聊天消息（同步）
+    rpc SendMessage(ChatReq) returns (ChatResp) {
+        option (api.post) = "/agent/api/chat";
     }
-    
+
+    // 发送聊天消息（SSE 流式）
+    rpc SendMessageStream(ChatReq) returns (ChatResp) {
+        option (api.post) = "/agent/api/chat/stream";
+    }
+
+    // 创建会话
+    rpc CreateSession(CreateSessionReq) returns (CreateSessionResp) {
+        option (api.post) = "/agent/api/session";
+    }
+
+    // 获取会话列表
+    rpc ListSessions(ListSessionsReq) returns (ListSessionsResp) {
+        option (api.get) = "/agent/api/sessions";
+    }
+
+    // 获取对话历史
+    rpc GetChatHistory(GetChatHistoryReq) returns (GetChatHistoryResp) {
+        option (api.get) = "/agent/api/history";
+    }
+
+    // 清空会话
+    rpc ClearSession(ClearSessionReq) returns (ClearSessionResp) {
+        option (api.delete) = "/agent/api/session";
+    }
+}
+
+// ==================== 请求/响应 ====================
+
+message ChatReq {
+    string session_id = 1 [(api.body) = "session_id"];
+    string message    = 2 [(api.body) = "message"];
+    // user_id 从 JWT 中提取，不由前端传入
+}
+
+message ChatResp {
+    string             reply               = 1;
+    string             intent              = 2;
+    repeated KnowledgeRef knowledge         = 3;
+    repeated string    suggested_questions  = 4;
+    HandoffSummary     handoff             = 5;
+}
+
+message CreateSessionReq {
+    string channel = 1 [(api.body) = "channel"];
+}
+
+message CreateSessionResp {
+    string session_id = 1;
+}
+
+message ListSessionsReq {
+    int32 limit  = 1 [(api.query) = "limit"];
+    int32 offset = 2 [(api.query) = "offset"];
+}
+
+message ListSessionsResp {
+    repeated SessionBrief sessions = 1;
+    int32                 total    = 2;
+}
+
+message GetChatHistoryReq {
+    string session_id = 1 [(api.query) = "session_id"];
+    int32  limit      = 2 [(api.query) = "limit"];
+    int32  offset     = 3 [(api.query) = "offset"];
+}
+
+message GetChatHistoryResp {
+    repeated MessageItem messages = 1;
+    int32                total    = 2;
+}
+
+message ClearSessionReq {
+    string session_id = 1 [(api.query) = "session_id"];
+}
+
+message ClearSessionResp {
+    bool success = 1;
+}
+
+// ==================== 嵌套类型 ====================
+
+message KnowledgeRef {
+    string id        = 1;
+    string title     = 2;
+    string content   = 3;
+    string category  = 4;
+    float  relevance = 5;
+}
+
+message HandoffSummary {
+    string              core_issue        = 1;
+    repeated string     ai_actions        = 2;
+    string              escalation_reason = 3;
+    string              user_emotion      = 4;
+    map<string, string> entities          = 5;
+}
+
+message SessionBrief {
+    string session_id   = 1;
+    string last_message = 2;
+    string status       = 3;
+    string created_at   = 4;
+    string updated_at   = 5;
+}
+
+message MessageItem {
+    string id         = 1;
+    string session_id = 2;
+    string role       = 3;
+    string content    = 4;
+    string intent     = 5;
+    float  confidence = 6;
+    string created_at = 7;
 }

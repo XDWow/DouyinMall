@@ -1,0 +1,18 @@
+server:
+  port: 9090
+
+etcd:
+  endpoints: ["douyinmall-etcd:2379"]
+
+# 下游 RPC 服务名（需与各微服务注册的名称一致）
+rpc:
+  search:
+    service_name: "search.service"
+  product:
+    service_name: "product.service"
+  cart:
+    service_name: "cart.service"
+  checkout:
+    service_name: "checkout.service"
+  order:
+    service_name: "order.service"

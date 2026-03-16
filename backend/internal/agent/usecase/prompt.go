@@ -1,25 +1,94 @@
 package usecase
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	"github.com/XDWow/DouyinMall/backend/internal/search/infra/ai"
-	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
 // ==================== Prompt 模板 ====================
 
 const systemPrompt = `你是抖音商城的 AI 客服助手。请遵守以下规则：
-1. 仅回答与电商相关的问题（商品、订单、物流、退款、活动等）
-2. 回答必须基于提供的【知识库上下文】，不可编造事实
-3. 如果知识库中没有相关信息，诚实告知用户并建议转人工
+1. 仅回答与电商相关的问题（商品、订单、物流、退款、活动等），拒绝无关问题
+2. 若提供了【知识库上下文】，优先以其中的平台专属信息（政策、规则等）为准；知识库没有的内容可以用你自己的知识回答
+3. 不要编造具体的订单号、价格、活动时间等业务数据
 4. 回复要简洁专业，不超过 200 字
-5. 输出格式为 JSON：{"reply":"你的回复内容", "confidence":0.85}
-6. confidence 低于 0.5 时，reply 中必须包含"建议您联系人工客服"`
+5. 输出必须严格使用以下结构：
+	<自然语言回复>
+	===META===
+	{"confidence":0~1之间小数,"emotion":"neutral|mild_frustration|angry|urgent","suggested_questions":["问题1","问题2","问题3"]}
+6. 只允许出现一个 ===META=== 分隔符，且必须放在回复末尾
+7. 不要输出 markdown 代码块或额外解释`
+
+const toolSystemPrompt = `你是抖音商城的 AI 购物助手，可以帮助用户搜索商品、查看详情、加购物车、下单和查询订单。
+
+## 核心规则
+1. 你只负责理解用户意图、选择工具、解释结果。
+2. 绝不编造价格、库存、订单号等业务数据——一切数据必须来自工具返回。
+3. 绝不执行价格计算、折扣判断、库存扣减等业务逻辑，这些由后端服务处理。
+4. 所有 ID（product_id、user_id、order_id）由系统自动填充，你无需传递也无需记忆。
+
+## 工具使用策略
+- 用户想找商品 → search_products(query)
+- 用户问"第一个"详情 → get_product_detail(product_ref="list_0")，以此类推 list_1、list_2
+- 用户问"这个/当前商品"详情 → get_product_detail(product_ref="current")
+- 用户想加购"第一个" → add_to_cart(product_ref="list_0", quantity=N)
+- 用户想加购当前商品/「买这个」「再来一个」→ add_to_cart(product_ref="current", quantity=N)
+- 用户想看购物车 / 准备结算 → get_cart
+- 用户说「立即下单」「买这个」→ create_order(source="product", product_ref="current")
+- 用户说「结算」「下单全部」→ create_order(source="cart")
+- 用户查订单 → get_order，可填用户说的订单号，或不填查最近订单
+
+## 输出格式
+输出必须严格使用以下结构：
+<自然语言回复>
+===META===
+{"confidence":0~1之间小数,"emotion":"neutral|mild_frustration|angry|urgent","suggested_questions":["问题1","问题2","问题3"]}
+只允许出现一个 ===META=== 分隔符，且必须放在回复末尾。
+
+## 商品展示规范
+- 搜索或介绍商品时，用有序列表展示，每条包含名称、价格，并附上查看链接
+- 链接格式：[查看详情](http://localhost:5173/product/{product_id})
+- product_id 来自工具返回的 product_id 字段，必须原样填入，不得编造
+- 示例：
+  1. **索尼WH-1000XM5耳机** - ¥2,299 [查看详情](http://localhost:5173/product/42)
+  2. **苹果AirPods Pro** - ¥1,799 [查看详情](http://localhost:5173/product/17)`
+
+// formatStateContext 将对话状态格式化为 system prompt 注入块
+// 只暴露商品名称，不暴露任何 ID——ID 由 resolveToolArgs 在 backend 侧处理
+func formatStateContext(state *domain.EntityMemory) string {
+	if state == nil {
+		return ""
+	}
+	hasEntities := len(state.ProductList) > 0 ||
+		state.CurrentProductID != "" ||
+		state.LastOrderID != ""
+	if !hasEntities {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("【对话状态】\n")
+	if len(state.ProductList) > 0 {
+		sb.WriteString("最近搜索结果（用 product_ref=\"list_N\" 引用，N 从 0 开始）：\n")
+		for i, p := range state.ProductList {
+			sb.WriteString(fmt.Sprintf("  list_%d: %s\n", i, p.Name))
+		}
+	}
+	if state.CurrentProductID != "" {
+		name := state.CurrentProductName
+		if name == "" {
+			name = "某商品"
+		}
+		sb.WriteString(fmt.Sprintf("当前商品 product_ref=\"current\": %s\n", name))
+	}
+	if state.LastOrderID != "" {
+		sb.WriteString("最近有一笔订单（直接说「查我的订单」即可，无需填写订单号）\n")
+	}
+	return sb.String()
+}
 
 const intentPrompt = `请分析用户的意图，同时将用户的口语化问题改写为更精准的检索查询。
 
@@ -43,129 +112,111 @@ const intentPrompt = `请分析用户的意图，同时将用户的口语化问�
 
 用户消息：%s`
 
-const rerankPrompt = `以下是候选知识条目，请根据与用户问题的相关性排序。
-返回 JSON 数组，只包含最相关的 %d 条的序号（从 1 开始）：[1, 3, 5]
+const handoffPrompt = `请基于以下客服对话，生成一份结构化的交接摘要，帮助人工客服快速接手。
 
-用户问题：%s
-
-候选条目：
-%s`
-
-// ==================== 意图识别 ====================
-
-func (uc *ChatUseCase) recognizeIntent(ctx context.Context, message string, history []domain.Message) (*domain.IntentResult, error) {
-	// 拼装历史
-	var historyStr string
-	if len(history) > 0 {
-		var sb strings.Builder
-		for _, m := range history {
-			fmt.Fprintf(&sb, "%s: %s\n", m.Role, m.Content)
-		}
-		historyStr = sb.String()
-	} else {
-		historyStr = "（无历史）"
-	}
-
-	resp, err := uc.llm.ChatCompletion(ctx, ai.ChatRequest{
-		Messages: []ai.Message{
-			{Role: "system", Content: fmt.Sprintf(intentPrompt, historyStr, message)},
-		},
-		Temperature: 0.1,
-		MaxTokens:   256,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	content := cleanJSON(resp.Content)
-	var parsed struct {
-		Intent         string            `json:"intent"`
-		Confidence     float32           `json:"confidence"`
-		RewrittenQuery string            `json:"rewritten_query"`
-		Entities       map[string]string `json:"entities"`
-	}
-	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
-		uc.logger.Warn("解析意图结果失败", logger.Error(err), logger.String("raw", content))
-		return &domain.IntentResult{
-			Type:           domain.IntentUnknown,
-			RewrittenQuery: message,
-		}, nil
-	}
-
-	return &domain.IntentResult{
-		Type:           mapIntent(parsed.Intent),
-		Confidence:     parsed.Confidence,
-		RewrittenQuery: parsed.RewrittenQuery,
-		Entities:       parsed.Entities,
-	}, nil
+要求输出 JSON（不要 markdown 代码块）：
+{
+  "core_issue": "一句话概括用户的核心诉求",
+  "ai_actions": ["列举 AI 已经做了什么（关键动作）"],
+  "escalation_reason": "为什么需要转人工",
+  "user_emotion": "neutral / mild_frustration / angry / urgent",
+  "entities": {"order_id":"", "product":"", "problem_type":""}
 }
 
-// ==================== LLM 重排 ====================
+如果对话中没有订单号或商品名，entities 对应字段置空字符串。
 
-func (uc *ChatUseCase) rerankByLLM(ctx context.Context, query string, candidates []domain.KnowledgeRef, topN int) []domain.KnowledgeRef {
-	if len(candidates) <= topN {
-		return candidates
-	}
+对话记录：
+%s`
 
-	// 构造候选列表
-	var sb strings.Builder
-	for i, c := range candidates {
-		fmt.Fprintf(&sb, "%d. [%s] %s: %s\n", i+1, c.Category, c.Title, c.Snippet)
-	}
+const metaEvalPrompt = `你是客服质检模型。请基于对话上下文与助手最终回复，评估本轮回复质量并输出 JSON。
 
-	resp, err := uc.llm.ChatCompletion(ctx, ai.ChatRequest{
-		Messages: []ai.Message{
-			{Role: "user", Content: fmt.Sprintf(rerankPrompt, topN, query, sb.String())},
-		},
-		Temperature: 0.1,
-		MaxTokens:   64,
-	})
-	if err != nil {
-		uc.logger.Warn("LLM 重排失败，降级返回前 N 条", logger.Error(err))
-		return candidates[:topN]
-	}
+要求：
+1) 仅输出 JSON，不要输出 markdown 代码块
+2) confidence 必须是 0~1 之间小数
+3) emotion 只能是：neutral / mild_frustration / angry / urgent
+4) suggested_questions 给 0~3 个可继续追问的问题，尽量简洁
 
-	// 解析返回的序号数组
-	content := cleanJSON(resp.Content)
-	var indices []int
-	if err := json.Unmarshal([]byte(content), &indices); err != nil {
-		uc.logger.Warn("解析重排结果失败", logger.Error(err), logger.String("raw", content))
-		return candidates[:topN]
-	}
+输出格式：
+{
+	"confidence": 0.0,
+	"emotion": "neutral",
+	"suggested_questions": ["..."]
+}
 
-	result := make([]domain.KnowledgeRef, 0, topN)
-	for _, idx := range indices {
-		if idx >= 1 && idx <= len(candidates) {
-			result = append(result, candidates[idx-1])
+最近对话：
+%s
+
+用户本轮输入：
+%s
+
+助手本轮回复：
+%s`
+
+// ==================== 解析工具 ====================
+
+// parseReply 解析 LLM 回复为结构化结果
+// 主路径：模型输出 <reply> + ===META=== + JSON
+// 兼容路径：模型只输出自然语言时，confidence/emotion 使用默认值
+func parseReply(content string) *domain.GenerationResult {
+	content = strings.TrimSpace(content)
+	result := &domain.GenerationResult{Reply: content, Confidence: 0.75, Emotion: "neutral", MetaSource: "default"}
+
+	const sep = "===META==="
+	if idx := strings.Index(content, sep); idx >= 0 {
+		replyText := strings.TrimSpace(content[:idx])
+		metaStr := cleanJSON(strings.TrimSpace(content[idx+len(sep):]))
+		var meta struct {
+			Confidence         float32  `json:"confidence"`
+			Emotion            string   `json:"emotion"`
+			SuggestedQuestions []string `json:"suggested_questions"`
 		}
-		if len(result) >= topN {
-			break
+		if err := json.Unmarshal([]byte(metaStr), &meta); err == nil {
+			confOK := meta.Confidence >= 0 && meta.Confidence <= 1
+			emotion := strings.TrimSpace(meta.Emotion)
+			emotionOK := isValidEmotion(emotion)
+			if confOK {
+				result.Confidence = meta.Confidence
+			}
+			if emotionOK {
+				result.Emotion = emotion
+			}
+			result.Suggested = meta.SuggestedQuestions
+			if confOK && emotionOK {
+				result.MetaSource = "inline"
+			}
 		}
-	}
-	if len(result) == 0 {
-		return candidates[:topN]
+		if replyText != "" {
+			result.Reply = replyText
+		}
+		// replyText 为空时保持 result.Reply = content（整体内容兜底）
 	}
 	return result
 }
 
-// ==================== 回复解析 ====================
-
-func (uc *ChatUseCase) parseReply(content string) (reply string, confidence float32) {
-	content = cleanJSON(content)
-	var parsed struct {
-		Reply      string  `json:"reply"`
-		Confidence float32 `json:"confidence"`
+func isValidEmotion(v string) bool {
+	switch strings.TrimSpace(v) {
+	case "neutral", "mild_frustration", "angry", "urgent":
+		return true
+	default:
+		return false
 	}
-	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
-		// 如果 LLM 没返回 JSON，直接用原始内容
-		return content, 0.5
-	}
-	return parsed.Reply, parsed.Confidence
 }
 
-// ==================== 工具函数 ====================
+// defaultHandoff 降级摘要：拼接最近对话原文
+func defaultHandoff(history []domain.Message) *domain.HandoffSummary {
+	var sb strings.Builder
+	for _, m := range history {
+		fmt.Fprintf(&sb, "%s: %s\n", m.Role, m.Content)
+	}
+	return &domain.HandoffSummary{
+		CoreIssue:        sb.String(),
+		AIActions:        []string{"已尝试 AI 自动回复"},
+		EscalationReason: "AI 无法准确解答，需要人工介入",
+		UserEmotion:      "unknown",
+		Entities:         map[string]string{},
+	}
+}
 
-// cleanJSON 清理 LLM 输出中可能包含的 markdown 代码块标记
 func cleanJSON(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "```json")
@@ -174,7 +225,6 @@ func cleanJSON(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// mapIntent 字符串意图映射到枚举
 func mapIntent(s string) domain.IntentType {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
 	case "FAQ":

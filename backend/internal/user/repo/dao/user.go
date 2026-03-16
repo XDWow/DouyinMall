@@ -98,7 +98,7 @@ type User struct {
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 
 	UserName string
-	Email    sql.NullString `gorm:"uniqueIndex"`
+	Email    sql.NullString `gorm:"type:varchar(191);uniqueIndex"`
 	Password string         `gorm:"type:varchar(255)"`
 	Phone    sql.NullString `gorm:"type:varchar(20);uniqueIndex"`
 	Avatar   string

@@ -98,7 +98,7 @@ func (h *CouponHandler) ListAvailableCoupons(ctx context.Context, req *couponv1.
 func (h *CouponHandler) ReserveCoupon(ctx context.Context, req *couponv1.ReserveCouponReq) (*couponv1.ReserveCouponResp, error) {
 	output, err := h.reserveUC.Execute(ctx, usecase.ReserveCouponInput{
 		UserID:    req.GetUserId(),
-		CouponIDs: []int64{req.GetUserCouponId()},
+		CouponIDs: req.GetUserCouponIds(),
 		OrderID:   req.GetOrderId(),
 	})
 	if err != nil {
