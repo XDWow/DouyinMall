@@ -17,41 +17,39 @@ func main() {
 	port := viper.GetInt("grpc.server.port")
 	log.Printf("Product service starting on port %d...", port)
 
-	// 启动所有 Producers
-	ctx := context.Background()
-	for i, p := range app.Producers {
-		producer := p // 避免闭包问题
-		go func(idx int) {
-			if err := producer.Start(ctx); err != nil {
-				log.Fatalf("Producer %d 启动失败: %v", idx+1, err)
-			}
-		}(i)
-		log.Printf("Producer %d 已启动", i+1)
+	if viper.GetBool("canal.enabled") {
+		ctx := context.Background()
+		for i, p := range app.Producers {
+			producer := p
+			go func(idx int) {
+				if err := producer.Start(ctx); err != nil {
+					log.Fatalf("producer %d start failed: %v", idx+1, err)
+				}
+			}(i)
+			log.Printf("Producer %d started", i+1)
+		}
+	} else {
+		log.Printf("Canal producer disabled by config")
 	}
 
-	// 启动 gRPC Server（阻塞）
 	if err := app.Server.Run(); err != nil {
 		log.Fatalf("server run error: %v", err)
 	}
 }
 
 func initViperWatch() {
-	cfile := pflag.String("config",
-		"internal/product/config/dev.yaml", "配置文件路径")
+	cfile := pflag.String("config", "internal/product/config/dev.yaml", "config file path")
 	pflag.Parse()
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("读取配置文件失败: %w", err))
+		panic(fmt.Errorf("read config failed: %w", err))
 	}
 
-	// 支持环境变量覆盖配置文件（环境变量优先）
 	viper.AutomaticEnv()
-	// 设置环境变量前缀（可选）
-	// viper.SetEnvPrefix("USER_SERVICE")
-
-	// 手动绑定环境变量到配置键
-	viper.BindEnv("db.dsn", "DB_DSN")
-	viper.BindEnv("redis.addr", "REDIS_ADDR")
-	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	_ = viper.BindEnv("db.dsn", "DB_DSN")
+	_ = viper.BindEnv("redis.addr", "REDIS_ADDR")
+	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	_ = viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
+	_ = viper.BindEnv("canal.enabled", "CANAL_ENABLED")
 }

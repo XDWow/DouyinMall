@@ -14,47 +14,46 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/payment/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/cloudwego/kitex/server"
+	"github.com/robfig/cron/v3"
 )
-
-// Injectors from wire.go:
 
 func InitApp() *App {
 	db := ioc.InitDB()
 	loggerV1 := ioc.InitLogger()
 	paymentRepository := repository.NewPaymentRepository(db, loggerV1)
-	nativeApiSdk := ioc.InitWechatNativeApiService()
-	nativeApiService := ioc.InitWechatNativeService(nativeApiSdk)
+	orderClient := ioc.InitOrderClient()
+	payCallbackUC := usecase.NewPayCallbackUC(paymentRepository, orderClient)
+	wechatService := ioc.InitWechatNativeApiService()
+	nativeApiService := ioc.InitWechatNativeService(wechatService)
 	nativePrePaymentUC := ioc.InitNativePrePaymentUC(paymentRepository, loggerV1, nativeApiService)
+	syncWechatOrderUC := ioc.InitSyncWechatOrderUC(nativeApiService, payCallbackUC, loggerV1)
 	getPaymentUC := usecase.NewGetPaymentUC(paymentRepository, loggerV1)
-	paymentHandler := grpc.NewPaymentHandler(nativePrePaymentUC, getPaymentUC)
+	confirmPaymentUC := usecase.NewConfirmPaymentUC(paymentRepository, syncWechatOrderUC, payCallbackUC)
+	paymentHandler := grpc.NewPaymentHandler(nativePrePaymentUC, getPaymentUC, confirmPaymentUC)
 	server := ioc.InitGRPCServer(paymentHandler)
-	client := ioc.InitOrderClient()
-	payCallbackUC := usecase.NewPayCallbackUC(paymentRepository, client)
 	ginxServer := ioc.InitHTTPServer(payCallbackUC, loggerV1)
-	syncWechatOrderUC := ioc.InitSyncWechatOrderUC(nativeApiSdk, payCallbackUC, loggerV1)
 	syncWechatOrderJob := job.NewSyncWechatOrderJob(syncWechatOrderUC, paymentRepository, loggerV1)
-	app := newApp(server, ginxServer, syncWechatOrderJob)
+	cron := ioc.InitJobs(syncWechatOrderJob, loggerV1)
+	app := newApp(server, ginxServer, cron)
 	return app
 }
 
-// wire.go:
-
 type App struct {
-	GRPCServer server.Server // gRPC 服务（其他微服务调用）
+	GRPCServer server.Server
 	HTTPServer interface {
 		Start() error
 	}
-	Job job.Job // 定时任务
+	Cron *cron.Cron
 }
 
 func newApp(
 	grpcServer server.Server,
 	httpServer *ginx.Server,
-	syncJob *job.SyncWechatOrderJob,
+	cron *cron.Cron,
 ) *App {
 	return &App{
 		GRPCServer: grpcServer,
 		HTTPServer: httpServer,
-		Job:        syncJob,
+		Cron:       cron,
 	}
 }

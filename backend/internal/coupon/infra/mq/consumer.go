@@ -24,7 +24,6 @@ const (
 	OrderStatusUnknown   OrderStatus = iota
 	OrderStatusCreated               // 1: 待支付
 	OrderStatusPaid                  // 2: 已支付（需要确认优惠券）
-	OrderStatusToShip                // 3: 待发货
 	OrderStatusShipped               // 4: 已发货
 	OrderStatusCompleted             // 5: 已完成
 	OrderStatusCanceled              // 6: 已取消（需要释放优惠券）

@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/payment/domain"
@@ -42,17 +44,24 @@ func (repo *paymentRepository) GetPayment(ctx context.Context, bizTradeNo string
 		Where("biz_trade_no = ?", bizTradeNo).
 		First(&pmtModel).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.Payment{}, domain.ErrPaymentNotFound
+		}
 		return domain.Payment{}, err
 	}
 	return toDomainPayment(pmtModel), nil
 }
 
 func (repo *paymentRepository) FindExpiredPayment(ctx context.Context,
-	offset, limit int, t time.Time) ([]domain.Payment, error) {
+	limit int, t time.Time) ([]domain.Payment, error) {
 	models := make([]db.Payment, 0)
-	err := repo.db.WithContext(ctx).
-		Where("status = ? && update_at < ?", domain.PaymentStatusInit.AsUint8(), t).
-		Find(&models).Error
+	query := repo.db.WithContext(ctx).
+		Where("status = ? AND updated_at < ?", domain.PaymentStatusInit.AsUint8(), t).
+		Order("updated_at ASC, id ASC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	err := query.Find(&models).Error
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +74,7 @@ func (repo *paymentRepository) FindExpiredPayment(ctx context.Context,
 
 func toDomainPayment(pmt db.Payment) domain.Payment {
 	return domain.Payment{
+		ID:          pmt.ID,
 		BizTradeNo:  pmt.BizTradeNO,
 		Description: pmt.Description,
 		Amt: domain.Amount{
@@ -77,11 +87,15 @@ func toDomainPayment(pmt db.Payment) domain.Payment {
 }
 
 func toDBPayment(pmt domain.Payment) db.Payment {
-	return db.Payment{
+	dbPmt := db.Payment{
 		BizTradeNO:  pmt.BizTradeNo,
 		Description: pmt.Description,
 		Currency:    pmt.Amt.Currency,
 		Amt:         pmt.Amt.Total,
 		Status:      pmt.Status.AsUint8(),
 	}
+	if pmt.TxnID != "" {
+		dbPmt.TxnID = sql.NullString{String: pmt.TxnID, Valid: true}
+	}
+	return dbPmt
 }

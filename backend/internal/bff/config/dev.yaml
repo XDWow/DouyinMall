@@ -5,25 +5,38 @@ jwt:
   access_secret: "douyinmall-access-secret-dev"
   refresh_secret: "douyinmall-refresh-secret-dev"
   access_expiry: "2h"
-  refresh_expiry: "168h"  # 7 天
+  refresh_expiry: "168h"
 
 redis:
-  addr: "douyinmall-redis:6379"
+  addr: "127.0.0.1:16379"
 
-# 全局 IP 限流（滑动窗口）
-# interval 时间窗口内最多允许 rate 次请求
 ratelimit:
   interval: "1m"
-  rate: 100
+  rate: 100000
 
 etcd:
   endpoints:
-    - "douyinmall-etcd:2379"
+    - "127.0.0.1:12379"
 
 rpc:
   agent:
     service_name: "agent-service"
-    direct_addr: "douyinmall-agent:8087"  # 容器名直连，绕过 etcd 服务发现
+    direct_addr: "127.0.0.1:8087"
   user:
     service_name: "user-service"
-    direct_addr: "douyinmall-user:8091"   # 容器名直连，绕过 etcd 服务发现
+    direct_addr: "127.0.0.1:8091"
+  checkout:
+    service_name: "checkout-service"
+    direct_addr: "127.0.0.1:8086"
+  seckill:
+    service_name: "seckill-service"
+    direct_addr: "127.0.0.1:8098"
+  order:
+    service_name: "order-service"
+    direct_addr: "127.0.0.1:8095"
+  product:
+    service_name: "product-service"
+    direct_addr: "127.0.0.1:8096"
+  inventory:
+    service_name: "inventory-service"
+    direct_addr: "127.0.0.1:8094"

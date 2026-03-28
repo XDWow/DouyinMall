@@ -3,60 +3,81 @@ package grpc
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/XDWow/DouyinMall/backend/internal/payment/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/usecase"
 	paymentv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1"
-	"time"
 )
 
 type PaymentHandler struct {
-	prePayUC *usecase.NativePrePaymentUC
-	GetPayUC *usecase.GetPaymentUC
+	prePayUC  *usecase.NativePrePaymentUC
+	getPayUC  *usecase.GetPaymentUC
+	confirmUC *usecase.ConfirmPaymentUC
 }
 
 func NewPaymentHandler(
 	prePayUC *usecase.NativePrePaymentUC,
 	getPayUC *usecase.GetPaymentUC,
+	confirmUC *usecase.ConfirmPaymentUC,
 ) *PaymentHandler {
 	return &PaymentHandler{
-		prePayUC: prePayUC,
-		GetPayUC: getPayUC,
+		prePayUC:  prePayUC,
+		getPayUC:  getPayUC,
+		confirmUC: confirmUC,
 	}
 }
 
-func (h *PaymentHandler) NativePrepay(ctx context.Context, req *paymentv1.NativePrePayRequest) (res *paymentv1.NativePrePayResponse, err error) {
+func (h *PaymentHandler) NativePrepay(ctx context.Context, req *paymentv1.NativePrePayRequest) (*paymentv1.NativePrePayResponse, error) {
 	cmd := usecase.PrePaymentCmd{
 		Amt: domain.Amount{
-			Total:    req.GetAmt().Total,
-			Currency: req.GetAmt().Currency,
+			Total:    req.GetAmt().GetTotal(),
+			Currency: req.GetAmt().GetCurrency(),
 		},
 		BizTradeNo:  req.GetBizTradeNo(),
 		Description: req.GetDescription(),
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5) // 给时间，给你5s，usecase内部自己决定怎么花时间
+
+	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	codeUrl, err := h.prePayUC.Execute(ctx, cmd)
+
+	codeURL, err := h.prePayUC.Execute(callCtx, cmd)
 	if err != nil {
 		return nil, err
 	}
-	return &paymentv1.NativePrePayResponse{CodeUrl: codeUrl}, nil
+	return &paymentv1.NativePrePayResponse{CodeUrl: codeURL}, nil
 }
 
-func (h *PaymentHandler) GetPayment(ctx context.Context, req *paymentv1.GetPaymentRequest) (res *paymentv1.GetPaymentResponse, err error) {
+func (h *PaymentHandler) GetPayment(ctx context.Context, req *paymentv1.GetPaymentRequest) (*paymentv1.GetPaymentResponse, error) {
 	if req.GetBizTradeNo() == "" {
 		return nil, errors.New("biz_trade_no is empty")
 	}
-	cmd := usecase.QueryPaymentCmd{
-		BizTradeNo: req.GetBizTradeNo(),
-	}
-	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+
+	callCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	pmt, err := h.GetPayUC.Execute(ctx, cmd)
+
+	pmt, err := h.getPayUC.Execute(callCtx, usecase.QueryPaymentCmd{BizTradeNo: req.GetBizTradeNo()})
 	if err != nil {
 		return nil, err
 	}
-	return &paymentv1.GetPaymentResponse{
+	return &paymentv1.GetPaymentResponse{Status: toProtoPaymentStatus(pmt.Status)}, nil
+}
+
+func (h *PaymentHandler) ConfirmPayment(ctx context.Context, req *paymentv1.ConfirmPaymentRequest) (*paymentv1.ConfirmPaymentResponse, error) {
+	if req.GetBizTradeNo() == "" {
+		return nil, errors.New("biz_trade_no is empty")
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	pmt, err := h.confirmUC.Execute(callCtx, req.GetBizTradeNo())
+	if err != nil {
+		return nil, err
+	}
+	return &paymentv1.ConfirmPaymentResponse{
 		Status: toProtoPaymentStatus(pmt.Status),
+		TxnId:  pmt.TxnID,
 	}, nil
 }
 

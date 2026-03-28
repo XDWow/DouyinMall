@@ -1,0 +1,28 @@
+db:
+  dsn: "root:root@tcp(douyinmall-mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "douyinmall-redis:6379"
+
+etcd:
+  endpoints:
+    - "douyinmall-etcd:2379"
+
+grpc:
+  server:
+    name: product.service
+    port: 8096
+    etcdTTL: 60
+
+kafka:
+  brokers:
+    - "douyinmall-kafka:9092"
+
+canal:
+  enabled: false
+  mysql:
+    host: "douyinmall-mysql"
+    port: 3306
+    user: "root"
+    password: "root"
+  server_id: 1234

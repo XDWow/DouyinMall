@@ -11,45 +11,40 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/cloudwego/kitex/server"
 	"github.com/google/wire"
+	"github.com/robfig/cron/v3"
 )
 
 type App struct {
-	GRPCServer server.Server // gRPC 服务（其他微服务调用）
-	HTTPServer interface {   // HTTP 服务（微信回调）
+	GRPCServer server.Server
+	HTTPServer interface {
 		Start() error
 	}
-	Job job.Job // 定时任务
+	Cron *cron.Cron
 }
 
 func InitApp() *App {
 	wire.Build(
-		// 基础设施
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitOrderClient,
 		ioc.InitWechatNativeApiService,
 		ioc.InitWechatNativeService,
 
-		// Repository
 		repository.NewPaymentRepository,
 
-		// Use Cases
 		usecase.NewPayCallbackUC,
 		ioc.InitNativePrePaymentUC,
 		ioc.InitSyncWechatOrderUC,
 		usecase.NewGetPaymentUC,
+		usecase.NewConfirmPaymentUC,
 
-		// Transport
-		grpc.NewPaymentHandler, // gRPC handler
+		grpc.NewPaymentHandler,
 
-		// Job
 		job.NewSyncWechatOrderJob,
+		ioc.InitJobs,
 
-		// Servers
-		ioc.InitGRPCServer, // gRPC 服务器
-		ioc.InitHTTPServer, // HTTP 服务器
-
-		// App
+		ioc.InitGRPCServer,
+		ioc.InitHTTPServer,
 		newApp,
 	)
 	return nil
@@ -58,11 +53,11 @@ func InitApp() *App {
 func newApp(
 	grpcServer server.Server,
 	httpServer *ginx.Server,
-	syncJob *job.SyncWechatOrderJob,
+	cron *cron.Cron,
 ) *App {
 	return &App{
 		GRPCServer: grpcServer,
 		HTTPServer: httpServer,
-		Job:        syncJob,
+		Cron:       cron,
 	}
 }

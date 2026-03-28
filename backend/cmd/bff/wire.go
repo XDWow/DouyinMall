@@ -11,26 +11,21 @@ import (
 
 func InitApp() *App {
 	wire.Build(
-		// JWT
 		ioc.InitJWTManager,
-
-		// Redis + 限流
 		ioc.InitRedis,
 		ioc.InitRateLimiter,
-
-		// RPC 客户端
 		ioc.InitAgentClient,
 		ioc.InitAgentStreamClient,
 		ioc.InitUserClient,
-
-		// Handler
+		ioc.InitCheckoutClient,
+		ioc.InitSeckillClient,
+		ioc.InitOrderClient,
+		ioc.InitProductClient,
+		ioc.InitInventoryClient,
 		handler.NewAgentHandler,
 		handler.NewAuthHandler,
-
-		// HTTP Server
+		handler.NewTradeHandler,
 		ioc.InitGinServer,
-
-		// App
 		newApp,
 	)
 	return nil

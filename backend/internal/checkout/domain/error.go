@@ -21,6 +21,9 @@ var (
 
 	// ErrPaymentCreateFailed 创建支付单失败（Payment 服务返回，Saga 补偿触发）
 	ErrPaymentCreateFailed = errors.New("failed to create payment")
+	ErrOrderNotPayable     = errors.New("order is not payable")
+	ErrOrderExpired        = errors.New("order has expired")
+	ErrOrderForbidden      = errors.New("order does not belong to current user")
 )
 
 // UnavailableItem 单个失效商品的详情

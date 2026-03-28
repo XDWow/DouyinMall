@@ -12,7 +12,6 @@ func InitLLMClient() ai.LLMClient {
 	return ai.NewOpenAIClient(ai.ChatConfig{
 		BaseURL: viper.GetString("llm.base_url"),
 		APIKey:  viper.GetString("llm.api_key"),
-		Model:   viper.GetString("llm.chat_model"),
 		Timeout: time.Duration(viper.GetInt("llm.timeout_seconds")) * time.Second,
 	})
 }

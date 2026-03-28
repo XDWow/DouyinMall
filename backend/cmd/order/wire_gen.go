@@ -10,6 +10,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/db"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
+	"github.com/XDWow/DouyinMall/backend/internal/order/infra/queue"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/order/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/order/job"
@@ -19,39 +20,48 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// Injectors from wire.go:
-
 func InitApp() *App {
 	gormDB := ioc.InitDB()
 	cmdable := ioc.InitRedis()
 	orderCache := cache.NewRedisOrderCache(cmdable)
 	loggerV1 := ioc.InitLogger()
-	orderRepository := repository.NewOrderRepository(gormDB, orderCache, loggerV1)
-	createOrderUseCase := usecase.NewCreateOrderUseCase(orderRepository, loggerV1)
-	listUserOrderUseCase := usecase.NewListUserOrderUseCase(orderRepository, loggerV1)
-	outboxRepository := repository.NewOutboxRepository(gormDB)
+	paymentClient := ioc.InitPaymentClient()
 	client := ioc.InitKafkaClient()
 	syncProducer := ioc.InitKafkaSyncProducer(client)
-	saramaProducer := mq.NewSaramaProducer(syncProducer)
 	txManager := db.NewGormTxManager(gormDB)
-	inventoryserviceClient := ioc.InitInventoryClient()
-	changeOrderStatusUseCase := usecase.NewChangeOrderStatusUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1, inventoryserviceClient)
-	orderHandler := grpc.NewOrderHandler(createOrderUseCase, listUserOrderUseCase, changeOrderStatusUseCase)
-	server := ioc.InitGRPCServer(orderHandler)
+	saramaProducer := mq.NewSaramaProducer(syncProducer)
+	orderDelayQueue := queue.NewOrderDelayQueue(orderCache, loggerV1)
+	orderRepository := repository.NewOrderRepository(gormDB, orderCache, loggerV1)
+	outboxRepository := repository.NewOutboxRepository(gormDB)
+	createOrderUseCase := usecase.NewCreateOrderUseCase(orderRepository, orderDelayQueue, loggerV1)
+	getOrderUseCase := usecase.NewGetOrderUseCase(orderRepository, loggerV1)
+	listUserOrderUseCase := usecase.NewListUserOrderUseCase(orderRepository, loggerV1)
+	changeOrderStatusUseCase := usecase.NewChangeOrderStatusUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1)
 	batchCancelOrderUseCase := usecase.NewBatchCancelOrderUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1)
-	checkExpiredJob := job.NewCheckExpiredJob(orderRepository, batchCancelOrderUseCase, loggerV1)
+	dispatchOrderTimeoutJob := job.NewDispatchOrderTimeoutJob(orderDelayQueue, paymentClient, orderRepository, outboxRepository, saramaProducer, txManager, batchCancelOrderUseCase, loggerV1)
+	checkExpiredJob := job.NewCheckExpiredJob(orderRepository, paymentClient, batchCancelOrderUseCase, loggerV1)
 	outboxWorkerJob := job.NewOutboxWorkerJob(outboxRepository, saramaProducer, loggerV1)
-	cron := ioc.InitJobs(checkExpiredJob, outboxWorkerJob, loggerV1)
-	app := &App{
-		Server: server,
-		Cron:   cron,
-	}
+	cron := ioc.InitJobs(dispatchOrderTimeoutJob, checkExpiredJob, outboxWorkerJob, loggerV1)
+	orderHandler := grpc.NewOrderHandler(createOrderUseCase, getOrderUseCase, listUserOrderUseCase, changeOrderStatusUseCase)
+	server := ioc.InitGRPCServer(orderHandler)
+	app := newApp(server, cron)
 	return app
 }
 
-// wire.go:
+func newApp(server server.Server, cron *cron.Cron) *App {
+	return &App{
+		Server:    server,
+		Cron:      cron,
+		Consumers: nil,
+	}
+}
+
+type ConsumerComponent interface {
+	Start() error
+}
 
 type App struct {
-	Server server.Server
-	Cron   *cron.Cron
+	Server    server.Server
+	Cron      *cron.Cron
+	Consumers []ConsumerComponent
 }

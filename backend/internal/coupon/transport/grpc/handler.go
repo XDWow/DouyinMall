@@ -109,8 +109,9 @@ func (h *CouponHandler) ReserveCoupon(ctx context.Context, req *couponv1.Reserve
 	}
 
 	return &couponv1.ReserveCouponResp{
-		Success: output.Success,
-		Message: "reserved successfully",
+		Success:  output.Success,
+		Message:  reserveCouponMessage(output),
+		Failures: toCouponFailures(output.Failures),
 	}, nil
 }
 
@@ -169,6 +170,30 @@ func (h *CouponHandler) IssueCoupon(ctx context.Context, req *couponv1.IssueCoup
 		UserCouponId: output.CouponID,
 		Message:      "issued successfully",
 	}, nil
+}
+
+func reserveCouponMessage(output *usecase.ReserveCouponOutput) string {
+	if output == nil {
+		return ""
+	}
+	if output.Success {
+		return "reserved successfully"
+	}
+	if len(output.Failures) > 0 {
+		return "reserve coupon failed"
+	}
+	return ""
+}
+
+func toCouponFailures(failures []usecase.ReserveCouponFailure) []*couponv1.CouponFailure {
+	result := make([]*couponv1.CouponFailure, 0, len(failures))
+	for _, failure := range failures {
+		result = append(result, &couponv1.CouponFailure{
+			UserCouponId: failure.CouponID,
+			Reason:       failure.Reason,
+		})
+	}
+	return result
 }
 
 // CreateCouponTemplate 创建优惠券模板（暂不实现，预留接口）

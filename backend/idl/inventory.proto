@@ -1,45 +1,34 @@
 syntax = "proto3";
 
 package inventory.v1;
+
 option go_package = "inventory/v1;inventoryv1";
 
 service InventoryService {
-  // 查询库存，查 DB
   rpc GetInventory(GetInventoryReq) returns (GetInventoryResp);
   rpc BatchGetInventory(BatchGetInventoryReq) returns (BatchGetInventoryResp);
-
-  // 业务库存接口（强语义）
-  rpc ReserveStock(ReserveStockReq) returns (InventoryOpResp);   // 下单预占
-  rpc CommitStock(CommitStockReq) returns (InventoryOpResp);     // 支付成功确认
-  rpc ReleaseStock(ReleaseStockReq) returns (InventoryOpResp);   // 未支付的超时释放
-  rpc RefundStock(RefundStockReq) returns (InventoryOpResp);     // 已售退款
-
-  // 管理接口 - 通过 HTTP 暴露，用于人工或系统校准库存
+  rpc ReserveStock(ReserveStockReq) returns (InventoryOpResp);
+  rpc CommitStock(CommitStockReq) returns (InventoryOpResp);
+  rpc ReleaseStock(ReleaseStockReq) returns (InventoryOpResp);
+  rpc RefundStock(RefundStockReq) returns (InventoryOpResp);
   rpc AdjustStock(AdjustStockReq) returns (InventoryOpResp);
 }
 
 message StockItem {
   int64 product_id = 1;
-  int32 quantity   = 2; // 变动数量
+  int32 quantity = 2;
 }
-
-/*
-operation_id：库存操作幂等 ID
-order_id + ":" + action
-如：123:reserve / 123:commit
-*/
 
 message InventoryOpResp {
   int32 status_code = 1;
   string status_msg = 2;
-  repeated InsufficientItem insufficient_items = 3; // 仅 ReserveStock 失败时有值
+  repeated InsufficientItem insufficient_items = 3;
 }
 
-// ReserveStock 失败时返回的库存不足明细
 message InsufficientItem {
   int64 product_id = 1;
-  int32 requested  = 2; // 请求预扣数量
-  int64 available  = 3; // 可用库存 = 实际库存 - Redis 已预扣库存
+  int32 requested = 2;
+  int64 available = 3;
 }
 
 message GetInventoryReq {
@@ -49,7 +38,7 @@ message GetInventoryReq {
 message GetInventoryResp {
   int64 product_id = 1;
   int64 available_stock = 2;
-  int64 sold_stock      = 3;
+  int64 sold_stock = 3;
 }
 
 message BatchGetInventoryReq {
@@ -60,34 +49,27 @@ message BatchGetInventoryResp {
   repeated GetInventoryResp inventories = 1;
 }
 
-// 下单预占（Redis 层）
 message ReserveStockReq {
-  // 业务标识，由业务方生成传过来，如：123:reverse，订单123的预占操作
   string operation_id = 1;
   repeated StockItem items = 2;
-  int64 expire_time   = 3; // 正常来说，订单超时取消，业务会主动 ReleaseStock；异常就要依靠过期时间来兜底，一定要有兜底！
+  int64 expire_time = 3;
 }
 
-// 支付成功确认（DB 强一致）
 message CommitStockReq {
   string operation_id = 1;
   repeated StockItem items = 2;
 }
 
-// 未支付超时释放
 message ReleaseStockReq {
   string operation_id = 1;
   repeated StockItem items = 2;
 }
 
-// 已售库存退款
 message RefundStockReq {
   string operation_id = 1;
   repeated StockItem items = 2;
 }
 
-// 对内开放的管理接口，用于人工或系统校准库存
-// 不像上面的业务接口：来源不可信，网络不可靠，重试超时，要operation_id保证幂等性，这里不用，只需reson方便审计
 message AdjustStockReq {
   string reason = 1;
   repeated StockItem items = 2;

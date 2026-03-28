@@ -19,6 +19,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1/productservice"
 )
 
+// 普通下单
 type PlaceOrderUseCase struct {
 	productClient   productservice.Client
 	inventoryClient inventoryservice.Client
@@ -57,8 +58,9 @@ type PlaceOrderInput struct {
 	Address        domain.Address
 	PaymentMethod  string
 	Currency       string
-	Remark         string
-	ExpectedAmount int64 // 用户结算页看到的应付金额，用来判断价格是否变动，因为怕用户看到的金额，和最后支付金额不一样
+	OrderKind      string
+	Remark         string // 订单备注
+	ExpectedAmount int64  // preview 中看到的金额，真正支付的时候会兜底再算一次，如果跟之前用户看到的不一样，就返回
 }
 
 type PlaceOrderOutput struct {
@@ -68,18 +70,17 @@ type PlaceOrderOutput struct {
 }
 
 func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput) (output *PlaceOrderOutput, err error) {
-	// 参数校验
 	if vErr := uc.validate(input); vErr != nil {
 		return nil, vErr
 	}
 
-	// 读阶段：要再读一下拿最新信息，之前 preview 读到的没有时效性
 	productResp, queryErr := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Id: extractProductIDs(input.Items)})
 	if queryErr != nil {
 		return nil, fmt.Errorf("query products: %w", queryErr)
 	}
-	available, unavailable := buildOrderLines(input.Items, productResp.Product)
-	// 小概率事件：商品刚好下架了，要返回已经下架的商品，前端提示用户哪些商品已经下架
+
+	lines, unavailable := buildOrderLines(input.Items, productResp.Product)
+	// 有的订单项失效了，必须返回，用户可以选择重新下单
 	if len(unavailable) > 0 {
 		items := make([]domain.UnavailableItem, len(unavailable))
 		for i, l := range unavailable {
@@ -87,19 +88,17 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 		}
 		return nil, &domain.UnavailableItemsError{Items: items}
 	}
-	lines := available
 
+	// 查一下选择的优惠券是否还在可使用列表中
 	var couponDiscount int64
 	if len(input.CouponIDs) > 0 {
-		// 再次确认可用优惠券
 		couponResp, couponErr := uc.couponClient.ListAvailableCoupons(ctx, &couponv1.ListAvailableCouponsReq{
 			UserId: input.UserID,
 			Items:  toCouponOrderItems(lines),
 		})
 		if couponErr != nil {
-			return nil, fmt.Errorf("query coupons: %w", couponErr)
+			return nil, fmt.Errorf("查询优惠券出错: %w", couponErr)
 		}
-		// 所有可用优惠券的情况，每个 Line 优惠多少钱，方便前端直接切换优惠券，自己计算价格
 		coupons := toCouponOptions(couponResp.Coupons, lines)
 		couponDiscount = sumSelectedCouponDiscount(coupons, input.CouponIDs)
 	}
@@ -108,56 +107,53 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 	if priceErr := domain.ValidatePriceChange(input.ExpectedAmount, price.TotalAmount); priceErr != nil {
 		return nil, priceErr
 	}
+	// --- 商品、优惠券校验完成 ---
 
-	// 写阶段：依次预扣资源 → 创建订单 → 创建支付
-	// checkout 是无状态编排层，无需主动补偿：预扣库存 TTL 自动过期，订单超时自动取消 → MQ 驱动下游释放资源
-
-	// 预生成 OrderID（雪花ID，全局唯一，用于关联 inventory/coupon/order）
 	orderID := uc.idGen.GenerateOrderID()
-
-	// 1. 预扣库存
-	reserveResp, reserveErr := uc.inventoryClient.ReserveStock(ctx, &inventoryv1.ReserveStockReq{
-		OperationId: operationID(orderID, "reserve"),
+	commitResp, commitErr := uc.inventoryClient.CommitStock(ctx, &inventoryv1.CommitStockReq{
+		OperationId: operationID(orderID, "commit"),
 		Items:       toInventoryStockItems(input.Items),
-		ExpireTime:  1800, // 30分钟过期兜底
 	})
-	if reserveErr != nil {
-		// 从 resp 取库存不足明细返回给前端
-		if reserveResp != nil && len(reserveResp.InsufficientItems) > 0 {
-			return nil, toInsufficientStockError(reserveResp.InsufficientItems, lines)
-		}
-		return nil, fmt.Errorf("%w: %v", domain.ErrInsufficientStock, reserveErr)
+	if commitErr != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrInsufficientStock, commitErr)
+	}
+	if commitResp != nil && commitResp.StatusCode != 0 {
+		return nil, fmt.Errorf("%w: %s", domain.ErrInsufficientStock, commitResp.GetStatusMsg())
 	}
 
-	// 2. 批量锁定优惠券
 	if len(input.CouponIDs) > 0 {
 		couponReserveResp, couponErr := uc.couponClient.ReserveCoupon(ctx, &couponv1.ReserveCouponReq{
 			UserId:        input.UserID,
 			UserCouponIds: input.CouponIDs,
 			OrderId:       orderID,
-			Items:         toCouponOrderItems(lines), // 优惠券那边用来计算优惠券可用性，锁定前的兜底确认
+			Items:         toCouponOrderItems(lines),
 		})
-		if couponErr != nil {
+		if couponErr != nil { // 调用出错，不知道优惠券扣了还是没扣，也是失败，回退优惠券，避免锁住优惠券
+			uc.restoreCommittedStock(ctx, orderID)
+			uc.releaseReservedCoupons(ctx, orderID)
 			return nil, fmt.Errorf("reserve coupons: %w", couponErr)
 		}
-		if !couponReserveResp.Success {
+		if !couponReserveResp.Success { // 明确是扣失败了
+			uc.restoreCommittedStock(ctx, orderID)
 			return nil, toCouponUnavailableError(couponReserveResp.Failures)
 		}
 	}
 
-	// 3. 资源预占成功，可以创建订单（传入预生成的 orderID）
 	if _, createErr := uc.orderClient.CreateOrder(ctx, &orderv1.CreateOrderReq{
-		OrderId:  orderID,
-		UserId:   input.UserID,
-		Currency: input.Currency,
-		Address:  toOrderAddress(input.Address),
-		Phone:    input.Address.Phone,
-		Items:    toOrderItems(lines, input.Currency),
+		OrderId:       orderID,
+		UserId:        input.UserID,
+		Currency:      input.Currency,
+		Address:       toOrderAddress(input.Address),
+		Remark:        input.Remark,
+		OrderKind:     normalizeOrderKind(input.OrderKind),
+		PayableAmount: price.TotalAmount,
+		Items:         toOrderItems(lines, input.Currency),
 	}); createErr != nil {
+		uc.restoreCommittedStock(ctx, orderID)
+		uc.releaseReservedCoupons(ctx, orderID)
 		return nil, fmt.Errorf("%w: %v", domain.ErrOrderCreateFailed, createErr)
 	}
 
-	// 4. 创建支付单
 	payResp, payErr := uc.paymentClient.NativePrepay(ctx, &paymentv1.NativePrePayRequest{
 		Amt: &paymentv1.Amount{
 			Total:    price.TotalAmount,
@@ -166,8 +162,15 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 		BizTradeNo:  fmt.Sprintf("%d", orderID),
 		Description: fmt.Sprintf("订单 %d 支付", orderID),
 	})
-	if payErr != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrPaymentCreateFailed, payErr)
+	if payErr != nil { // 调用支付失败，不影响订单创建，打个日志
+		uc.logger.Warn("create initial payment session failed",
+			logger.Int64("orderID", orderID),
+			logger.Error(payErr),
+		)
+		return &PlaceOrderOutput{
+			OrderID:     orderID,
+			TotalAmount: price.TotalAmount,
+		}, nil
 	}
 
 	return &PlaceOrderOutput{
@@ -177,23 +180,50 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 	}, nil
 }
 
-// 内部方法
-
 func (uc *PlaceOrderUseCase) validate(input PlaceOrderInput) error {
 	if input.UserID <= 0 {
-		return errors.New("invalid user_id")
+		return errors.New("无效的用户id")
 	}
 	if len(input.Items) == 0 {
 		return domain.ErrInvalidInput
 	}
 	if input.Address.ReceiverName == "" || input.Address.Phone == "" {
-		return errors.New("address is incomplete")
+		return errors.New("地址补完整")
 	}
 	if input.PaymentMethod == "" {
-		return errors.New("payment method is required")
+		return errors.New("未选择支付方式")
 	}
 	if input.ExpectedAmount <= 0 {
 		return errors.New("expected amount must be positive")
 	}
 	return nil
+}
+
+func (uc *PlaceOrderUseCase) restoreCommittedStock(ctx context.Context, orderID int64) {
+	if _, err := uc.inventoryClient.RefundStock(ctx, &inventoryv1.RefundStockReq{
+		OperationId: operationID(orderID, "refund"),
+	}); err != nil {
+		uc.logger.Error("restore committed stock failed",
+			logger.Int64("orderID", orderID),
+			logger.Error(err),
+		)
+	}
+}
+
+func (uc *PlaceOrderUseCase) releaseReservedCoupons(ctx context.Context, orderID int64) {
+	if _, err := uc.couponClient.ReleaseCoupon(ctx, &couponv1.ReleaseCouponReq{
+		OrderId: orderID,
+	}); err != nil {
+		uc.logger.Error("release reserved coupons failed",
+			logger.Int64("orderID", orderID),
+			logger.Error(err),
+		)
+	}
+}
+
+func normalizeOrderKind(orderKind string) string {
+	if orderKind == "" {
+		return "DIRECT_BUY"
+	}
+	return orderKind
 }

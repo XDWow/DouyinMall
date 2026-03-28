@@ -48,6 +48,7 @@ func (t *CheckoutTool) CreateOrder(ctx context.Context, arguments json.RawMessag
 	}
 
 	var checkoutItems []*checkoutv1.CheckoutItem
+	orderKind := "DIRECT_BUY"
 
 	switch args.Source {
 	case "product":
@@ -65,6 +66,7 @@ func (t *CheckoutTool) CreateOrder(ctx context.Context, arguments json.RawMessag
 		}
 
 	case "cart":
+		orderKind = "CART"
 		// 从购物车服务读取当前内容
 		cartResp, cartErr := t.cartClient.GetCart(ctx, &cartv1.GetCartReq{UserId: args.UserID})
 		if cartErr != nil {
@@ -87,8 +89,9 @@ func (t *CheckoutTool) CreateOrder(ctx context.Context, arguments json.RawMessag
 
 	// 调用 Checkout 服务下单
 	resp, err := t.checkoutClient.PlaceOrder(ctx, &checkoutv1.PlaceOrderReq{
-		UserId: args.UserID,
-		Items:  checkoutItems,
+		UserId:    args.UserID,
+		Items:     checkoutItems,
+		OrderKind: orderKind,
 	})
 	if err != nil {
 		return mcp.NewErrorResult("下单失败: " + err.Error())

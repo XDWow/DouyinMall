@@ -51,14 +51,20 @@ services:
     restart: unless-stopped
     ports:
       - "9092:9092"
+      - "29092:29092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,HOST://:29092,CONTROLLER://:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
     networks:
       - douyinmall-net
 
@@ -157,6 +163,133 @@ services:
       - mysql
       - redis
       - etcd
+    networks:
+      - douyinmall-net
+
+  order-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/order/Dockerfile
+    container_name: douyinmall-order
+    restart: unless-stopped
+    ports:
+      - "8095:8095"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - mysql
+      - redis
+      - etcd
+      - kafka
+    networks:
+      - douyinmall-net
+
+  inventory-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/inventory/Dockerfile
+    container_name: douyinmall-inventory
+    restart: unless-stopped
+    ports:
+      - "8094:8094"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - mysql
+      - redis
+      - etcd
+      - kafka
+      - order-service
+    networks:
+      - douyinmall-net
+
+  product-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/product/Dockerfile
+    container_name: douyinmall-product
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - mysql
+      - redis
+      - etcd
+      - kafka
+    networks:
+      - douyinmall-net
+
+  mock-wechat-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/mock-wechat/Dockerfile
+    container_name: douyinmall-mock-wechat
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      TZ: Asia/Shanghai
+    networks:
+      - douyinmall-net
+
+  payment-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/payment/Dockerfile
+    container_name: douyinmall-payment
+    restart: unless-stopped
+    ports:
+      - "8092:8092"
+      - "8093:8093"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - mysql
+      - redis
+      - etcd
+      - kafka
+      - order-service
+      - mock-wechat-service
+    networks:
+      - douyinmall-net
+
+  checkout-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/checkout/Dockerfile
+    container_name: douyinmall-checkout
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - etcd
+      - product-service
+      - inventory-service
+      - order-service
+      - payment-service
+    networks:
+      - douyinmall-net
+
+  seckill-service:
+    build:
+      context: ./backend
+      dockerfile: cmd/seckill/Dockerfile
+    container_name: douyinmall-seckill
+    restart: unless-stopped
+    ports:
+      - "8098:8098"
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      - mysql
+      - redis
+      - etcd
+      - kafka
+      - order-service
     networks:
       - douyinmall-net
 

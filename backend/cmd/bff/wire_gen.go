@@ -12,23 +12,25 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 )
 
-// Injectors from wire.go:
-
 func InitApp() *App {
 	client := ioc.InitAgentClient()
 	streamClient := ioc.InitAgentStreamClient()
 	agentHandler := handler.NewAgentHandler(client, streamClient)
 	userserviceClient := ioc.InitUserClient()
+	checkoutserviceClient := ioc.InitCheckoutClient()
+	seckillserviceClient := ioc.InitSeckillClient()
+	orderserviceClient := ioc.InitOrderClient()
+	productserviceClient := ioc.InitProductClient()
+	inventoryserviceClient := ioc.InitInventoryClient()
 	jwtManager := ioc.InitJWTManager()
 	authHandler := handler.NewAuthHandler(userserviceClient, jwtManager)
+	tradeHandler := handler.NewTradeHandler(checkoutserviceClient, seckillserviceClient, orderserviceClient, productserviceClient, inventoryserviceClient)
 	cmdable := ioc.InitRedis()
 	limiter := ioc.InitRateLimiter(cmdable)
-	server := ioc.InitGinServer(agentHandler, authHandler, jwtManager, limiter)
+	server := ioc.InitGinServer(agentHandler, authHandler, tradeHandler, jwtManager, limiter)
 	app := newApp(server)
 	return app
 }
-
-// wire.go:
 
 func newApp(svr *ginx.Server) *App {
 	return &App{Server: svr}

@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/spf13/viper"
 )
@@ -15,7 +14,6 @@ func main() {
 	initViperWatch()
 	app := InitApp()
 
-	// 优雅启动和关闭
 	go func() {
 		port := viper.GetInt("grpc.server.port")
 		log.Printf("Payment gRPC service starting on port %d...", port)
@@ -32,41 +30,25 @@ func main() {
 		}
 	}()
 
-	// 启动定时任务（每30分钟执行一次）
-	go func() {
-		ticker := time.NewTicker(30 * time.Minute)
-		defer ticker.Stop()
+	app.Cron.Start()
+	log.Println("Payment cron jobs started")
 
-		log.Printf("Payment sync job [%s] starting...", app.Job.Name())
-
-		// 启动时立即执行一次
-		if err := app.Job.Run(); err != nil {
-			log.Printf("Job [%s] execution error: %v", app.Job.Name(), err)
-		}
-
-		for range ticker.C {
-			if err := app.Job.Run(); err != nil {
-				log.Printf("Job [%s] execution error: %v", app.Job.Name(), err)
-			}
-		}
-	}()
-
-	// 等待退出信号
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down servers...")
+	log.Println("Shutting down payment services...")
 
-	// 优雅关闭 gRPC 服务器
+	stopCtx := app.Cron.Stop()
+	<-stopCtx.Done()
+
 	if err := app.GRPCServer.Stop(); err != nil {
 		log.Printf("gRPC server forced to shutdown: %v", err)
 	}
 
-	log.Println("Servers exited")
+	log.Println("Payment services exited")
 }
 
-// initViperWatch 初始化 Viper 配置
 func initViperWatch() {
 	cwd, _ := os.Getwd()
 	viper.SetConfigName("dev")
@@ -79,7 +61,6 @@ func initViperWatch() {
 		panic(fmt.Errorf("读取配置文件失败: %w (工作目录: %s)", err, cwd))
 	}
 
-	// 监听配置文件变化
 	viper.WatchConfig()
 
 	log.Println("配置文件加载成功:", viper.ConfigFileUsed())

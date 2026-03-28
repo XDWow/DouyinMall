@@ -1,7 +1,5 @@
 package domain
 
-// ==================== 值对象：从外部服务获取的数据 ====================
-
 // CheckoutItem 前端传入的商品项（只有ID和数量）
 type CheckoutItem struct {
 	ProductID int64
@@ -99,4 +97,3 @@ func ValidatePriceChange(expected, actual int64) error {
 	}
 	return nil
 }
-

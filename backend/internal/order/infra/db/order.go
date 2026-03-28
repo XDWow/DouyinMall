@@ -8,12 +8,17 @@ import "time"
 // 以支持 1:N 关系、审计、对账与未来演进。
 
 type OrderModel struct {
-	ID       int64 `gorm:"primaryKey;autoIncrement"`
-	UserID   int64 `gorm:"index:idx_userID_createdAt;index:idx_userID_status"`
-	Phone    string
-	Status   uint8 `gorm:"index:idx_status_expiredAt"`
-	Currency string
-	Total    int64
+	ID            int64 `gorm:"primaryKey;autoIncrement"`
+	UserID        int64 `gorm:"index:idx_userID_createdAt;index:idx_userID_status"`
+	Phone         string
+	Remark        string `gorm:"type:varchar(512)"`
+	Status        uint8  `gorm:"index:idx_status_expiredAt"`
+	OrderKind     string `gorm:"column:order_kind;type:varchar(32);index"`
+	ActivityID    int64  `gorm:"index"`
+	Currency      string
+	Total         int64
+	PayableTotal  int64
+	DiscountTotal int64
 
 	// 地址
 	Street  string
@@ -22,7 +27,7 @@ type OrderModel struct {
 	Country string
 	ZipCode string
 
-	CreatedAt time.Time	`gorm:"index:idx_userID_createdAt,sort:desc"`
+	CreatedAt time.Time `gorm:"index:idx_userID_createdAt,sort:desc"`
 	UpdatedAt time.Time
 	ExpiredAt time.Time `gorm:"index:idx_status_expiredAt,sort:asc"`
 	// ORM 关系声明，关系字段，不真正落库
@@ -37,6 +42,7 @@ type OrderItemModel struct {
 	ID               int64 `gorm:"primaryKey;autoIncrement"`
 	OrderID          int64
 	ProductID        int64
+	SKUID            int64
 	Quantity         int64
 	SnapshotPrice    int64
 	SnapshotCurrency string

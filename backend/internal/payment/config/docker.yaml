@@ -1,0 +1,35 @@
+db:
+  dsn: "root:root@tcp(douyinmall-mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "douyinmall-redis:6379"
+
+etcd:
+  endpoints:
+    - "douyinmall-etcd:2379"
+
+grpc:
+  server:
+    name: payment.service
+    port: 8092
+    etcdTTL: 60
+
+http:
+  server:
+    port: 8093
+
+payment:
+  mode: "mock"
+
+wechat:
+  api_base_url: "http://mock-wechat-service:8888"
+  app_id: "wx_mock_app_id"
+  mch_id: "1234567890"
+  cert_serial_no: "MOCK_CERT_SERIAL_NO"
+  private_key_path: ""
+  api_v3_key: "mock_api_v3_key_32_characters!!"
+  notify_url: "http://payment-service:8093/payment/wechat/callback"
+
+kafka:
+  brokers:
+    - "douyinmall-kafka:9092"

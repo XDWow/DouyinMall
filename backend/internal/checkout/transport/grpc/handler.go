@@ -12,15 +12,18 @@ import (
 type CheckoutHandler struct {
 	previewUC *usecase.PreviewOrderUseCase
 	placeUC   *usecase.PlaceOrderUseCase
+	payUC     *usecase.PayOrderUseCase
 }
 
 func NewCheckoutHandler(
 	previewUC *usecase.PreviewOrderUseCase,
 	placeUC *usecase.PlaceOrderUseCase,
+	payUC *usecase.PayOrderUseCase,
 ) *CheckoutHandler {
 	return &CheckoutHandler{
 		previewUC: previewUC,
 		placeUC:   placeUC,
+		payUC:     payUC,
 	}
 }
 
@@ -47,6 +50,7 @@ func (h *CheckoutHandler) PlaceOrder(ctx context.Context, req *checkoutv1.PlaceO
 		Address:        toAddress(req.GetAddress()),
 		PaymentMethod:  req.GetPaymentMethod(),
 		Currency:       req.GetCurrency(),
+		OrderKind:      req.GetOrderKind(),
 		Remark:         req.GetRemark(),
 		ExpectedAmount: req.GetExpectedAmount(),
 	})
@@ -62,7 +66,21 @@ func (h *CheckoutHandler) PlaceOrder(ctx context.Context, req *checkoutv1.PlaceO
 	}, nil
 }
 
-// ==================== 内部转换 ====================
+func (h *CheckoutHandler) PayOrder(ctx context.Context, req *checkoutv1.PayOrderReq) (*checkoutv1.PayOrderResp, error) {
+	output, err := h.payUC.Execute(ctx, usecase.PayOrderInput{
+		UserID:  req.GetUserId(),
+		OrderID: req.GetOrderId(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &checkoutv1.PayOrderResp{
+		OrderId:     output.OrderID,
+		PaymentUrl:  output.PaymentURL,
+		TotalAmount: output.TotalAmount,
+		ExpireAt:    output.ExpireAt,
+	}, nil
+}
 
 func toCheckoutItems(items []*checkoutv1.CheckoutItem) []domain.CheckoutItem {
 	result := make([]domain.CheckoutItem, 0, len(items))

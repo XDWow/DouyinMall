@@ -30,6 +30,7 @@ func InitApp() *App {
 		// Use Cases
 		usecase.NewPreviewOrderUseCase,
 		usecase.NewPlaceOrderUseCase,
+		usecase.NewPayOrderUseCase,
 
 		// Transport
 		transportgrpc.NewCheckoutHandler,

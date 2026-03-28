@@ -9,14 +9,12 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// 用于定时任务扫描超时订单并批量取消
 type BatchCancelOrderUseCase struct {
 	orderRepo  domain.OrderRepository
 	outboxRepo domain.OutboxRepository
 	producer   mq.SaramaProducer
 	tx         domain.TxManager
 	log        logger.LoggerV1
-	maxRetry   int
 }
 
 func NewBatchCancelOrderUseCase(
@@ -32,132 +30,93 @@ func NewBatchCancelOrderUseCase(
 		producer:   producer,
 		tx:         tx,
 		log:        log,
-		maxRetry:   5, // 最大重试5次
 	}
 }
 
-// Execute 执行批量取消订单
-// 1. 批量更新订单状态
-// 2. 批量写入outbox事件（慢路径兜底）
-// 3. 批量发送MQ消息（快路径）
-func (uc *BatchCancelOrderUseCase) Execute(ctx context.Context, orders []*domain.Order) error {
-	if len(orders) == 0 {
+func (uc *BatchCancelOrderUseCase) Execute(ctx context.Context, orderIDs []int64) error {
+	if len(orderIDs) == 0 {
 		return nil
 	}
 
-	orderIDs := make([]int64, 0, len(orders))
-	events := make([]any, 0, len(orders))
+	var outboxIDs []int64
+	var events []domain.OrderStatusUpdateEvent
+	var cancelIDs []int64
 
-	for _, order := range orders {
-		orderIDs = append(orderIDs, order.ID)
-		events = append(events, domain.OrderStatusUpdateEvent{
-			OrderID: order.ID,
-			Status:  domain.OrderStatusCanceled,
-		})
-	}
-
-	err := uc.tx.Tx(ctx, func(ctx context.Context) error {
-		err := uc.orderRepo.BatchUpdateStatus(ctx, orderIDs, domain.OrderStatusCreated, domain.OrderStatusCanceled)
+	if err := uc.tx.Tx(ctx, func(ctx context.Context) error {
+		// 必须要查到信息，后续发 event 要用，且事务一开始就当前读，把这些都锁住，避免并发问题
+		orders, err := uc.orderRepo.FindByIDsForUpdate(ctx, orderIDs)
 		if err != nil {
-			uc.log.Error("批量更新订单状态失败",
-				logger.Error(err),
-				logger.Int("orderCount", len(orderIDs)))
 			return err
 		}
 
-		// 批量写入outbox（慢路径兜底，保证生产者消息不丢）
-		err = uc.outboxRepo.BatchAdd(ctx, OrderStatusChanged, events)
-		if err != nil {
-			uc.log.Error("批量保存outbox失败",
-				logger.Error(err),
-				logger.Int("orderCount", len(orderIDs)))
-			return err
+		events = make([]domain.OrderStatusUpdateEvent, 0, len(orders))
+		payloads := make([]any, 0, len(orders))
+		cancelIDs = make([]int64, 0, len(orders))
+
+		for _, order := range orders {
+			if order.Status != domain.OrderStatusCreated {
+				continue
+			}
+
+			canceledOrder := *order
+			canceledOrder.Status = domain.OrderStatusCanceled
+			event := domain.BuildOrderStatusUpdateEvent(&canceledOrder)
+
+			cancelIDs = append(cancelIDs, order.ID)
+			events = append(events, event)
+			payloads = append(payloads, event)
 		}
 
-		return nil
-	})
+		if len(events) == 0 {
+			return nil
+		}
 
-	if err != nil {
+		if err := uc.orderRepo.BatchUpdateStatus(ctx, cancelIDs, domain.OrderStatusCreated, domain.OrderStatusCanceled); err != nil {
+			return err
+		}
+		var addErr error
+		outboxIDs, addErr = uc.outboxRepo.BatchAdd(ctx, domain.EventTypeOrderStatusChanged, payloads)
+		return addErr
+	}); err != nil {
 		return err
 	}
+	if len(events) == 0 {
+		return nil
+	}
 
-	uc.log.Info("批量取消订单成功",
-		logger.Int("orderCount", len(orderIDs)))
-
-	// 快路径：异步批量发送MQ消息
-	go uc.batchSendMessages(orderIDs, events)
-
+	go uc.batchSendMessages(cancelIDs, outboxIDs, events)
 	return nil
 }
 
-// batchSendMessages 批量发送MQ消息（快路径）
-// 性能优化在发送层：使用MQ的批量发送API，而不是业务上的批量
-// 失败隔离：每个消息独立处理，防止部分失败放大
-func (uc *BatchCancelOrderUseCase) batchSendMessages(orderIDs []int64, events []any) {
+func (uc *BatchCancelOrderUseCase) batchSendMessages(orderIDs, outboxIDs []int64, events []domain.OrderStatusUpdateEvent) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	mqEvents := make([]domain.OrderStatusUpdateEvent, 0, len(events))
-	for _, event := range events {
-		mqEvents = append(mqEvents, event.(domain.OrderStatusUpdateEvent))
-	}
+	errs := uc.producer.SendMessages(ctx, events)
 
-	// 批量发送：性能优化在MQ生产者，每个消息仍然独立
-	errs := uc.producer.SendMessages(ctx, mqEvents)
+	successOutboxIDs := make([]int64, 0, len(outboxIDs))
+	failedOrderIDs := make([]int64, 0)
 
-	successIDs := make([]int64, 0, len(orderIDs))
-	failedIDs := make([]int64, 0)
-
-	// 根据 errs 进行后续处理
 	if errs == nil {
-		successIDs = orderIDs
+		successOutboxIDs = append(successOutboxIDs, outboxIDs...)
 	} else {
 		for i, err := range errs {
-			if err != nil {
-				uc.log.Error("订单状态变化事件发送失败",
-					logger.Error(err),
-					logger.Int64("orderId", mqEvents[i].OrderID))
-				failedIDs = append(failedIDs, orderIDs[i])
-
-				// 失败了：增加重试次数，失败处理逻辑包含"分支决策"（DLQ+告警），就不再具备批量条件
-				retryCount, e := uc.outboxRepo.IncreaseRetry(ctx, orderIDs[i])
-				if e != nil {
-					uc.log.Error("增加重试次数失败",
-						logger.Error(e),
-						logger.Int64("orderId", orderIDs[i]))
-				} else if retryCount > uc.maxRetry {
-					// 达到最大重试次数，标记为失败（DLQ）
-					if err := uc.outboxRepo.MarkFailed(ctx, orderIDs[i]); err != nil {
-						uc.log.Error("标记事件失败状态失败",
-							logger.Error(err),
-							logger.Int64("orderId", orderIDs[i]))
-					} else {
-						uc.log.Warn("事件达到最大重试次数，已标记为失败",
-							logger.Int64("orderId", orderIDs[i]),
-							logger.Int("retryCount", retryCount))
-						// TODO: 进入DLQ，发送告警通知
-					}
-				}
-			} else {
-				successIDs = append(successIDs, orderIDs[i])
+			if err == nil {
+				successOutboxIDs = append(successOutboxIDs, outboxIDs[i])
+				continue
 			}
+
+			failedOrderIDs = append(failedOrderIDs, orderIDs[i])
+			uc.log.Error("发送取消订单事件失败", logger.Error(err), logger.Int64("orderID", orderIDs[i]), logger.Int64("outboxID", outboxIDs[i]))
 		}
 	}
 
-	// 批量标记成功发送的消息
-	if len(successIDs) > 0 {
-		if err := uc.outboxRepo.BatchMarkSent(ctx, successIDs); err != nil {
-			uc.log.Error("批量标记outbox为已发送失败",
-				logger.Error(err),
-				logger.Int("successCount", len(successIDs)))
-		} else {
-			uc.log.Info("批量发送订单取消事件成功",
-				logger.Int("successCount", len(successIDs)))
+	if len(successOutboxIDs) > 0 {
+		if err := uc.outboxRepo.BatchMarkSent(ctx, successOutboxIDs); err != nil {
+			uc.log.Error("批量标记 outbox 已发送失败", logger.Error(err), logger.Int("count", len(successOutboxIDs)))
 		}
 	}
-
-	if len(failedIDs) > 0 {
-		uc.log.Warn("部分订单状态变化事件发送失败",
-			logger.Int("failedCount", len(failedIDs)))
+	if len(failedOrderIDs) > 0 {
+		uc.log.Warn("部分取消订单事件发送失败", logger.Int("count", len(failedOrderIDs)))
 	}
 }

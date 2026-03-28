@@ -4,13 +4,17 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-//go:embed scripts/zadd_with_limit.lua
+//go:embed lua/zadd_with_limit.lua
 var zaddWithLimitScript string
+
+//go:embed lua/zclaim_by_score.lua
+var zclaimByScoreScript string
 
 type redisOrderCache struct {
 	client redis.Cmdable
@@ -40,13 +44,14 @@ func (c *redisOrderCache) MGet(ctx context.Context, keys ...string) ([]*string, 
 	if err != nil {
 		return nil, err
 	}
-	// 转换为[]*string切片，nil值保持nil
+
 	strings := make([]*string, len(result))
 	for i, v := range result {
-		if v != nil {
-			str := v.(string)
-			strings[i] = &str
+		if v == nil {
+			continue
 		}
+		str := v.(string)
+		strings[i] = &str
 	}
 	return strings, nil
 }
@@ -77,13 +82,11 @@ func (c *redisOrderCache) ZAdd(ctx context.Context, key string, members map[stri
 	return err
 }
 
-// ZAddWithLimit: 原子性执行 ZADD + 裁剪 + TTL，保持ZSet固定大小
 func (c *redisOrderCache) ZAddWithLimit(ctx context.Context, key string, members map[string]float64, limit int64, ttl time.Duration) error {
 	if len(members) == 0 {
 		return nil
 	}
 
-	// 构造参数：ARGV = [limit, ttl_seconds, score1, member1, score2, member2, ...]
 	args := make([]interface{}, 0, 2+len(members)*2)
 	args = append(args, limit, int64(ttl.Seconds()))
 	for member, score := range members {
@@ -98,6 +101,46 @@ func (c *redisOrderCache) ZRange(ctx context.Context, key string, start, stop in
 		return c.client.ZRevRange(ctx, key, start, stop).Result()
 	}
 	return c.client.ZRange(ctx, key, start, stop).Result()
+}
+
+func (c *redisOrderCache) ZRangeByScore(ctx context.Context, key, min, max string, limit int64) ([]string, error) {
+	args := &redis.ZRangeBy{
+		Min: min,
+		Max: max,
+	}
+	if limit > 0 {
+		args.Offset = 0
+		args.Count = limit
+	}
+	return c.client.ZRangeByScore(ctx, key, args).Result()
+}
+
+func (c *redisOrderCache) ZClaimByScore(ctx context.Context, key, max string, limit int64) ([]string, error) {
+	res, err := c.client.Eval(ctx, zclaimByScoreScript, []string{key}, max, limit).Result()
+	if err != nil {
+		return nil, err
+	}
+	if res == nil {
+		return nil, nil
+	}
+
+	rawMembers, ok := res.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("unexpected redis eval result type %T", res)
+	}
+
+	members := make([]string, 0, len(rawMembers))
+	for _, raw := range rawMembers {
+		switch v := raw.(type) {
+		case string:
+			members = append(members, v)
+		case []byte:
+			members = append(members, string(v))
+		default:
+			return nil, fmt.Errorf("unexpected redis member type %T", raw)
+		}
+	}
+	return members, nil
 }
 
 func (c *redisOrderCache) ZRem(ctx context.Context, key string, members ...string) error {

@@ -1,0 +1,18 @@
+db:
+  dsn: "root:root@tcp(localhost:13306)/DouyinMall"
+
+redis:
+  addr: "localhost:6379"
+
+etcd:
+  endpoints:
+    - "localhost:12379"
+
+grpc:
+  server:
+    name: seckill.service
+    port: 8098
+
+kafka:
+  brokers:
+    - "localhost:9092"

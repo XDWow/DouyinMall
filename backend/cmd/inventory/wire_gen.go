@@ -11,12 +11,10 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/infra/mq"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/ioc"
-	"github.com/XDWow/DouyinMall/backend/internal/inventory/transport/grpc"
+	transportgrpc "github.com/XDWow/DouyinMall/backend/internal/inventory/transport/grpc"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/usecase"
 	"github.com/cloudwego/kitex/server"
 )
-
-// Injectors from wire.go:
 
 func InitApp() *App {
 	db := ioc.InitDB()
@@ -24,32 +22,23 @@ func InitApp() *App {
 	inventoryCache := cache.NewRedisInventoryCache(cmdable)
 	loggerV1 := ioc.InitLogger()
 	inventoryRepository := repository.NewGormInventoryRepository(db, inventoryCache, loggerV1)
-	inventoryHandler := grpc.NewInventoryHandler(inventoryRepository)
-	server := ioc.InitGRPCServer(inventoryHandler)
+	reserveStockUsecase := usecase.NewReserveStockUsecase(inventoryRepository, loggerV1)
+	commitStockUseCase := usecase.NewCommitStockUseCase(inventoryRepository, loggerV1)
+	refundStockUseCase := usecase.NewRefundStockUseCase(inventoryRepository, loggerV1)
+	releaseStockUseCase := usecase.NewReleaseStockUseCase(inventoryRepository, loggerV1)
 	client := ioc.InitKafkaClient()
 	syncProducer := ioc.InitKafkaSyncProducer(client)
-	commitStockUseCase := usecase.NewCommitStockUseCase(inventoryRepository, loggerV1)
-	releaseStockUseCase := usecase.NewReleaseStockUseCase(inventoryRepository, loggerV1)
-	refundStockUseCase := usecase.NewRefundStockUseCase(inventoryRepository, loggerV1)
-	orderserviceClient := ioc.InitOrderClient()
-	orderConsumer := mq.NewOrderConsumer(client, syncProducer, commitStockUseCase, releaseStockUseCase, refundStockUseCase, orderserviceClient, loggerV1)
-	app := newApp(server, orderConsumer)
-	return app
-}
-
-// wire.go:
-
-type App struct {
-	GRPCServer    server.Server
-	OrderConsumer *mq.OrderConsumer
-}
-
-func newApp(
-	grpcServer server.Server,
-	orderConsumer *mq.OrderConsumer,
-) *App {
+	orderClient := ioc.InitOrderClient()
+	orderConsumer := mq.NewOrderConsumer(client, syncProducer, releaseStockUseCase, refundStockUseCase, orderClient, loggerV1)
+	inventoryHandler := transportgrpc.NewInventoryHandler(reserveStockUsecase, commitStockUseCase, releaseStockUseCase, refundStockUseCase, inventoryRepository)
+	grpcServer := ioc.InitGRPCServer(inventoryHandler)
 	return &App{
 		GRPCServer:    grpcServer,
 		OrderConsumer: orderConsumer,
 	}
+}
+
+type App struct {
+	GRPCServer    server.Server
+	OrderConsumer *mq.OrderConsumer
 }

@@ -3,60 +3,51 @@ package usecase
 import (
 	"context"
 
+	"github.com/XDWow/DouyinMall/backend/internal/payment/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/wechatpay-apiv3/wechatpay-go/core"
-	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/native"
 )
 
 type WechatOrderResult struct {
-	TradeState    string // 交易状态
-	TransactionId string // 微信支付订单号
-	OutTradeNo    string // 商户订单号
+	TradeState    string
+	TransactionId string
+	OutTradeNo    string
 }
 
-// 主动查询微信订单状态，并更新本地支付记录
 type SyncWechatOrderUC struct {
-	svc           *native.NativeApiService
-	mchID         string // 这个订单的钱归属方才能查订单状态
+	svc           domain.WechatNativeService
 	payCallbackUC *PayCallbackUC
 	l             logger.LoggerV1
 }
 
 func NewSyncWechatOrderUC(
-	svc *native.NativeApiService,
+	svc domain.WechatNativeService,
 	payCallbackUC *PayCallbackUC,
 	l logger.LoggerV1,
-	mchID string,
 ) *SyncWechatOrderUC {
 	return &SyncWechatOrderUC{
 		svc:           svc,
 		payCallbackUC: payCallbackUC,
 		l:             l,
-		mchID:         mchID,
 	}
 }
 
 func (uc *SyncWechatOrderUC) SyncWechatInfo(ctx context.Context, bizTradeNo string) error {
-	resp, _, err := uc.svc.QueryOrderByOutTradeNo(ctx, native.QueryOrderByOutTradeNoRequest{
-		OutTradeNo: core.String(bizTradeNo),
-		Mchid:      core.String(uc.mchID),
-	})
+	resp, err := uc.svc.QueryOrderByOutTradeNo(ctx, bizTradeNo)
 	if err != nil {
-		uc.l.Error("查询微信订单失败",
+		uc.l.Error("查询微信支付单失败",
 			logger.String("biz_trade_no", bizTradeNo),
 			logger.Error(err))
 		return err
 	}
 
 	cmd := CallbackCmd{
-		TradeState:    *resp.TradeState,
-		TransactionId: *resp.TransactionId,
-		OutTradeNo:    *resp.OutTradeNo,
+		TradeState:    resp.TradeState,
+		TransactionId: resp.TransactionID,
+		OutTradeNo:    resp.OutTradeNo,
 	}
 
-	err = uc.payCallbackUC.UpdatePaymentByTxn(ctx, cmd)
-	if err != nil {
-		uc.l.Error("更新支付状态失败",
+	if err = uc.payCallbackUC.UpdatePaymentByTxn(ctx, cmd); err != nil {
+		uc.l.Error("根据微信支付单更新本地支付记录失败",
 			logger.String("biz_trade_no", bizTradeNo),
 			logger.Error(err))
 		return err

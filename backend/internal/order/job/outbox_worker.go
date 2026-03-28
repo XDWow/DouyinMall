@@ -11,6 +11,7 @@ import (
 
 // OutboxWorkerJob 定期扫描 pending 的 outboxEvent，进行发送
 // 这是慢路径的兜底机制，确保即使快路径失败，消息最终也能被发送（最终数据一致性）
+// Outbox 就是记录待发送消息、重试次数和下次重试时间，再由定时任务持续扫描，把还能重试的消息继续发出去。
 type OutboxWorkerJob struct {
 	outboxRepo domain.OutboxRepository
 	producer   mq.SaramaProducer
@@ -46,13 +47,13 @@ func (j *OutboxWorkerJob) Run() error {
 	for {
 		outboxEvents, err := j.outboxRepo.ListPending(ctx, offset, j.batchSize)
 		if err != nil {
-			j.l.Error("查询pending outbox事件失败", logger.Error(err))
+			j.l.Error("查询待发送 outbox 事件失败", logger.Error(err))
 			return err
 		}
 		if len(outboxEvents) == 0 {
 			break
 		}
-		j.l.Info("发现pending outbox事件", logger.Int("count", len(outboxEvents)))
+		j.l.Info("发现待发送 outbox 事件", logger.Int("count", len(outboxEvents)))
 		// 生产者批量发送
 		j.processBatch(ctx, outboxEvents)
 
