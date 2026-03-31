@@ -1,0 +1,1166 @@
+package orchestrator
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/components/model"
+	einoretriever "github.com/cloudwego/eino/components/retriever"
+	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+
+	"github.com/XDWow/DouyinMall/backend/internal/agent/cache"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/dto"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/memory"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/tool"
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+)
+
+func NewService(ctx context.Context, cfg Config, deps Dependencies) (*Service, error) {
+	cfg = applyConfigDefaults(cfg)
+
+	log := deps.Logger
+	if log == nil {
+		log = logger.NewNopLogger()
+	}
+	metrics := deps.Metrics
+	if metrics == nil {
+		metrics = NewMetrics("agent")
+	}
+	prompts := deps.Prompts
+	if prompts == nil {
+		prompts = NewDefaultPrompts()
+	}
+	summarizer := deps.Summarizer
+	if summarizer == nil {
+		summarizer = memory.NewFallbackSummarizer()
+	}
+	tracer := deps.Tracer
+	if tracer == nil {
+		tracer = otel.Tracer("douyinmall/agent")
+	}
+
+	svc := &Service{
+		cfg:             cfg,
+		model:           deps.Model,
+		embedder:        deps.Embedder,
+		retriever:       deps.Retriever,
+		registry:        deps.Registry,
+		sessionStore:    deps.SessionStore,
+		summarizer:      summarizer,
+		semanticCache:   deps.SemanticCache,
+		rateLimiter:     deps.RateLimiter,
+		checkpointStore: deps.CheckpointStore,
+		prompts:         prompts,
+		logger:          log,
+		metrics:         metrics,
+		tracer:          tracer,
+	}
+
+	runner, err := svc.buildGraph(ctx)
+	if err != nil {
+		return nil, err
+	}
+	svc.runnable = runner
+	return svc, nil
+}
+
+func (s *Service) Chat(ctx context.Context, req dto.ChatRequest) (*dto.ChatResponse, error) {
+	return s.run(ctx, req, nil)
+}
+
+func (s *Service) ChatStream(ctx context.Context, req dto.ChatRequest, writer StreamWriter) (*dto.ChatResponse, error) {
+	return s.run(ctx, req, writer)
+}
+
+func (s *Service) CreateSession(ctx context.Context, userID int64, channel string) (*dto.Session, error) {
+	session := &memory.Session{
+		ID:        newSessionID(),
+		UserID:    userID,
+		Channel:   channel,
+		Status:    dto.SessionStatusActive,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if s.sessionStore != nil {
+		if err := s.sessionStore.Create(ctx, session); err != nil {
+			return nil, err
+		}
+	}
+	return toSessionDTO(session), nil
+}
+
+func (s *Service) GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]dto.Message, int, error) {
+	if s.sessionStore == nil {
+		return nil, 0, nil
+	}
+	session, err := s.sessionStore.Load(ctx, sessionID)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := len(session.Messages)
+	if limit <= 0 {
+		limit = 20
+	}
+	if offset >= total {
+		return []dto.Message{}, total, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return append([]dto.Message(nil), session.Messages[offset:end]...), total, nil
+}
+
+func (s *Service) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]dto.Session, int, error) {
+	if s.sessionStore == nil {
+		return nil, 0, nil
+	}
+	sessions, total, err := s.sessionStore.ListByUser(ctx, userID, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	result := make([]dto.Session, 0, len(sessions))
+	for _, item := range sessions {
+		session := item
+		result = append(result, *toSessionDTO(&session))
+	}
+	return result, total, nil
+}
+
+func (s *Service) ClearSession(ctx context.Context, sessionID string) error {
+	if s.sessionStore == nil {
+		return nil
+	}
+	return s.sessionStore.Clear(ctx, sessionID)
+}
+
+func (s *Service) run(ctx context.Context, req dto.ChatRequest, writer StreamWriter) (*dto.ChatResponse, error) {
+	start := time.Now()
+	flow := newFlowContext(req, writer)
+	checkpointID := req.ResumeToken
+	if checkpointID == "" {
+		checkpointID = flow.TraceID
+	}
+	flow.Checkpoint = checkpointID
+
+	sendEvent(ctx, writer, "start", map[string]any{
+		"trace_id":      flow.TraceID,
+		"checkpoint_id": checkpointID,
+		"session_id":    req.SessionID,
+	})
+
+	invokeOpts := make([]compose.Option, 0, 2)
+	if s.checkpointStore != nil {
+		invokeOpts = append(invokeOpts, compose.WithCheckPointID(checkpointID), compose.WithWriteToCheckPointID(checkpointID))
+	}
+
+	out, err := s.runnable.Invoke(ctx, flow, invokeOpts...)
+	if out == nil {
+		out = flow
+	}
+	resp := out.ensureResponse()
+	resp.Trace.CheckpointID = checkpointID
+	resp.Trace.TraceID = out.TraceID
+
+	if info, ok := compose.ExtractInterruptInfo(err); ok {
+		resp.Status = dto.ReplyStatusFallback
+		resp.Interrupt = &dto.InterruptInfo{CheckpointID: checkpointID}
+		if info != nil {
+			resp.Interrupt.RerunNodes = append(resp.Interrupt.RerunNodes, info.RerunNodes...)
+		}
+		if resp.Reply == "" {
+			resp.Reply = "当前流程需要进一步确认后再继续，我先为您保留上下文。"
+		}
+		s.metrics.ObserveRequest(string(resp.Status), time.Since(start))
+		sendEvent(ctx, writer, "done", resp)
+		return resp, nil
+	}
+	if err != nil {
+		sendEvent(ctx, writer, "error", map[string]any{"message": err.Error()})
+		s.metrics.ObserveRequest("error", time.Since(start))
+		return nil, err
+	}
+
+	s.metrics.ObserveRequest(string(resp.Status), time.Since(start))
+	sendEvent(ctx, writer, "done", resp)
+	return resp, nil
+}
+
+func newFlowContext(req dto.ChatRequest, writer StreamWriter) *FlowContext {
+	traceID := uuid.NewString()
+	resp := &dto.ChatResponse{
+		SessionID:   req.SessionID,
+		TraceID:     traceID,
+		Status:      dto.ReplyStatusFallback,
+		Intent:      dto.IntentUnknown,
+		Trace:       dto.Trace{TraceID: traceID},
+		Confidence:  0,
+		NeedHandoff: false,
+	}
+	return &FlowContext{
+		StartedAt:    time.Now(),
+		TraceID:      traceID,
+		Request:      req,
+		Response:     resp,
+		StreamWriter: writer,
+		Recorder:     agenttool.NewSafeExecutionRecorder(),
+	}
+}
+
+func (f *FlowContext) ensureResponse() *dto.ChatResponse {
+	if f.Response == nil {
+		f.Response = &dto.ChatResponse{
+			SessionID:   f.Request.SessionID,
+			TraceID:     f.TraceID,
+			Status:      dto.ReplyStatusFallback,
+			Intent:      dto.IntentUnknown,
+			Trace:       dto.Trace{TraceID: f.TraceID},
+			Confidence:  0,
+			NeedHandoff: false,
+		}
+	}
+	if f.Response.Trace.TraceID == "" {
+		f.Response.Trace.TraceID = f.TraceID
+	}
+	return f.Response
+}
+
+func (f *FlowContext) toolExecutions() []dto.ToolExecution {
+	if f == nil || f.Recorder == nil {
+		return nil
+	}
+	return f.Recorder.Snapshot()
+}
+
+func (f *FlowContext) DecisionMessageContent() string {
+	if f == nil || f.Tool.DecisionMessage == nil {
+		return ""
+	}
+	return f.Tool.DecisionMessage.Content
+}
+
+func (s *Service) generateAnswer(ctx context.Context, flow *FlowContext, messages []*schema.Message) (string, error) {
+	if flow.StreamWriter == nil {
+		msg, err := s.model.Generate(ctx, messages, model.WithTemperature(0.2), model.WithMaxTokens(s.cfg.MaxAnswerTokens), model.WithToolChoice(schema.ToolChoiceForbidden))
+		if err != nil || msg == nil {
+			return "", err
+		}
+		return msg.Content, nil
+	}
+
+	stream, err := s.model.Stream(ctx, messages, model.WithTemperature(0.2), model.WithMaxTokens(s.cfg.MaxAnswerTokens), model.WithToolChoice(schema.ToolChoiceForbidden))
+	if err != nil {
+		return "", err
+	}
+	defer stream.Close()
+
+	var builder strings.Builder
+	for {
+		chunk, recvErr := stream.Recv()
+		if errors.Is(recvErr, io.EOF) {
+			break
+		}
+		if recvErr != nil {
+			return "", recvErr
+		}
+		if chunk == nil || chunk.Content == "" {
+			continue
+		}
+		builder.WriteString(chunk.Content)
+		sendEvent(ctx, flow.StreamWriter, "token", map[string]any{
+			"trace_id": flow.TraceID,
+			"text":     chunk.Content,
+		})
+	}
+	return builder.String(), nil
+}
+
+func (s *Service) embedFirst(ctx context.Context, text string) ([]float64, error) {
+	vectors, err := s.embedder.EmbedStrings(ctx, []string{text})
+	if err != nil || len(vectors) == 0 {
+		return nil, err
+	}
+	return vectors[0], nil
+}
+
+func (s *Service) saveSession(ctx context.Context, session *memory.Session) error {
+	if session == nil || s.sessionStore == nil {
+		return nil
+	}
+	if err := s.sessionStore.Save(ctx, session); err == nil {
+		return nil
+	}
+	if len(session.Messages) == 0 {
+		return s.sessionStore.Create(ctx, session)
+	}
+	return nil
+}
+
+func (s *Service) sessionGuardNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	if strings.TrimSpace(flow.Request.Message) == "" {
+		return flow, fmt.Errorf("message is required")
+	}
+	if s.rateLimiter != nil && flow.Request.UserID > 0 {
+		allowed, err := s.rateLimiter.AllowUser(ctx, flow.Request.UserID, s.cfg.RateLimitPerMinute, time.Minute)
+		if err == nil && !allowed {
+			flow.Risk = RiskDecision{
+				ForceHandoff: true,
+				Reason:       "rate_limit",
+				RiskLevel:    "high",
+			}
+		}
+	}
+
+	sessionID := flow.Request.SessionID
+	if sessionID == "" {
+		sessionID = newSessionID()
+		flow.Request.SessionID = sessionID
+	}
+
+	session := &memory.Session{
+		ID:        sessionID,
+		UserID:    flow.Request.UserID,
+		Channel:   flow.Request.Channel,
+		Status:    dto.SessionStatusActive,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if s.sessionStore != nil {
+		stored, err := s.sessionStore.Load(ctx, sessionID)
+		if err == nil && stored != nil {
+			session = stored
+			if session.UserID != 0 && flow.Request.UserID != 0 && session.UserID != flow.Request.UserID {
+				return flow, fmt.Errorf("session user mismatch")
+			}
+		}
+	}
+
+	if session.Channel == "" {
+		session.Channel = flow.Request.Channel
+	}
+	if session.Status == "" {
+		session.Status = dto.SessionStatusActive
+	}
+	flow.Session = session
+	resp := flow.ensureResponse()
+	resp.SessionID = session.ID
+	resp.Trace.TraceID = flow.TraceID
+	return flow, nil
+}
+
+func (s *Service) cacheLookupNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	if s.semanticCache == nil || s.embedder == nil {
+		return flow, nil
+	}
+	vector, err := s.embedFirst(ctx, strings.TrimSpace(flow.Request.Message))
+	if err != nil {
+		return flow, nil
+	}
+	flow.QueryVector = vector
+
+	item, err := s.semanticCache.Lookup(ctx, vector, s.cfg.CacheSimilarityThreshold, s.cfg.CacheCandidateLimit)
+	if err != nil || item == nil {
+		return flow, nil
+	}
+
+	flow.CacheItem = item
+	flow.Answer = AnswerResult{
+		Reply:      item.Reply,
+		Confidence: 0.99,
+		Source:     "cache",
+	}
+	resp := flow.ensureResponse()
+	resp.Status = dto.ReplyStatusAnswered
+	resp.Reply = item.Reply
+	resp.Intent = item.Intent
+	resp.Confidence = 0.99
+	resp.Trace.CacheHit = true
+	return flow, nil
+}
+
+func (s *Service) intentClassifyNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	intent := heuristicIntent(flow.Request.Message)
+	intent.NeedRewrite = requiresRewrite(flow.Request.Message, flow.Session)
+
+	if s.model != nil && s.prompts != nil && s.prompts.Intent != nil {
+		messages, err := s.prompts.Intent.Format(ctx, map[string]any{
+			"system_text": s.prompts.SystemText,
+			"history_text": historyText(flow.Session, 6),
+			"message":      flow.Request.Message,
+		})
+		if err == nil {
+			msg, llmErr := s.model.Generate(ctx, messages, model.WithTemperature(0.1), model.WithMaxTokens(256))
+			if llmErr == nil && msg != nil {
+				if parsed, ok := parseIntentDecision(msg.Content); ok {
+					intent = parsed
+					if !intent.NeedRewrite {
+						intent.NeedRewrite = requiresRewrite(flow.Request.Message, flow.Session)
+					}
+				}
+			}
+		}
+	}
+
+	flow.Intent = intent
+	return flow, nil
+}
+
+func (s *Service) riskGuardNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	if flow.Risk.ForceHandoff {
+		return flow, nil
+	}
+	raw := strings.ToLower(strings.TrimSpace(flow.Request.Message))
+	switch {
+	case flow.Intent.Intent == dto.IntentComplaint:
+		flow.Risk = RiskDecision{ForceHandoff: true, Reason: "complaint", RiskLevel: "high"}
+	case flow.Intent.Intent == dto.IntentHandoff:
+		flow.Risk = RiskDecision{ForceHandoff: true, Reason: "user_request", RiskLevel: "high"}
+	case flow.Intent.Intent == dto.IntentUnsupported:
+		flow.Risk = RiskDecision{ForceHandoff: true, Reason: "unsupported", RiskLevel: "high"}
+	case strings.Contains(raw, "验证码") || strings.Contains(raw, "支付密码") || strings.Contains(raw, "银行卡") || strings.Contains(raw, "身份证"):
+		flow.Risk = RiskDecision{ForceHandoff: true, Reason: "sensitive", RiskLevel: "high"}
+	case strings.Contains(raw, "忽略之前") || strings.Contains(raw, "system prompt") || strings.Contains(raw, "越狱"):
+		flow.Risk = RiskDecision{ForceHandoff: true, Reason: "prompt_injection", RiskLevel: "high"}
+	default:
+		flow.Risk = RiskDecision{RiskLevel: "low"}
+	}
+	return flow, nil
+}
+
+func (s *Service) rewriteNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	query := strings.TrimSpace(flow.Request.Message)
+	reason := "identity"
+	if !flow.Intent.NeedRewrite {
+		flow.Rewrite = RewriteDecision{Query: query, Reason: reason}
+		return flow, nil
+	}
+
+	if s.model != nil && s.prompts != nil && s.prompts.Rewrite != nil {
+		messages, err := s.prompts.Rewrite.Format(ctx, map[string]any{
+			"system_text": s.prompts.SystemText,
+			"history_text": historyText(flow.Session, 6),
+			"message":      flow.Request.Message,
+			"intent":       string(flow.Intent.Intent),
+		})
+		if err == nil {
+			msg, llmErr := s.model.Generate(ctx, messages, model.WithTemperature(0.1), model.WithMaxTokens(256))
+			if llmErr == nil && msg != nil {
+				if parsedQuery, parsedReason, ok := parseRewriteDecision(msg.Content); ok && strings.TrimSpace(parsedQuery) != "" {
+					query = strings.TrimSpace(parsedQuery)
+					reason = parsedReason
+				}
+			}
+		}
+	}
+
+	flow.Rewrite = RewriteDecision{Query: query, Reason: reason}
+	return flow, nil
+}
+
+func (s *Service) retrieveNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	query := strings.TrimSpace(flow.Rewrite.Query)
+	if query == "" || !shouldRetrieve(flow.Intent.Intent) || s.retriever == nil {
+		return flow, nil
+	}
+	docs, err := s.retriever.Retrieve(
+		ctx,
+		query,
+		einoretriever.WithTopK(s.cfg.RetrieveTopK),
+		einoretriever.WithScoreThreshold(s.cfg.RetrieveMinScore),
+	)
+	if err != nil {
+		return flow, nil
+	}
+	flow.Retrieval = RetrievalResult{
+		Query:     query,
+		Documents: docs,
+	}
+	return flow, nil
+}
+
+func (s *Service) rerankNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	if len(flow.Retrieval.Documents) == 0 {
+		return flow, nil
+	}
+
+	refs := make([]dto.KnowledgeRef, 0, len(flow.Retrieval.Documents))
+	queryTokens := splitTerms(flow.Rewrite.Query)
+	for _, doc := range flow.Retrieval.Documents {
+		if doc == nil {
+			continue
+		}
+		ref := dto.KnowledgeRef{
+			ID:       doc.ID,
+			Title:    stringMeta(doc.MetaData, "title"),
+			Snippet:  summarize(doc.Content, 180),
+			Category: stringMeta(doc.MetaData, "category"),
+			Score:    doc.Score(),
+			Metadata: stringMapMeta(doc.MetaData),
+		}
+		if snippet := stringMeta(doc.MetaData, "snippet"); snippet != "" {
+			ref.Snippet = snippet
+		}
+		overlap := keywordOverlap(queryTokens, splitTerms(ref.Title+" "+ref.Snippet))
+		ref.Score = clamp01(ref.Score*0.7 + overlap*0.3)
+		refs = append(refs, ref)
+	}
+
+	sort.Slice(refs, func(i, j int) bool {
+		return refs[i].Score > refs[j].Score
+	})
+	if len(refs) > s.cfg.RerankTopK {
+		refs = refs[:s.cfg.RerankTopK]
+	}
+	flow.Retrieval.References = refs
+	return flow, nil
+}
+
+func (s *Service) toolDecisionNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	allowed := allowedToolsForIntent(flow.Intent.Intent)
+	flow.Tool.AllowedToolList = allowed
+	if len(allowed) == 0 || s.registry == nil || s.model == nil {
+		return flow, nil
+	}
+
+	infos := s.toolInfos(ctx, allowed)
+	if len(infos) == 0 {
+		return flow, nil
+	}
+
+	withTools, err := s.model.WithTools(infos)
+	if err != nil {
+		return flow, nil
+	}
+
+	messages := []*schema.Message{
+		schema.SystemMessage(s.prompts.SystemText + `
+
+如果需要查询订单、搜索商品或执行加购物车，只能调用提供的工具。
+没有足够参数时，不要调用写操作工具；可以先解释缺少什么信息。`),
+	}
+	messages = append(messages, historyMessages(flow.Session, s.cfg.ConversationWindow)...)
+	messages = append(messages, schema.UserMessage(fmt.Sprintf(`用户问题：%s
+独立查询：%s
+知识检索摘要：%s
+
+请判断是否需要调用工具。
+- 需要工具：直接返回 tool calls
+- 不需要工具：输出一句简短答复草稿`, flow.Request.Message, flow.Rewrite.Query, referencesText(flow.Retrieval.References))))
+
+	resp, err := withTools.Generate(
+		ctx,
+		messages,
+		model.WithTemperature(0.1),
+		model.WithMaxTokens(256),
+		model.WithToolChoice(schema.ToolChoiceAllowed, allowed...),
+	)
+	if err != nil || resp == nil {
+		return flow, nil
+	}
+
+	flow.Tool.DecisionMessage = resp
+	if len(resp.ToolCalls) == 0 {
+		return flow, nil
+	}
+
+	flow.Tool.NeedTool = true
+	plans := make([]dto.ToolCallPlan, 0, len(resp.ToolCalls))
+	for _, call := range resp.ToolCalls {
+		plans = append(plans, dto.ToolCallPlan{
+			Name:      call.Function.Name,
+			Arguments: agenttool.ParseToolArguments(call.Function.Arguments),
+			RawJSON:   call.Function.Arguments,
+		})
+	}
+	flow.Tool.Plans = plans
+	return flow, nil
+}
+
+func (s *Service) toolExecNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	if s.registry == nil || flow.Tool.DecisionMessage == nil || len(flow.Tool.DecisionMessage.ToolCalls) == 0 {
+		return flow, nil
+	}
+
+	toolCtx := agenttool.WithExecutionRecorder(ctx, flow.Recorder)
+	toolCtx = agenttool.WithRuntime(toolCtx, agenttool.Runtime{
+		UserID:    flow.Request.UserID,
+		SessionID: flow.Request.SessionID,
+		TraceID:   flow.TraceID,
+	})
+
+	toolMessages, err := s.registry.Node().Invoke(toolCtx, flow.Tool.DecisionMessage)
+	if err != nil {
+		flow.ensureResponse().NeedHandoff = true
+		flow.ensureResponse().HandoffReason = "tool_exec_failed"
+		return flow, nil
+	}
+
+	flow.Tool.ToolMessages = toolMessages
+	return flow, nil
+}
+
+func (s *Service) answerComposeNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	reply := ""
+	source := "fallback"
+
+	if s.model != nil && s.prompts != nil && s.prompts.Answer != nil {
+		messages, err := s.prompts.Answer.Format(ctx, map[string]any{
+			"system_text":     s.prompts.SystemText,
+			"history":         historyMessages(flow.Session, s.cfg.ConversationWindow),
+			"message":         flow.Request.Message,
+			"query":           firstNonEmpty(flow.Rewrite.Query, flow.Request.Message),
+			"references_text": referencesText(flow.Retrieval.References),
+			"tool_text":       toolText(flow.toolExecutions()),
+		})
+		if err == nil {
+			reply, err = s.generateAnswer(ctx, flow, messages)
+			if err == nil {
+				source = "llm"
+			}
+		}
+	}
+
+	if strings.TrimSpace(reply) == "" {
+		if draft := strings.TrimSpace(flow.DecisionMessageContent()); draft != "" {
+			reply = draft
+			source = "draft"
+		} else {
+			reply = fallbackAnswer(flow)
+		}
+	}
+
+	reply = normalizeReply(reply)
+	flow.Answer = AnswerResult{
+		Reply:  reply,
+		Source: source,
+	}
+	flow.ensureResponse().Reply = reply
+	return flow, nil
+}
+
+func (s *Service) confidenceGuardNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	resp := flow.ensureResponse()
+	resp.Intent = flow.Intent.Intent
+	resp.References = flow.Retrieval.References
+	resp.ToolExecutions = flow.toolExecutions()
+
+	confidence := estimateConfidence(flow, s.cfg)
+	resp.Confidence = confidence
+	flow.Answer.Confidence = confidence
+
+	if flow.Risk.ForceHandoff {
+		resp.NeedHandoff = true
+		resp.HandoffReason = flow.Risk.Reason
+		resp.Status = dto.ReplyStatusHandoff
+		return flow, nil
+	}
+
+	if confidence < s.cfg.ConfidenceThreshold {
+		resp.NeedHandoff = true
+		resp.HandoffReason = "low_confidence"
+		resp.Status = dto.ReplyStatusFallback
+		return flow, nil
+	}
+
+	resp.Status = dto.ReplyStatusAnswered
+	return flow, nil
+}
+
+func (s *Service) handoffNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	resp := flow.ensureResponse()
+	reason := firstNonEmpty(resp.HandoffReason, flow.Risk.Reason, "manual_review")
+	resp.NeedHandoff = true
+	resp.HandoffReason = reason
+	resp.Status = dto.ReplyStatusHandoff
+	if strings.TrimSpace(resp.Reply) == "" || !strings.Contains(resp.Reply, "人工") {
+		resp.Reply = "这个问题我先为您转给人工客服继续处理，请稍等。"
+	}
+	if flow.Session != nil {
+		flow.Session.Status = dto.SessionStatusHuman
+	}
+	s.metrics.ObserveHandoff(reason)
+	return flow, nil
+}
+
+func (s *Service) persistNode(ctx context.Context, flow *FlowContext) (*FlowContext, error) {
+	resp := flow.ensureResponse()
+	if flow.Session != nil {
+		resp.SessionID = flow.Session.ID
+	}
+	resp.Trace.TraceID = flow.TraceID
+	resp.Trace.CheckpointID = flow.Checkpoint
+	resp.Trace.CacheHit = flow.CacheItem != nil
+	resp.Trace.RewrittenQuery = flow.Rewrite.Query
+	resp.ToolExecutions = flow.toolExecutions()
+	resp.References = flow.Retrieval.References
+
+	if flow.Session != nil && s.sessionStore != nil {
+		now := time.Now()
+		flow.Session.Messages = append(flow.Session.Messages, dto.Message{
+			ID:        uuid.NewString(),
+			SessionID: flow.Session.ID,
+			Role:      dto.RoleUser,
+			Content:   flow.Request.Message,
+			CreatedAt: now,
+		})
+		if strings.TrimSpace(resp.Reply) != "" {
+			flow.Session.Messages = append(flow.Session.Messages, dto.Message{
+				ID:         uuid.NewString(),
+				SessionID:  flow.Session.ID,
+				Role:       dto.RoleAssistant,
+				Content:    resp.Reply,
+				Intent:     resp.Intent,
+				Confidence: resp.Confidence,
+				CreatedAt:  now,
+			})
+			flow.Session.TotalTurns++
+		}
+		flow.Session.UpdatedAt = now
+		if flow.Session.TotalTurns >= s.cfg.SummaryTriggerTurns && s.summarizer != nil {
+			if summary, err := s.summarizer.Summarize(ctx, flow.Session); err == nil && summary != "" {
+				flow.Session.Summary = summary
+			}
+		}
+		if err := s.saveSession(ctx, flow.Session); err != nil {
+			s.logger.Warn("save session failed", logger.Error(err))
+		}
+	}
+
+	if s.semanticCache != nil && flow.CacheItem == nil && len(flow.QueryVector) > 0 && !resp.NeedHandoff && resp.Confidence >= s.cfg.StrongAnswerThreshold {
+		_ = s.semanticCache.Store(ctx, &cache.SemanticCacheItem{
+			Query:     firstNonEmpty(flow.Rewrite.Query, flow.Request.Message),
+			Reply:     resp.Reply,
+			Intent:    resp.Intent,
+			Vector:    flow.QueryVector,
+			CreatedAt: time.Now(),
+		}, s.cfg.CacheTTL)
+	}
+
+	return flow, nil
+}
+
+func (s *Service) toolInfos(ctx context.Context, allowed []string) []*schema.ToolInfo {
+	if s.registry == nil {
+		return nil
+	}
+	allowedSet := make(map[string]bool, len(allowed))
+	for _, name := range allowed {
+		allowedSet[name] = true
+	}
+
+	infos := make([]*schema.ToolInfo, 0, len(allowed))
+	for _, item := range s.registry.Tools() {
+		info, err := item.Info(ctx)
+		if err != nil || info == nil {
+			continue
+		}
+		if len(allowedSet) == 0 || allowedSet[info.Name] {
+			infos = append(infos, info)
+		}
+	}
+	return infos
+}
+
+func historyMessages(session *memory.Session, limit int) []*schema.Message {
+	if session == nil {
+		return nil
+	}
+	items := session.RecentMessages(limit)
+	out := make([]*schema.Message, 0, len(items))
+	for _, item := range items {
+		switch item.Role {
+		case dto.RoleAssistant:
+			out = append(out, schema.AssistantMessage(item.Content, nil))
+		case dto.RoleSystem:
+			out = append(out, schema.SystemMessage(item.Content))
+		case dto.RoleTool:
+			out = append(out, schema.ToolMessage(item.Content, item.ID))
+		default:
+			out = append(out, schema.UserMessage(item.Content))
+		}
+	}
+	return out
+}
+
+func historyText(session *memory.Session, limit int) string {
+	if session == nil {
+		return "无"
+	}
+	var builder strings.Builder
+	for _, item := range session.RecentMessages(limit) {
+		builder.WriteString(string(item.Role))
+		builder.WriteString(": ")
+		builder.WriteString(strings.TrimSpace(item.Content))
+		builder.WriteString("\n")
+	}
+	if builder.Len() == 0 {
+		return "无"
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func referencesText(refs []dto.KnowledgeRef) string {
+	if len(refs) == 0 {
+		return "无"
+	}
+	var builder strings.Builder
+	for i, ref := range refs {
+		builder.WriteString(fmt.Sprintf("%d. [%s] %s\n%s\n", i+1, ref.Category, firstNonEmpty(ref.Title, ref.ID), ref.Snippet))
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func toolText(execs []dto.ToolExecution) string {
+	if len(execs) == 0 {
+		return "无"
+	}
+	var builder strings.Builder
+	for i, exec := range execs {
+		builder.WriteString(fmt.Sprintf("%d. tool=%s success=%t\n", i+1, exec.Name, exec.Success))
+		if exec.Result != "" {
+			builder.WriteString(exec.Result)
+			builder.WriteString("\n")
+		}
+		if exec.Error != "" {
+			builder.WriteString("error: ")
+			builder.WriteString(exec.Error)
+			builder.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func fallbackAnswer(flow *FlowContext) string {
+	if len(flow.Retrieval.References) > 0 {
+		ref := flow.Retrieval.References[0]
+		title := firstNonEmpty(ref.Title, "知识库")
+		return fmt.Sprintf("根据%s的信息：%s", title, ref.Snippet)
+	}
+	if execs := flow.toolExecutions(); len(execs) > 0 {
+		last := execs[len(execs)-1]
+		if last.Success && last.Result != "" {
+			return fmt.Sprintf("根据系统查询结果：%s", last.Result)
+		}
+	}
+	return "我暂时没有足够把握给出准确答复，建议为您转接人工客服继续处理。"
+}
+
+func normalizeReply(reply string) string {
+	reply = strings.TrimSpace(reply)
+	reply = strings.Trim(reply, "\"")
+	return reply
+}
+
+func estimateConfidence(flow *FlowContext, cfg Config) float64 {
+	score := 0.18
+	score += clamp01(flow.Intent.Confidence) * 0.3
+
+	if len(flow.Retrieval.References) > 0 {
+		score += clamp01(flow.Retrieval.References[0].Score) * 0.22
+	}
+	execs := flow.toolExecutions()
+	successTools := 0
+	for _, exec := range execs {
+		if exec.Success {
+			successTools++
+		}
+	}
+	if successTools > 0 {
+		score += 0.24
+	}
+	if strings.TrimSpace(flow.Answer.Reply) != "" {
+		score += 0.08
+	}
+	if strings.Contains(flow.Answer.Reply, "建议") || strings.Contains(flow.Answer.Reply, "不确定") {
+		score -= 0.08
+	}
+	if flow.Risk.ForceHandoff {
+		score -= 0.2
+	}
+	return clamp01(score)
+}
+
+func shouldRetrieve(intent dto.Intent) bool {
+	switch intent {
+	case dto.IntentFAQ, dto.IntentPolicy, dto.IntentProductSearch, dto.IntentComplaint, dto.IntentUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+func allowedToolsForIntent(intent dto.Intent) []string {
+	switch intent {
+	case dto.IntentOrderQuery:
+		return []string{"query_order"}
+	case dto.IntentProductSearch:
+		return []string{"search_product"}
+	case dto.IntentAddToCart:
+		return []string{"search_product", "add_to_cart"}
+	default:
+		return nil
+	}
+}
+
+func requiresRewrite(message string, session *memory.Session) bool {
+	msg := strings.TrimSpace(message)
+	if msg == "" || session == nil || len(session.Messages) == 0 {
+		return false
+	}
+	short := len([]rune(msg)) <= 10
+	pronoun := strings.Contains(msg, "这个") || strings.Contains(msg, "那个") || strings.Contains(msg, "它") || strings.Contains(msg, "上一个")
+	return short || pronoun
+}
+
+func heuristicIntent(message string) IntentDecision {
+	raw := strings.ToLower(strings.TrimSpace(message))
+	intent := dto.IntentFAQ
+	confidence := 0.68
+	switch {
+	case strings.Contains(raw, "人工") || strings.Contains(raw, "客服"):
+		intent, confidence = dto.IntentHandoff, 0.96
+	case strings.Contains(raw, "投诉") || strings.Contains(raw, "差评"):
+		intent, confidence = dto.IntentComplaint, 0.92
+	case strings.Contains(raw, "加购") || strings.Contains(raw, "购物车") || strings.Contains(raw, "加入购物车"):
+		intent, confidence = dto.IntentAddToCart, 0.9
+	case strings.Contains(raw, "订单") || strings.Contains(raw, "物流") || strings.Contains(raw, "单号"):
+		intent, confidence = dto.IntentOrderQuery, 0.88
+	case strings.Contains(raw, "搜索") || strings.Contains(raw, "有没有") || strings.Contains(raw, "推荐") || strings.Contains(raw, "商品"):
+		intent, confidence = dto.IntentProductSearch, 0.82
+	case strings.Contains(raw, "退款") || strings.Contains(raw, "退货") || strings.Contains(raw, "运费险") || strings.Contains(raw, "规则"):
+		intent, confidence = dto.IntentPolicy, 0.8
+	case strings.Contains(raw, "你好") || strings.Contains(raw, "谢谢"):
+		intent, confidence = dto.IntentChitchat, 0.72
+	}
+	return IntentDecision{
+		Intent:      intent,
+		Confidence:  confidence,
+		Entities:    extractSimpleEntities(message),
+		NeedRewrite: false,
+		Reason:      "heuristic",
+	}
+}
+
+func extractSimpleEntities(message string) map[string]string {
+	entities := map[string]string{}
+	for _, part := range strings.FieldsFunc(message, func(r rune) bool {
+		return r < '0' || r > '9'
+	}) {
+		if len(part) >= 6 {
+			entities["id"] = part
+			break
+		}
+	}
+	return entities
+}
+
+func splitTerms(text string) []string {
+	text = strings.ToLower(text)
+	replacer := strings.NewReplacer("，", " ", "。", " ", ",", " ", ".", " ", "：", " ", ":", " ", "\n", " ")
+	text = replacer.Replace(text)
+	return strings.Fields(text)
+}
+
+func keywordOverlap(a, b []string) float64 {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	set := make(map[string]bool, len(a))
+	for _, item := range a {
+		set[item] = true
+	}
+	var hit int
+	for _, item := range b {
+		if set[item] {
+			hit++
+		}
+	}
+	return float64(hit) / float64(len(a))
+}
+
+func stringMeta(meta map[string]any, key string) string {
+	if meta == nil {
+		return ""
+	}
+	value, _ := meta[key].(string)
+	return value
+}
+
+func stringMapMeta(meta map[string]any) map[string]string {
+	if len(meta) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(meta))
+	for key, value := range meta {
+		if str, ok := value.(string); ok {
+			out[key] = str
+		}
+	}
+	return out
+}
+
+func summarize(content string, size int) string {
+	content = strings.TrimSpace(content)
+	runes := []rune(content)
+	if len(runes) <= size {
+		return content
+	}
+	return string(runes[:size]) + "..."
+}
+
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func newSessionID() string {
+	return "sess_" + uuid.NewString()
+}
+
+func toSessionDTO(session *memory.Session) *dto.Session {
+	if session == nil {
+		return nil
+	}
+	return &dto.Session{
+		SessionID:   session.ID,
+		UserID:      session.UserID,
+		Channel:     session.Channel,
+		Status:      session.Status,
+		Summary:     session.Summary,
+		LastMessage: session.LastMessagePreview(),
+		TotalTurns:  session.TotalTurns,
+		CreatedAt:   session.CreatedAt,
+		UpdatedAt:   session.UpdatedAt,
+	}
+}
+
+func applyConfigDefaults(cfg Config) Config {
+	def := DefaultConfig()
+	if cfg.RateLimitPerMinute == 0 {
+		cfg.RateLimitPerMinute = def.RateLimitPerMinute
+	}
+	if cfg.ConversationWindow == 0 {
+		cfg.ConversationWindow = def.ConversationWindow
+	}
+	if cfg.CacheTTL == 0 {
+		cfg.CacheTTL = def.CacheTTL
+	}
+	if cfg.CacheSimilarityThreshold == 0 {
+		cfg.CacheSimilarityThreshold = def.CacheSimilarityThreshold
+	}
+	if cfg.CacheCandidateLimit == 0 {
+		cfg.CacheCandidateLimit = def.CacheCandidateLimit
+	}
+	if cfg.RetrieveTopK == 0 {
+		cfg.RetrieveTopK = def.RetrieveTopK
+	}
+	if cfg.RetrieveMinScore == 0 {
+		cfg.RetrieveMinScore = def.RetrieveMinScore
+	}
+	if cfg.RerankTopK == 0 {
+		cfg.RerankTopK = def.RerankTopK
+	}
+	if cfg.ConfidenceThreshold == 0 {
+		cfg.ConfidenceThreshold = def.ConfidenceThreshold
+	}
+	if cfg.StrongAnswerThreshold == 0 {
+		cfg.StrongAnswerThreshold = def.StrongAnswerThreshold
+	}
+	if cfg.SummaryTriggerTurns == 0 {
+		cfg.SummaryTriggerTurns = def.SummaryTriggerTurns
+	}
+	if cfg.MaxAnswerTokens == 0 {
+		cfg.MaxAnswerTokens = def.MaxAnswerTokens
+	}
+	if cfg.StreamBuffer == 0 {
+		cfg.StreamBuffer = def.StreamBuffer
+	}
+	return cfg
+}
+
+func parseIntentDecision(content string) (IntentDecision, bool) {
+	var payload struct {
+		Intent      string            `json:"intent"`
+		Confidence  float64           `json:"confidence"`
+		NeedRewrite bool              `json:"need_rewrite"`
+		Reason      string            `json:"reason"`
+		Entities    map[string]string `json:"entities"`
+	}
+	if err := json.Unmarshal([]byte(cleanJSON(content)), &payload); err != nil {
+		return IntentDecision{}, false
+	}
+	return IntentDecision{
+		Intent:      normalizeIntent(payload.Intent),
+		Confidence:  clamp01(payload.Confidence),
+		NeedRewrite: payload.NeedRewrite,
+		Reason:      payload.Reason,
+		Entities:    payload.Entities,
+	}, true
+}
+
+func parseRewriteDecision(content string) (string, string, bool) {
+	var payload struct {
+		Query  string `json:"query"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal([]byte(cleanJSON(content)), &payload); err != nil {
+		return "", "", false
+	}
+	return payload.Query, payload.Reason, true
+}
+
+func normalizeIntent(raw string) dto.Intent {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "faq":
+		return dto.IntentFAQ
+	case "product_search":
+		return dto.IntentProductSearch
+	case "order_query":
+		return dto.IntentOrderQuery
+	case "add_to_cart":
+		return dto.IntentAddToCart
+	case "policy":
+		return dto.IntentPolicy
+	case "complaint":
+		return dto.IntentComplaint
+	case "handoff":
+		return dto.IntentHandoff
+	case "chitchat":
+		return dto.IntentChitchat
+	case "unsupported":
+		return dto.IntentUnsupported
+	default:
+		return dto.IntentUnknown
+	}
+}
+
+func cleanJSON(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	return strings.TrimSpace(raw)
+}
