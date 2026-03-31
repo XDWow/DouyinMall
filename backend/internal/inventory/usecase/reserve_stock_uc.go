@@ -20,28 +20,23 @@ func (uc *ReserveStockUsecase) Execute(ctx context.Context, cmd ReserveStockComm
 	if cmd.OperationID == "" {
 		return errors.New("OperationID is empty")
 	}
-	changes := []domain.StockChange{}
-	for _, item := range cmd.Changes {
-		changes = append(changes, domain.StockChange{
+	changes := make([]domain.StockChange, len(cmd.Changes))
+	for i, item := range cmd.Changes {
+		changes[i] = domain.StockChange{
 			ProductID: item.ProductID,
-			Quantity:  item.Quantity,
-		})
+			Quantity:  -item.Quantity, // 预扣是减库存，取负
+		}
 	}
 	return uc.repo.ReserveStock(ctx, cmd.OperationID, changes, cmd.ExpireTime)
 }
 
-/*
-Redis 是键值型存储，不适合承载需要人工排查的异常状态。
-预扣记录属于临时并发控制数据，应设置 TTL 自动清理，
-TTL 略大于订单过期时间，以覆盖正常业务延迟，
-避免永久占用内存和库存泄漏
-*/
 type ReserveStockCommand struct {
 	OperationID string
 	Changes     []StockItem
 	ExpireTime  int64
 }
 
+// StockItem Quantity 为正数，表示购买数量（usecase 层负责转为负数传给 repo）
 type StockItem struct {
 	ProductID int64
 	Quantity  int32

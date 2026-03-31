@@ -30,6 +30,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingUnary),
 	),
+	"GetOrder": kitex.NewMethodInfo(
+		getOrderHandler,
+		newGetOrderArgs,
+		newGetOrderResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingUnary),
+	),
 	"ListOrder": kitex.NewMethodInfo(
 		listOrderHandler,
 		newListOrderArgs,
@@ -325,6 +332,117 @@ func (p *ChangeOrderStatusResult) GetResult() interface{} {
 	return p.Success
 }
 
+func getOrderHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	switch s := arg.(type) {
+	case *streaming.Args:
+		st := s.Stream
+		req := new(v1.GetOrderReq)
+		if err := st.RecvMsg(req); err != nil {
+			return err
+		}
+		resp, err := handler.(orderv1.OrderService).GetOrder(ctx, req)
+		if err != nil {
+			return err
+		}
+		return st.SendMsg(resp)
+	case *GetOrderArgs:
+		success, err := handler.(orderv1.OrderService).GetOrder(ctx, s.Req)
+		if err != nil {
+			return err
+		}
+		realResult := result.(*GetOrderResult)
+		realResult.Success = success
+		return nil
+	default:
+		return errInvalidMessageType
+	}
+}
+func newGetOrderArgs() interface{} {
+	return &GetOrderArgs{}
+}
+
+func newGetOrderResult() interface{} {
+	return &GetOrderResult{}
+}
+
+type GetOrderArgs struct {
+	Req *v1.GetOrderReq
+}
+
+func (p *GetOrderArgs) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetReq() {
+		return out, nil
+	}
+	return proto.Marshal(p.Req)
+}
+
+func (p *GetOrderArgs) Unmarshal(in []byte) error {
+	msg := new(v1.GetOrderReq)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Req = msg
+	return nil
+}
+
+var GetOrderArgs_Req_DEFAULT *v1.GetOrderReq
+
+func (p *GetOrderArgs) GetReq() *v1.GetOrderReq {
+	if !p.IsSetReq() {
+		return GetOrderArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+func (p *GetOrderArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *GetOrderArgs) GetFirstArgument() interface{} {
+	return p.Req
+}
+
+type GetOrderResult struct {
+	Success *v1.GetOrderResp
+}
+
+var GetOrderResult_Success_DEFAULT *v1.GetOrderResp
+
+func (p *GetOrderResult) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetSuccess() {
+		return out, nil
+	}
+	return proto.Marshal(p.Success)
+}
+
+func (p *GetOrderResult) Unmarshal(in []byte) error {
+	msg := new(v1.GetOrderResp)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Success = msg
+	return nil
+}
+
+func (p *GetOrderResult) GetSuccess() *v1.GetOrderResp {
+	if !p.IsSetSuccess() {
+		return GetOrderResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+func (p *GetOrderResult) SetSuccess(x interface{}) {
+	p.Success = x.(*v1.GetOrderResp)
+}
+
+func (p *GetOrderResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *GetOrderResult) GetResult() interface{} {
+	return p.Success
+}
+
 func listOrderHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	switch s := arg.(type) {
 	case *streaming.Args:
@@ -461,6 +579,16 @@ func (p *kClient) ChangeOrderStatus(ctx context.Context, Req *v1.ChangeOrderStat
 	_args.Req = Req
 	var _result ChangeOrderStatusResult
 	if err = p.c.Call(ctx, "ChangeOrderStatus", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetOrder(ctx context.Context, Req *v1.GetOrderReq) (r *v1.GetOrderResp, err error) {
+	var _args GetOrderArgs
+	_args.Req = Req
+	var _result GetOrderResult
+	if err = p.c.Call(ctx, "GetOrder", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

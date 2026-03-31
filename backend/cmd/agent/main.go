@@ -15,6 +15,11 @@ func main() {
 
 	app := InitApp()
 
+	// 启动 Kafka 消费者（异步消息落库）
+	if err := app.Consumer.Start(); err != nil {
+		fmt.Printf("警告: Kafka 消费者启动失败: %v，消息将仅存于 Redis\n", err)
+	}
+
 	go func() {
 		fmt.Printf("Agent gRPC 服务启动在: %d\n", viper.GetInt("grpc.server.port"))
 		if err := app.Server.Run(); err != nil {
@@ -28,6 +33,7 @@ func main() {
 	<-quit
 
 	fmt.Println("正在关闭 Agent 服务...")
+	app.Consumer.Stop()
 	if err := app.Server.Stop(); err != nil {
 		fmt.Printf("关闭 gRPC 服务失败: %v\n", err)
 	}
@@ -35,19 +41,15 @@ func main() {
 }
 
 func initViper() {
-	cfile := pflag.String("config",
-		"internal/agent/config/dev.yaml", "配置文件路径")
+	pflag.String("config", "internal/agent/config/dev.yaml", "配置文件路径")
 	pflag.Parse()
-	viper.SetConfigFile(*cfile)
+	viper.SetConfigFile(pflag.Lookup("config").Value.String())
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("读取配置文件失败: %w", err))
 	}
 
 	viper.AutomaticEnv()
-	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
-	viper.BindEnv("grpc.server.port", "GRPC_PORT")
-	viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 	viper.BindEnv("llm.api_key", "LLM_API_KEY")
-	viper.BindEnv("embedding.api_key", "EMBEDDING_API_KEY")
+	viper.BindEnv("reranker.api_key", "SILICONFLOW_API_KEY")
 }

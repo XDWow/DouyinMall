@@ -1,15 +1,15 @@
 db:
-  dsn: "root:root@tcp(localhost:13316)/DouyinMall_user"
+  dsn: "root:root@tcp(douyinmall-mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "localhost:6379"
+  addr: "douyinmall-redis:6379"
 
 etcd:
   endpoints:
-    - "localhost:12379"
+    - "douyinmall-etcd:2379"
 
 grpc:
   server:
-    name: user.service
+    name: user-service
     port: 8091
     etcdTTL: 60

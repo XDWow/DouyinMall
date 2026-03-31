@@ -12,6 +12,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/db"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrRecordNotFound 已移到domain层
@@ -56,9 +57,10 @@ func userOrderListKey(userID int64) string {
 }
 
 func (repo *orderRepository) Save(ctx context.Context, order *domain.Order) error {
+	conn := db.DBFromContext(ctx, repo.db)
 	orderModel := toOrderModel(order)
 	// GORM会自动设置OrderItems的OrderID外键
-	if err := repo.db.WithContext(ctx).Create(orderModel).Error; err != nil {
+	if err := conn.Create(orderModel).Error; err != nil {
 		return err
 	}
 	// 回写生成的ID到domain对象
@@ -86,8 +88,9 @@ func (repo *orderRepository) Save(ctx context.Context, order *domain.Order) erro
 }
 
 func (repo *orderRepository) FindByID(ctx context.Context, orderID int64) (domain.Order, error) {
+	conn := db.DBFromContext(ctx, repo.db)
 	var orderModel db.OrderModel
-	err := repo.db.WithContext(ctx).
+	err := conn.
 		Preload("Items"). // 预加载订单项
 		Where("id = ?", orderID).
 		First(&orderModel).Error
@@ -100,11 +103,57 @@ func (repo *orderRepository) FindByID(ctx context.Context, orderID int64) (domai
 	return *toDomainOrder(&orderModel), nil
 }
 
-func (repo *orderRepository) UpdateStatus(ctx context.Context, order *domain.Order) error {
-	res := repo.db.WithContext(ctx).
+func (repo *orderRepository) FindByIDs(ctx context.Context, orderIDs []int64) ([]*domain.Order, error) {
+	return repo.findByIDs(ctx, orderIDs, false)
+}
+
+func (repo *orderRepository) FindByIDsForUpdate(ctx context.Context, orderIDs []int64) ([]*domain.Order, error) {
+	return repo.findByIDs(ctx, orderIDs, true)
+}
+
+func (repo *orderRepository) findByIDs(ctx context.Context, orderIDs []int64, forUpdate bool) ([]*domain.Order, error) {
+	if len(orderIDs) == 0 {
+		return nil, nil
+	}
+
+	conn := db.DBFromContext(ctx, repo.db)
+	if forUpdate {
+		conn = conn.Clauses(clause.Locking{Strength: "UPDATE"}) // sql 语句会带上 for update
+	}
+	var models []db.OrderModel
+	if err := conn.
+		Preload("Items"). // 把 Items 这个关联字段顺手一起查出来，不然默认只查主表
+		Where("id IN ?", orderIDs).
+		Find(&models).Error; err != nil {
+		return nil, err
+	}
+
+	// 数据库查询是无序的，通过 map 来使返回的 order 跟传进来的 orderID 顺序对应
+	ordersByID := make(map[int64]*domain.Order, len(models))
+	for _, model := range models {
+		order := toDomainOrder(&model)
+		ordersByID[order.ID] = order
+	}
+
+	orders := make([]*domain.Order, 0, len(orderIDs))
+	for _, orderID := range orderIDs {
+		order, ok := ordersByID[orderID]
+		if !ok {
+			return nil, domain.ErrRecordNotFound
+		}
+		orders = append(orders, order)
+	}
+	return orders, nil
+}
+
+func (repo *orderRepository) UpdateStatus(ctx context.Context, orderID int64, fromStatus, toStatus domain.OrderStatus) error {
+	conn := db.DBFromContext(ctx, repo.db)
+	order := domain.Order{ID: orderID}
+	fromStatuses := matchStatuses(fromStatus)
+	res := conn.
 		Model(&db.OrderModel{}).
-		Where("id = ? && status = ?", order.ID, domain.OrderStatusCreated.AsUint8()).
-		Update("status", order.Status.AsUint8())
+		Where("id = ? AND status IN ?", orderID, fromStatuses).
+		Update("status", toStatus)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -112,7 +161,7 @@ func (repo *orderRepository) UpdateStatus(ctx context.Context, order *domain.Ord
 		return domain.ErrRecordNotFound
 	}
 	// 这里删除缓存失败会导致数据不一致，只能依赖短TTL兜底，无能的丈夫
-	err := repo.cache.Del(ctx, orderKey(order.ID))
+	err := repo.cache.Del(ctx, orderKey(orderID))
 	if err != nil {
 		repo.log.Warn("删除订单缓存失败", logger.Error(err), logger.Int64("orderID", order.ID))
 	}
@@ -125,14 +174,15 @@ func (repo *orderRepository) BatchUpdateStatus(ctx context.Context, orderIDs []i
 		return nil
 	}
 
-	res := repo.db.WithContext(ctx).
+	conn := db.DBFromContext(ctx, repo.db)
+	res := conn.
 		Model(&db.OrderModel{}).
-		Where("id IN ? AND status = ?", orderIDs, fromStatus.AsUint8()).
-		Update("status", toStatus.AsUint8())
+		Where("id IN ? AND status = ?", orderIDs, fromStatus).
+		Update("status", toStatus)
 	if res.Error != nil {
 		return res.Error
 	}
-	if res.RowsAffected == 0 {
+	if res.RowsAffected != int64(len(orderIDs)) {
 		return domain.ErrRecordNotFound
 	}
 
@@ -156,7 +206,7 @@ func (repo *orderRepository) ListByUserID(
 		// 1. 从ZSet获取orderID列表
 		idStrs, err := repo.cache.ZRange(ctx, userOrderListKey(userID), 0, int64(limit-1), true)
 		if err != nil {
-			repo.log.Warn("ZRange失败，fallback到DB", logger.Error(err), logger.Int64("userID", userID))
+			repo.log.Warn("ZRange 查询失败，回退到数据库", logger.Error(err), logger.Int64("userID", userID))
 		} else if len(idStrs) > 0 {
 			orderIDs := make([]int64, 0, len(idStrs))
 			for _, idStr := range idStrs {
@@ -173,7 +223,7 @@ func (repo *orderRepository) ListByUserID(
 
 				dataList, err := repo.cache.MGet(ctx, keys...)
 				if err != nil {
-					repo.log.Warn("MGet失败，fallback到DB", logger.Error(err), logger.Int64("userID", userID))
+					repo.log.Warn("MGet 查询失败，回退到数据库", logger.Error(err), logger.Int64("userID", userID))
 				} else {
 					// 3. 分离命中和未命中的orderIDs
 					orders := make([]*domain.Order, 0, len(orderIDs))
@@ -203,11 +253,12 @@ func (repo *orderRepository) ListByUserID(
 					// 4. 去DB补充查询未命中的订单
 					if len(missIDs) > 0 {
 						var missModels []db.OrderModel
-						err := repo.db.WithContext(ctx).
+						err := db.DBFromContext(ctx, repo.db).
+							Preload("Items").
 							Where("id IN ?", missIDs).
 							Find(&missModels).Error
 						if err != nil {
-							repo.log.Error("DB查询miss订单失败", logger.Error(err))
+							repo.log.Error("数据库查询缺失订单失败", logger.Error(err))
 							return nil, 0, err
 						}
 
@@ -231,7 +282,7 @@ func (repo *orderRepository) ListByUserID(
 					validOrders := make([]*domain.Order, 0, len(orders))
 					hasInvalidData := false
 					for _, o := range orders {
-						if o.ID != 0 {
+						if o != nil && o.ID != 0 {
 							validOrders = append(validOrders, o)
 						} else {
 							hasInvalidData = true
@@ -258,9 +309,13 @@ func (repo *orderRepository) ListByUserID(
 	// 非首页，不走缓存，直接DB查询
 	var models []db.OrderModel
 	// Limit(limit+1)来判断是否还有下一页
-	err = repo.db.WithContext(ctx).
-		Where("user_id = ? && id < ?", userID, cursor).
-		Order("id DESC").
+	query := db.DBFromContext(ctx, repo.db).
+		Preload("Items").
+		Where("user_id = ?", userID)
+	if cursor > 0 {
+		query = query.Where("id < ?", cursor)
+	}
+	err = query.Order("id DESC").
 		Limit(limit + 1).
 		Find(&models).Error
 	if err != nil {
@@ -289,7 +344,8 @@ func (repo *orderRepository) ListByUserID(
 
 func (repo *orderRepository) FindExpiredOrders(ctx context.Context, limit int) ([]*domain.Order, error) {
 	var models []db.OrderModel
-	query := repo.db.WithContext(ctx).
+	query := db.DBFromContext(ctx, repo.db).
+		Preload("Items").
 		Where("status = ? AND expired_at < ?", domain.OrderStatusCreated, time.Now())
 
 	// limit > 0 才限制数量，否则查询所有
@@ -312,7 +368,7 @@ func (repo *orderRepository) FindExpiredOrders(ctx context.Context, limit int) (
 // 列出某用户某状态的订单列表，这个不是热点数据吧，不缓存了
 func (repo *orderRepository) ListOrdersByStatus(ctx context.Context, userID int64, status string) ([]*domain.Order, error) {
 	var models []db.OrderModel
-	err := repo.db.WithContext(ctx).
+	err := db.DBFromContext(ctx, repo.db).
 		Where("user_id = ? AND status = ?", userID, status).
 		Find(&models).Error
 	if err != nil {
@@ -327,23 +383,29 @@ func (repo *orderRepository) ListOrdersByStatus(ctx context.Context, userID int6
 
 func toOrderModel(order *domain.Order) *db.OrderModel {
 	m := &db.OrderModel{
-		ID:        order.ID,
-		UserID:    order.UserID,
-		Phone:     order.Phone,
-		Status:    uint8(order.Status),
-		Currency:  order.PayableAmount.Currency,
-		Total:     order.PayableAmount.Total,
-		Street:    order.Addr.Street,
-		City:      order.Addr.City,
-		State:     order.Addr.State,
-		Country:   order.Addr.Country,
-		ZipCode:   order.Addr.Zipcode,
-		ExpiredAt: order.ExpireAt,
+		ID:            order.ID,
+		UserID:        order.UserID,
+		Phone:         order.Addr.Phone,
+		Remark:        order.Remark,
+		Status:        uint8(order.Status),
+		OrderKind:     order.OrderKind,
+		ActivityID:    order.ActivityID,
+		Currency:      order.PayableAmount.Currency,
+		Total:         order.TotalAmount.Total,
+		PayableTotal:  order.PayableAmount.Total,
+		DiscountTotal: order.DiscountAmount.Total,
+		Street:        order.Addr.Street,
+		City:          order.Addr.City,
+		State:         order.Addr.State,
+		Country:       order.Addr.Country,
+		ZipCode:       order.Addr.Zipcode,
+		ExpiredAt:     order.ExpireAt,
 	}
 
 	for _, item := range order.OrderItems {
 		m.Items = append(m.Items, db.OrderItemModel{
 			ProductID:        item.ProductID,
+			SKUID:            item.SKUID,
 			Quantity:         item.Quantity,
 			SnapshotPrice:    item.SnapshotPrice,
 			SnapshotCurrency: item.SnapshotCurrency,
@@ -356,15 +418,25 @@ func toOrderModel(order *domain.Order) *db.OrderModel {
 
 func toDomainOrder(model *db.OrderModel) *domain.Order {
 	order := &domain.Order{
-		ID:        model.ID,
-		UserID:    model.UserID,
-		Phone:     model.Phone,
-		Status:    domain.OrderStatus(model.Status),
-		CreatedAt: model.CreatedAt,
-		ExpireAt:  model.ExpiredAt,
+		ID:         model.ID,
+		UserID:     model.UserID,
+		Remark:     model.Remark,
+		Status:     domain.OrderStatus(model.Status),
+		OrderKind:  model.OrderKind,
+		ActivityID: model.ActivityID,
+		CreatedAt:  model.CreatedAt,
+		ExpireAt:   model.ExpiredAt,
 		PayableAmount: domain.Amount{
 			Currency: model.Currency,
+			Total:    model.PayableTotal,
+		},
+		TotalAmount: domain.Amount{
+			Currency: model.Currency,
 			Total:    model.Total,
+		},
+		DiscountAmount: domain.Amount{
+			Currency: model.Currency,
+			Total:    model.DiscountTotal,
 		},
 		Addr: domain.Address{
 			Street:  model.Street,
@@ -372,12 +444,14 @@ func toDomainOrder(model *db.OrderModel) *domain.Order {
 			State:   model.State,
 			Country: model.Country,
 			Zipcode: model.ZipCode,
+			Phone:   model.Phone,
 		},
 	}
 
 	for _, itemModel := range model.Items {
 		order.OrderItems = append(order.OrderItems, domain.OrderItem{
 			ProductID:        itemModel.ProductID,
+			SKUID:            itemModel.SKUID,
 			Quantity:         itemModel.Quantity,
 			SnapshotPrice:    itemModel.SnapshotPrice,
 			SnapshotCurrency: itemModel.SnapshotCurrency,
@@ -386,4 +460,8 @@ func toDomainOrder(model *db.OrderModel) *domain.Order {
 	}
 
 	return order
+}
+
+func matchStatuses(status domain.OrderStatus) []domain.OrderStatus {
+	return []domain.OrderStatus{status}
 }

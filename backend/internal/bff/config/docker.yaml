@@ -1,0 +1,42 @@
+http:
+  addr: ":8080"
+
+jwt:
+  access_secret: "douyinmall-access-secret-dev"
+  refresh_secret: "douyinmall-refresh-secret-dev"
+  access_expiry: "2h"
+  refresh_expiry: "168h"
+
+redis:
+  addr: "douyinmall-redis:6379"
+
+ratelimit:
+  interval: "1m"
+  rate: 100000
+
+etcd:
+  endpoints:
+    - "douyinmall-etcd:2379"
+
+rpc:
+  agent:
+    service_name: "agent-service"
+    direct_addr: "douyinmall-agent:8087"
+  user:
+    service_name: "user-service"
+    direct_addr: "douyinmall-user:8091"
+  checkout:
+    service_name: "checkout-service"
+    direct_addr: "douyinmall-checkout:8086"
+  seckill:
+    service_name: "seckill-service"
+    direct_addr: "douyinmall-seckill:8098"
+  order:
+    service_name: "order-service"
+    direct_addr: "douyinmall-order:8095"
+  product:
+    service_name: "product-service"
+    direct_addr: "douyinmall-product:8096"
+  inventory:
+    service_name: "inventory-service"
+    direct_addr: "douyinmall-inventory:8094"

@@ -7,20 +7,34 @@ import (
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/domain"
+	"github.com/XDWow/DouyinMall/backend/internal/inventory/usecase"
 	inventoryv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/inventory/v1"
 )
 
 type InventoryHandler struct {
-	repo domain.InventoryRepository
+	reserveStockUC *usecase.ReserveStockUsecase
+	commitStockUC  *usecase.CommitStockUseCase
+	releaseStockUC *usecase.ReleaseStockUseCase
+	refundStockUC  *usecase.RefundStockUseCase
+	repo           domain.InventoryRepository
 }
 
-func NewInventoryHandler(repo domain.InventoryRepository) *InventoryHandler {
+func NewInventoryHandler(
+	reserveStockUC *usecase.ReserveStockUsecase,
+	commitStockUC *usecase.CommitStockUseCase,
+	releaseStockUC *usecase.ReleaseStockUseCase,
+	refundStockUC *usecase.RefundStockUseCase,
+	repo domain.InventoryRepository,
+) *InventoryHandler {
 	return &InventoryHandler{
-		repo: repo,
+		reserveStockUC: reserveStockUC,
+		commitStockUC:  commitStockUC,
+		releaseStockUC: releaseStockUC,
+		refundStockUC:  refundStockUC,
+		repo:           repo,
 	}
 }
 
-// 查询单个商品库存
 func (h *InventoryHandler) GetInventory(ctx context.Context, req *inventoryv1.GetInventoryReq) (*inventoryv1.GetInventoryResp, error) {
 	if req.GetProductId() <= 0 {
 		return nil, errors.New("product_id must be greater than 0")
@@ -33,7 +47,6 @@ func (h *InventoryHandler) GetInventory(ctx context.Context, req *inventoryv1.Ge
 	if err != nil {
 		return nil, err
 	}
-
 	if len(inventories) == 0 {
 		return nil, errors.New("inventory not found")
 	}
@@ -44,7 +57,6 @@ func (h *InventoryHandler) GetInventory(ctx context.Context, req *inventoryv1.Ge
 	}, nil
 }
 
-// BatchGetInventory 批量查询商品库存
 func (h *InventoryHandler) BatchGetInventory(ctx context.Context, req *inventoryv1.BatchGetInventoryReq) (*inventoryv1.BatchGetInventoryResp, error) {
 	if len(req.GetProductIds()) == 0 {
 		return &inventoryv1.BatchGetInventoryResp{Inventories: []*inventoryv1.GetInventoryResp{}}, nil
@@ -68,11 +80,9 @@ func (h *InventoryHandler) BatchGetInventory(ctx context.Context, req *inventory
 			SoldStock:      0,
 		}
 	}
-
 	return resp, nil
 }
 
-// ReserveStock 下单预扣库存（Redis原子操作）
 func (h *InventoryHandler) ReserveStock(ctx context.Context, req *inventoryv1.ReserveStockReq) (*inventoryv1.InventoryOpResp, error) {
 	if req.GetOperationId() == "" {
 		return nil, errors.New("operation_id is required")
@@ -84,19 +94,20 @@ func (h *InventoryHandler) ReserveStock(ctx context.Context, req *inventoryv1.Re
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// 转换请求参数
-	changes := make([]domain.StockChange, len(req.Items))
+	items := make([]usecase.StockItem, len(req.Items))
 	for i, item := range req.Items {
-		changes[i] = domain.StockChange{
+		items[i] = usecase.StockItem{
 			ProductID: item.ProductId,
-			Quantity:  -item.Quantity, // 预扣是负数
+			Quantity:  item.Quantity,
 		}
 	}
 
-	// 调用Repository
-	err := h.repo.ReserveStock(ctx, req.OperationId, changes, req.ExpireTime)
+	err := h.reserveStockUC.Execute(ctx, usecase.ReserveStockCommand{
+		OperationID: req.OperationId,
+		Changes:     items,
+		ExpireTime:  req.ExpireTime,
+	})
 	if err != nil {
-		// 库存不足：返回明细
 		var stockErr *domain.InsufficientStockError
 		if errors.As(err, &stockErr) {
 			insufficient := make([]*inventoryv1.InsufficientItem, len(stockErr.Items))
@@ -119,13 +130,9 @@ func (h *InventoryHandler) ReserveStock(ctx context.Context, req *inventoryv1.Re
 		}, nil
 	}
 
-	return &inventoryv1.InventoryOpResp{
-		StatusCode: 0,
-		StatusMsg:  "success",
-	}, nil
+	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
 }
 
-// CommitStock 支付成功，确认扣减库存（DB强一致）
 func (h *InventoryHandler) CommitStock(ctx context.Context, req *inventoryv1.CommitStockReq) (*inventoryv1.InventoryOpResp, error) {
 	if req.GetOperationId() == "" {
 		return nil, errors.New("operation_id is required")
@@ -137,38 +144,28 @@ func (h *InventoryHandler) CommitStock(ctx context.Context, req *inventoryv1.Com
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// 转换请求参数
 	changes := make([]domain.StockChange, len(req.Items))
 	for i, item := range req.Items {
 		changes[i] = domain.StockChange{
 			ProductID: item.ProductId,
-			Quantity:  -item.Quantity, // 扣减是负数
+			Quantity:  -item.Quantity,
 		}
 	}
 
-	// 调用Repository
-	err := h.repo.CommitStock(ctx, req.OperationId, changes)
+	err := h.commitStockUC.Execute(ctx, usecase.CommitStockCommand{
+		OperationID: req.OperationId,
+		Changes:     changes,
+	})
 	if err != nil {
-		// 幂等冲突，返回成功
 		if errors.Is(err, domain.ErrDuplicateOperation) {
-			return &inventoryv1.InventoryOpResp{
-				StatusCode: 0,
-				StatusMsg:  "success (idempotent)",
-			}, nil
+			return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success (idempotent)"}, nil
 		}
-		return &inventoryv1.InventoryOpResp{
-			StatusCode: -1,
-			StatusMsg:  err.Error(),
-		}, nil
+		return &inventoryv1.InventoryOpResp{StatusCode: -1, StatusMsg: err.Error()}, nil
 	}
 
-	return &inventoryv1.InventoryOpResp{
-		StatusCode: 0,
-		StatusMsg:  "success",
-	}, nil
+	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
 }
 
-// ReleaseStock 订单取消，释放预扣库存
 func (h *InventoryHandler) ReleaseStock(ctx context.Context, req *inventoryv1.ReleaseStockReq) (*inventoryv1.InventoryOpResp, error) {
 	if req.GetOperationId() == "" {
 		return nil, errors.New("operation_id is required")
@@ -177,23 +174,14 @@ func (h *InventoryHandler) ReleaseStock(ctx context.Context, req *inventoryv1.Re
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// 调用Repository
-	err := h.repo.ReleaseStock(ctx, req.OperationId)
+	err := h.releaseStockUC.Execute(ctx, usecase.ReleaseStockCommand{OperationID: req.OperationId})
 	if err != nil {
-		return &inventoryv1.InventoryOpResp{
-			StatusCode: -1,
-			StatusMsg:  err.Error(),
-		}, nil
+		return &inventoryv1.InventoryOpResp{StatusCode: -1, StatusMsg: err.Error()}, nil
 	}
 
-	return &inventoryv1.InventoryOpResp{
-		StatusCode: 0,
-		StatusMsg:  "success",
-	}, nil
+	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
 }
 
-// RefundStock 已售商品退款，恢复库存
-// operationID: 原始commit的operationID，从commit记录读取商品信息
 func (h *InventoryHandler) RefundStock(ctx context.Context, req *inventoryv1.RefundStockReq) (*inventoryv1.InventoryOpResp, error) {
 	if req.GetOperationId() == "" {
 		return nil, errors.New("operation_id is required")
@@ -202,29 +190,17 @@ func (h *InventoryHandler) RefundStock(ctx context.Context, req *inventoryv1.Ref
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// 调用Repository（从commit记录读取商品信息）
-	err := h.repo.RefundStock(ctx, req.OperationId)
+	err := h.refundStockUC.Execute(ctx, usecase.RefundStockCommand{OperationID: req.OperationId})
 	if err != nil {
-		// 幂等冲突，返回成功
 		if errors.Is(err, domain.ErrDuplicateOperation) {
-			return &inventoryv1.InventoryOpResp{
-				StatusCode: 0,
-				StatusMsg:  "success (idempotent)",
-			}, nil
+			return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success (idempotent)"}, nil
 		}
-		return &inventoryv1.InventoryOpResp{
-			StatusCode: -1,
-			StatusMsg:  err.Error(),
-		}, nil
+		return &inventoryv1.InventoryOpResp{StatusCode: -1, StatusMsg: err.Error()}, nil
 	}
 
-	return &inventoryv1.InventoryOpResp{
-		StatusCode: 0,
-		StatusMsg:  "success",
-	}, nil
+	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
 }
 
-// AdjustStock 人工调整库存（内部管理接口）
 func (h *InventoryHandler) AdjustStock(ctx context.Context, req *inventoryv1.AdjustStockReq) (*inventoryv1.InventoryOpResp, error) {
 	if req.GetReason() == "" {
 		return nil, errors.New("reason is required for audit")
@@ -236,29 +212,19 @@ func (h *InventoryHandler) AdjustStock(ctx context.Context, req *inventoryv1.Adj
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	// 转换请求参数
 	changes := make([]domain.StockChange, len(req.Items))
 	for i, item := range req.Items {
 		changes[i] = domain.StockChange{
 			ProductID: item.ProductId,
-			Quantity:  item.Quantity, // 带符号的数量
+			Quantity:  item.Quantity,
 		}
 	}
 
-	// 生成唯一操作ID（时间戳+原因摘要，确保幂等）
 	operationID := fmt.Sprintf("adjust_%d_%s", time.Now().UnixNano(), req.Reason)
-
-	// 调用Repository
 	err := h.repo.AdjustStock(ctx, operationID, req.Reason, changes)
 	if err != nil {
-		return &inventoryv1.InventoryOpResp{
-			StatusCode: -1,
-			StatusMsg:  err.Error(),
-		}, nil
+		return &inventoryv1.InventoryOpResp{StatusCode: -1, StatusMsg: err.Error()}, nil
 	}
 
-	return &inventoryv1.InventoryOpResp{
-		StatusCode: 0,
-		StatusMsg:  "success",
-	}, nil
+	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
 }

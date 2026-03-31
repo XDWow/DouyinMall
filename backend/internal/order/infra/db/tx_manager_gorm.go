@@ -35,3 +35,11 @@ func TxFromContext(ctx context.Context) *gorm.DB {
 	}
 	return tx
 }
+
+func DBFromContext(ctx context.Context, fallback *gorm.DB) *gorm.DB {
+	tx, ok := ctx.Value(txKey{}).(*gorm.DB)
+	if ok && tx != nil {
+		return tx
+	}
+	return fallback.WithContext(ctx)
+}

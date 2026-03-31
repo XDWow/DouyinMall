@@ -1,0 +1,18 @@
+db:
+  dsn: "root:root@tcp(douyinmall-mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "douyinmall-redis:6379"
+
+etcd:
+  endpoints:
+    - "douyinmall-etcd:2379"
+
+grpc:
+  server:
+    name: inventory.service
+    port: 8094
+
+kafka:
+  brokers:
+    - "douyinmall-kafka:9092"

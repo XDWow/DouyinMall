@@ -11,7 +11,9 @@ import (
 type OrderRepository interface {
 	Save(ctx context.Context, order *Order) error
 	FindByID(ctx context.Context, orderID int64) (Order, error)
-	UpdateStatus(ctx context.Context, order *Order) error
+	FindByIDs(ctx context.Context, orderIDs []int64) ([]*Order, error)
+	FindByIDsForUpdate(ctx context.Context, orderIDs []int64) ([]*Order, error)
+	UpdateStatus(ctx context.Context, orderID int64, fromStatus, toStatus OrderStatus) error
 	ListOrdersByStatus(ctx context.Context, userID int64, status string) ([]*Order, error)
 	// 查找超过30分钟未支付的待支付订单（过期）
 	FindExpiredOrders(ctx context.Context, limit int) ([]*Order, error)
@@ -24,8 +26,8 @@ type OrderRepository interface {
 }
 
 type OutboxRepository interface {
-	Add(ctx context.Context, eventType string, payload any) error
-	BatchAdd(ctx context.Context, eventType string, payloads []any) error
+	Add(ctx context.Context, eventType string, payload any) (int64, error)
+	BatchAdd(ctx context.Context, eventType string, payloads []any) ([]int64, error)
 	// ListPending 分页查询待发送的事件
 	ListPending(ctx context.Context, offset, limit int) ([]OutboxEvent, error)
 	MarkSent(ctx context.Context, id int64) error

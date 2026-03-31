@@ -3,24 +3,19 @@ package usecase
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/inventory/v1/inventoryservice"
 )
 
-const OrderStatusChanged = "order.status.changed"
-
 type ChangeOrderStatusUseCase struct {
-	orderRepo    domain.OrderRepository
-	outboxRepo   domain.OutboxRepository
-	producer     mq.SaramaProducer
-	tx           domain.TxManager
-	log          logger.LoggerV1
-	inventoryCli inventoryservice.Client
+	orderRepo  domain.OrderRepository
+	outboxRepo domain.OutboxRepository
+	producer   mq.SaramaProducer
+	tx         domain.TxManager
+	log        logger.LoggerV1
 }
 
 func NewChangeOrderStatusUseCase(
@@ -29,157 +24,103 @@ func NewChangeOrderStatusUseCase(
 	producer mq.SaramaProducer,
 	tx domain.TxManager,
 	log logger.LoggerV1,
-	inventoryCli inventoryservice.Client,
 ) *ChangeOrderStatusUseCase {
 	return &ChangeOrderStatusUseCase{
-		orderRepo:    orderRepo,
-		outboxRepo:   outboxRepo,
-		producer:     producer,
-		tx:           tx,
-		log:          log,
-		inventoryCli: inventoryCli,
+		orderRepo:  orderRepo,
+		outboxRepo: outboxRepo,
+		producer:   producer,
+		tx:         tx,
+		log:        log,
 	}
 }
 
 type ChangeOrderStatusCmd struct {
-	OrderID     int64
-	OrderStatus domain.OrderStatus
+	OrderID int64
+	Action  domain.OrderAction
 }
 
-func (uc *ChangeOrderStatusUseCase) Execute(ctx context.Context, cmd ChangeOrderStatusCmd) error {
+type ChangeOrderStatusResult struct {
+	Changed bool
+}
+
+func (uc *ChangeOrderStatusUseCase) Execute(ctx context.Context, cmd ChangeOrderStatusCmd) (ChangeOrderStatusResult, error) {
 	if cmd.OrderID <= 0 {
-		return errors.New("订单ID无效")
+		return ChangeOrderStatusResult{}, errors.New("invalid order id")
+	}
+	if cmd.Action == domain.OrderActionUnknown {
+		return ChangeOrderStatusResult{}, errors.New("invalid order action")
 	}
 
-	return uc.updateStatusAndPublish(ctx, cmd.OrderID, cmd.OrderStatus)
-}
-
-/*
-// 处理支付成功的同步流程：支付成功 → CommitStock → 成功/失败 → 订单成功/触发退款
-func (uc *ChangeOrderStatusUseCase) handlePaymentSuccess(ctx context.Context, orderID int64) error {
-	// 1. 查询订单详情（获取Items信息用于CommitStock）
-	order, err := uc.orderRepo.FindByID(ctx, orderID)
+	fullOrder, err := uc.orderRepo.FindByID(ctx, cmd.OrderID)
 	if err != nil {
-		uc.log.Error("查询订单失败", logger.Error(err), logger.Int64("orderID", orderID))
-		return err
+		return ChangeOrderStatusResult{}, err
 	}
 
-	// 2. 同步调用库存服务CommitStock
-	items := make([]*inventoryv1.StockItem, len(order.OrderItems))
-	for i, item := range order.OrderItems {
-		items[i] = &inventoryv1.StockItem{
-			ProductId: item.ProductID,
-			Quantity:  int32(item.Quantity),
+	fromStatus := fullOrder.Status
+	if err := applyOrderAction(&fullOrder, cmd.Action); err != nil {
+		if errors.Is(err, domain.ErrOrderStatusUnchanged) {
+			return ChangeOrderStatusResult{Changed: false}, nil
 		}
+		return ChangeOrderStatusResult{}, err
+	}
+	if fromStatus == fullOrder.Status {
+		return ChangeOrderStatusResult{Changed: false}, nil
 	}
 
-	operationID := buildOrderOperationID(orderID, "commit")
-	resp, err := uc.inventoryCli.CommitStock(ctx, &inventoryv1.CommitStockReq{
-		OperationId: operationID,
-		Items:       items,
-	})
+	event := domain.BuildOrderStatusUpdateEvent(&fullOrder)
 
-	// 3. 根据CommitStock结果决定订单状态
-	if err != nil || resp.StatusCode != 0 {
-		// CommitStock失败 → 订单失败 → 后续需触发退款
-		uc.log.Error("CommitStock失败，订单标记为失败",
-			logger.Error(err),
-			logger.Int64("orderID", orderID),
-			logger.String("resp_msg", resp.GetStatusMsg()))
-
-		// TODO: 这里应该触发退款流程（调用支付服务Refund接口）
-		// 暂时先标记订单为取消状态
-		return uc.updateStatusAndPublish(ctx, orderID, domain.OrderStatusCanceled)
-	}
-
-	// 4. CommitStock成功 → 订单成功
-	uc.log.Info("CommitStock成功，订单支付成功", logger.Int64("orderID", orderID))
-	return uc.updateStatusAndPublish(ctx, orderID, domain.OrderStatusPaid)
-}
-*/
-
-// 构造订单相关的operationID：order_{orderID}_{action}
-// 用于库存操作的幂等性标识，与库存服务保持一致
-func buildOrderOperationID(orderID int64, action string) string {
-	return fmt.Sprintf("order_%d_%s", orderID, action)
-}
-
-// 异步：更新订单状态并发布MQ事件
-func (uc *ChangeOrderStatusUseCase) updateStatusAndPublish(ctx context.Context, orderID int64, status domain.OrderStatus) error {
-	order := domain.Order{
-		ID:     orderID,
-		Status: status,
-	}
-
-	// CommitStock需要Items，先查询订单
-	var eventItems []domain.OrderEventItem
-	var userID int64
-	if status == domain.OrderStatusPaid {
-		fullOrder, err := uc.orderRepo.FindByID(ctx, orderID)
-		if err != nil {
-			uc.log.Error("查询订单失败", logger.Error(err), logger.Int64("orderID", orderID))
-			return err
-		}
-		userID = fullOrder.UserID
-		eventItems = make([]domain.OrderEventItem, len(fullOrder.OrderItems))
-		for i, item := range fullOrder.OrderItems {
-			eventItems[i] = domain.OrderEventItem{
-				ProductID: item.ProductID,
-				Quantity:  item.Quantity,
-			}
-		}
-	}
-
-	// 必须要拿到执行结果，那就同步调用 rpc，否则异步MQ
-	// 这个比较重要，所以通过 outbox 把要发的消息变为数据库事实（慢路径兜底，保证生产者消息不丢），并且和状态修改同一个DB事务提交
-	err := uc.tx.Tx(ctx, func(ctx context.Context) error {
-		err := uc.orderRepo.UpdateStatus(ctx, &order)
-		if err != nil {
+	var outboxID int64
+	err = uc.tx.Tx(ctx, func(ctx context.Context) error {
+		if err := uc.orderRepo.UpdateStatus(ctx, fullOrder.ID, fromStatus, fullOrder.Status); err != nil {
 			if errors.Is(err, domain.ErrRecordNotFound) {
-				return errors.New("订单不存在或状态不能改变")
+				return domain.ErrInvalidStatusTransition
 			}
 			return err
 		}
-		event := domain.OrderStatusUpdateEvent{
-			OrderID: order.ID,
-			UserID:  userID, // 支付成功时有值，用于清购物车
-			Status:  order.Status,
-			Items:   eventItems, // 状态为Paid时有值，其他状态为nil
-		}
-		err = uc.outboxRepo.Add(ctx, OrderStatusChanged, event)
-		if err != nil {
-			uc.log.Error("保存outbox失败", logger.Error(err))
-			return err
-		}
-		return nil
+		var addErr error
+		outboxID, addErr = uc.outboxRepo.Add(ctx, domain.EventTypeOrderStatusChanged, event)
+		return addErr
 	})
 	if err != nil {
-		return err
+		return ChangeOrderStatusResult{}, err
 	}
 
-	// fast path
-	go func() {
-		c, can := context.WithTimeout(context.Background(), 3*time.Second)
-		defer can()
-		e := uc.producer.SendMessage(c, domain.OrderStatusUpdateEvent{
-			OrderID: order.ID,
-			UserID:  userID,
-			Status:  order.Status,
-			Items:   eventItems,
-		})
-		if e != nil {
-			uc.log.Error("订单状态变化事件发送失败", logger.Error(e))
-			_, e = uc.outboxRepo.IncreaseRetry(c, order.ID)
-			if e != nil {
-				uc.log.Error("增加重试次数失败", logger.Error(e))
-			}
+	go func(outboxID int64, evt domain.OrderStatusUpdateEvent) {
+		c, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		if sendErr := uc.producer.SendMessage(c, evt); sendErr != nil {
+			uc.log.Error("发送订单状态变更事件失败",
+				logger.Error(sendErr),
+				logger.Int64("orderID", evt.OrderID),
+				logger.Int64("outboxID", outboxID))
 			return
 		}
-		e = uc.outboxRepo.MarkSent(c, order.ID)
-		if e != nil {
-			uc.log.Error("修改发件箱状态为已发送，失败", logger.Error(e))
-		}
-	}()
 
-	return nil
+		if markErr := uc.outboxRepo.MarkSent(c, outboxID); markErr != nil {
+			uc.log.Error("标记 outbox 已发送失败",
+				logger.Error(markErr),
+				logger.Int64("orderID", evt.OrderID),
+				logger.Int64("outboxID", outboxID))
+		}
+	}(outboxID, event)
+
+	return ChangeOrderStatusResult{Changed: true}, nil
+}
+
+func applyOrderAction(order *domain.Order, action domain.OrderAction) error {
+	switch action {
+	case domain.OrderActionPay:
+		return order.Pay()
+	case domain.OrderActionShip:
+		return order.Ship()
+	case domain.OrderActionComplete:
+		return order.Complete()
+	case domain.OrderActionCancel:
+		return order.Cancel()
+	case domain.OrderActionRefund:
+		return order.Refund()
+	default:
+		return domain.ErrInvalidStatusTransition
+	}
 }

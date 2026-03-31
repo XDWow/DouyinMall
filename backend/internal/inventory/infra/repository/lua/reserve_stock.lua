@@ -1,19 +1,3 @@
--- 预扣库存 Lua 脚本（原子性操作）
--- KEYS[1] = reserve:{reserveID}
--- ARGV[1] = expireTime (秒，订单30分钟超时 + 5分钟缓冲 = 35分钟 = 2100秒)
--- ARGV[2..n] = productID1, quantity1, productID2, quantity2, ...
--- 
--- 返回值：
---   0 = 幂等，已预扣过
---   1 = 预扣成功
---  -1 = 商品不存在（stock key 缺失）
---  {productID1, requested1, available1, ...} = 库存不足明细（table）
---
--- 为什么要比订单超时长？
--- 避免边界case：订单刚好30分钟时取消，但Redis记录已过期，导致ReleaseStock找不到记录
--- 
--- 为什么不删除预扣记录？
--- ReleaseStock需要从预扣记录读取商品信息，且预扣记录用于预扣幂等（防止重复预扣）
 
 local reserveKey = KEYS[1]
 local expireTime = tonumber(ARGV[1])

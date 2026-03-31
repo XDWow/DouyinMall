@@ -13,6 +13,7 @@ import (
 type Client interface {
 	CreateOrder(ctx context.Context, Req *v1.CreateOrderReq, callOptions ...callopt.Option) (r *v1.CreateOrderResp, err error)
 	ChangeOrderStatus(ctx context.Context, Req *v1.ChangeOrderStatusReq, callOptions ...callopt.Option) (r *v1.ChangeOrderStatusResp, err error)
+	GetOrder(ctx context.Context, Req *v1.GetOrderReq, callOptions ...callopt.Option) (r *v1.GetOrderResp, err error)
 	ListOrder(ctx context.Context, Req *v1.ListOrderReq, callOptions ...callopt.Option) (r *v1.ListOrderResp, err error)
 }
 
@@ -53,6 +54,11 @@ func (p *kOrderServiceClient) CreateOrder(ctx context.Context, Req *v1.CreateOrd
 func (p *kOrderServiceClient) ChangeOrderStatus(ctx context.Context, Req *v1.ChangeOrderStatusReq, callOptions ...callopt.Option) (r *v1.ChangeOrderStatusResp, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ChangeOrderStatus(ctx, Req)
+}
+
+func (p *kOrderServiceClient) GetOrder(ctx context.Context, Req *v1.GetOrderReq, callOptions ...callopt.Option) (r *v1.GetOrderResp, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetOrder(ctx, Req)
 }
 
 func (p *kOrderServiceClient) ListOrder(ctx context.Context, Req *v1.ListOrderReq, callOptions ...callopt.Option) (r *v1.ListOrderResp, err error) {

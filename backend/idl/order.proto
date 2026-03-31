@@ -7,16 +7,37 @@ option go_package="order/v1;orderv1";
 service OrderService {
     rpc CreateOrder(CreateOrderReq) returns (CreateOrderResp) {}
     rpc ChangeOrderStatus(ChangeOrderStatusReq) returns (ChangeOrderStatusResp) {}
+    rpc GetOrder(GetOrderReq) returns (GetOrderResp) {}
     rpc ListOrder(ListOrderReq) returns (ListOrderResp) {}
 }
 
-// 更改订单状态
-message ChangeOrderStatusReq {
-    int64 order_id = 1;
-    uint32 order_status = 2;
+enum OrderStatus {
+    ORDER_STATUS_UNKNOWN   = 0;
+    ORDER_STATUS_CREATED   = 1;
+    ORDER_STATUS_PAID      = 2;
+    ORDER_STATUS_SHIPPED   = 3;
+    ORDER_STATUS_COMPLETED = 4;
+    ORDER_STATUS_CANCELED  = 5;
+    ORDER_STATUS_REFUNDED  = 6;
 }
 
-message ChangeOrderStatusResp {}
+enum ChangeOrderAction {
+    CHANGE_ORDER_ACTION_UNKNOWN  = 0;
+    CHANGE_ORDER_ACTION_PAY      = 1;
+    CHANGE_ORDER_ACTION_SHIP     = 2;
+    CHANGE_ORDER_ACTION_COMPLETE = 3;
+    CHANGE_ORDER_ACTION_CANCEL   = 4;
+    CHANGE_ORDER_ACTION_REFUND   = 5;
+}
+
+message ChangeOrderStatusReq {
+    int64 order_id = 1;
+    ChangeOrderAction action = 2;
+}
+
+message ChangeOrderStatusResp {
+    bool changed = 1;
+}
 
 message Address {
     string street_address = 1;
@@ -24,32 +45,40 @@ message Address {
     string state = 3;
     string country = 4;
     string zip_code = 5;
+    string phone = 6;
 }
 
-// 订单项：只存储商品ID、数量、价格快照（目的是审计，不冗余存储商品详情，展示时从Product服务查询）
 message OrderItem {
     int64 product_id = 1;
     int64 quantity = 2;
-    int64 snapshot_price = 3; // 商品原始单价快照
+    int64 snapshot_price = 3;
     string snapshot_currency = 4;
-    int64 converted_price = 5; // 转换为支付货币类型的价格
+    int64 converted_price = 5;
+    int64 sku_id = 6;
 }
 
 message CreateOrderReq {
     int64 user_id = 1;
-    string currency = 2; // 用户选择的支付货币
+    string currency = 2;
     Address address = 3;
-    string phone = 4;
     repeated OrderItem items = 5;
-    int64 order_id = 6; // 由 checkout 服务预生成的订单ID（雪花ID），非0时使用此ID
-    //  int64 total = 6; 本来还想直接算出total传过来，后面发现不对，正确订单服务的业务理解：
-    //  接收一组已定价的商品项，
-    //  根据订单业务规则，（可以扣税，优惠，减小数点）
-    //  生成唯一、不可变的订单金额事实，返回
+    int64 order_id = 6;
+    string order_kind = 7;
+    int64 activity_id = 8;
+    string remark = 9;
+    int64 payable_amount = 10;
 }
 
 message CreateOrderResp {
     int64 order_id = 1;
+}
+
+message GetOrderReq {
+    int64 order_id = 1;
+}
+
+message GetOrderResp {
+    Order order = 1;
 }
 
 message ListOrderReq {
@@ -61,15 +90,19 @@ message ListOrderReq {
 message Order {
     int64 order_id = 1;
     int64 user_id = 2;
-    uint32 order_status = 3; // 订单状态：0-未知 1-待支付 2-待发货 3-待收货 4-已完成 5-已取消 6-已退款
+    OrderStatus order_status = 3;
     repeated OrderItem items = 4;
     int64 total_amount = 5;
-    string currency = 6; // 订单支付货币
+    string currency = 6;
     Address address = 7;
-    string phone = 8;
     int64 created_at = 9;
+    int64 expire_at = 10;
+    string order_kind = 11;
+    int64 activity_id = 12;
+    string remark = 13;
 }
 
 message ListOrderResp {
     repeated Order orders = 1;
+    int64 next_cursor = 2;
 }

@@ -1,20 +1,34 @@
 package domain
 
+const EventTypeOrderStatusChanged = "order.status.changed"
+
 type OrderStatusUpdateEvent struct {
-	OrderID int64            `json:"order_id"`
-	UserID  int64            `json:"user_id,omitempty"` // 支付成功清购物车需要
-	Status  OrderStatus      `json:"status"`
-	Items   []OrderEventItem `json:"items,omitempty"` // CommitStock需要，其他操作可为空
+	OrderID    int64       `json:"order_id"`
+	UserID     int64       `json:"user_id,omitempty"`
+	Status     OrderStatus `json:"status"`
+	OrderKind  string      `json:"order_kind,omitempty"`
+	ProductIDs []int64     `json:"product_ids,omitempty"`
 }
 
-// OrderEventItem 事件中的商品信息（精简版，只包含库存需要的字段）
-type OrderEventItem struct {
-	ProductID int64 `json:"product_id"`
-	Quantity  int64 `json:"quantity"`
-}
-
-// 事件ID和负载
 type OutboxEvent struct {
 	ID    int64                  `json:"id"`
 	Event OrderStatusUpdateEvent `json:"event"`
+}
+
+func BuildOrderStatusUpdateEvent(order *Order) OrderStatusUpdateEvent {
+	event := OrderStatusUpdateEvent{
+		OrderID:   order.ID,
+		Status:    order.Status,
+		OrderKind: order.OrderKind,
+	}
+	if order.Status != OrderStatusPaid || order.OrderKind != OrderKindCart {
+		return event
+	}
+
+	event.UserID = order.UserID
+	event.ProductIDs = make([]int64, 0, len(order.OrderItems))
+	for _, item := range order.OrderItems {
+		event.ProductIDs = append(event.ProductIDs, item.ProductID)
+	}
+	return event
 }

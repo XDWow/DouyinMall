@@ -135,22 +135,39 @@ func (repo *couponRepository) BatchReserve(ctx context.Context, couponIDs []int6
 		return nil
 	}
 
-	return repo.db.WithContext(ctx).
-		Model(&db.Coupon{}).
-		Where("id IN ? AND status = ?", couponIDs, domain.UserCouponStatusUnused.AsUint8()).
-		Updates(map[string]interface{}{
-			"status":   domain.UserCouponStatusLocked.AsUint8(),
-			"order_id": orderID,
-		}).Error
+	return repo.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&db.Coupon{}).
+			Where("id IN ? AND status = ?", couponIDs, domain.UserCouponStatusUnused.AsUint8()).
+			Updates(map[string]interface{}{
+				"status":   domain.UserCouponStatusLocked.AsUint8(),
+				"order_id": orderID,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != int64(len(couponIDs)) {
+			return domain.ErrCouponNotAvailable
+		}
+		return nil
+	})
 }
 
 func (repo *couponRepository) UpdateStatusByOrderID(ctx context.Context, orderID int64, fromStatus, toStatus domain.CouponStatus) error {
+	updates := map[string]interface{}{
+		"status": toStatus.AsUint8(),
+	}
+	switch toStatus {
+	case domain.UserCouponStatusUsed:
+		updates["used_at"] = time.Now()
+	case domain.UserCouponStatusUnused:
+		updates["order_id"] = nil
+		updates["used_at"] = nil
+	}
+
 	return repo.db.WithContext(ctx).
 		Model(&db.Coupon{}).
 		Where("order_id = ? AND status = ?", orderID, fromStatus.AsUint8()).
-		Updates(map[string]interface{}{
-			"status": toStatus,
-		}).Error
+		Updates(updates).Error
 }
 
 func domainToEntity(coupon *domain.Coupon) *db.Coupon {

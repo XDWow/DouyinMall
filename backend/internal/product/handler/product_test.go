@@ -76,10 +76,10 @@ func TestProductHandler_ListProducts(t *testing.T) {
 	}
 }
 
-func TestProductHandler_GetProduct(t *testing.T) {
+func TestProductHandler_GetProducts(t *testing.T) {
 	testCases := []struct {
 		name     string
-		req      *v1.GetProductReq
+		req      *v1.GetProductsReq
 		mock     func(ctrl *gomock.Controller) *svcmocks.MockProductService
 		wantID   int64
 		wantName string
@@ -87,7 +87,7 @@ func TestProductHandler_GetProduct(t *testing.T) {
 	}{
 		{
 			name: "成功获取商品详情",
-			req:  &v1.GetProductReq{Id: 1},
+			req:  &v1.GetProductsReq{Id: []int64{1}},
 			mock: func(ctrl *gomock.Controller) *svcmocks.MockProductService {
 				svc := svcmocks.NewMockProductService(ctrl)
 				svc.EXPECT().GetProduct(gomock.Any(), int64(1)).Return(domain.Product{
@@ -107,7 +107,7 @@ func TestProductHandler_GetProduct(t *testing.T) {
 		},
 		{
 			name: "商品不存在",
-			req:  &v1.GetProductReq{Id: 999},
+			req:  &v1.GetProductsReq{Id: []int64{999}},
 			mock: func(ctrl *gomock.Controller) *svcmocks.MockProductService {
 				svc := svcmocks.NewMockProductService(ctrl)
 				svc.EXPECT().GetProduct(gomock.Any(), int64(999)).Return(domain.Product{}, errors.New("not found"))
@@ -125,15 +125,15 @@ func TestProductHandler_GetProduct(t *testing.T) {
 			svc := tc.mock(ctrl)
 			h := NewProductHandler(svc)
 
-			resp, err := h.GetProduct(context.Background(), tc.req)
+			resp, err := h.GetProducts(context.Background(), tc.req)
 
 			if tc.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, resp)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tc.wantID, resp.Product.Id)
-				assert.Equal(t, tc.wantName, resp.Product.Name)
+				assert.Equal(t, tc.wantID, resp.Product[0].Id)
+				assert.Equal(t, tc.wantName, resp.Product[0].Name)
 			}
 		})
 	}

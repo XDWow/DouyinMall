@@ -1,0 +1,11 @@
+etcd:
+  endpoints:
+    - "douyinmall-etcd:2379"
+
+grpc:
+  server:
+    port: 8086
+    name: checkout.service
+
+snowflake:
+  node_id: 1

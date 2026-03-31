@@ -4,14 +4,93 @@ package orderv1
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cloudwego/prutal"
 )
 
-// 更改订单状态
+type OrderStatus int32
+
+const (
+	OrderStatus_ORDER_STATUS_UNKNOWN   OrderStatus = 0
+	OrderStatus_ORDER_STATUS_CREATED   OrderStatus = 1
+	OrderStatus_ORDER_STATUS_PAID      OrderStatus = 2
+	OrderStatus_ORDER_STATUS_SHIPPED   OrderStatus = 3
+	OrderStatus_ORDER_STATUS_COMPLETED OrderStatus = 4
+	OrderStatus_ORDER_STATUS_CANCELED  OrderStatus = 5
+	OrderStatus_ORDER_STATUS_REFUNDED  OrderStatus = 6
+)
+
+// Enum value maps for OrderStatus.
+var OrderStatus_name = map[int32]string{
+	0: "ORDER_STATUS_UNKNOWN",
+	1: "ORDER_STATUS_CREATED",
+	2: "ORDER_STATUS_PAID",
+	3: "ORDER_STATUS_SHIPPED",
+	4: "ORDER_STATUS_COMPLETED",
+	5: "ORDER_STATUS_CANCELED",
+	6: "ORDER_STATUS_REFUNDED",
+}
+
+var OrderStatus_value = map[string]int32{
+	"ORDER_STATUS_UNKNOWN":   0,
+	"ORDER_STATUS_CREATED":   1,
+	"ORDER_STATUS_PAID":      2,
+	"ORDER_STATUS_SHIPPED":   3,
+	"ORDER_STATUS_COMPLETED": 4,
+	"ORDER_STATUS_CANCELED":  5,
+	"ORDER_STATUS_REFUNDED":  6,
+}
+
+func (x OrderStatus) String() string {
+	s, ok := OrderStatus_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+
+type ChangeOrderAction int32
+
+const (
+	ChangeOrderAction_CHANGE_ORDER_ACTION_UNKNOWN  ChangeOrderAction = 0
+	ChangeOrderAction_CHANGE_ORDER_ACTION_PAY      ChangeOrderAction = 1
+	ChangeOrderAction_CHANGE_ORDER_ACTION_SHIP     ChangeOrderAction = 2
+	ChangeOrderAction_CHANGE_ORDER_ACTION_COMPLETE ChangeOrderAction = 3
+	ChangeOrderAction_CHANGE_ORDER_ACTION_CANCEL   ChangeOrderAction = 4
+	ChangeOrderAction_CHANGE_ORDER_ACTION_REFUND   ChangeOrderAction = 5
+)
+
+// Enum value maps for ChangeOrderAction.
+var ChangeOrderAction_name = map[int32]string{
+	0: "CHANGE_ORDER_ACTION_UNKNOWN",
+	1: "CHANGE_ORDER_ACTION_PAY",
+	2: "CHANGE_ORDER_ACTION_SHIP",
+	3: "CHANGE_ORDER_ACTION_COMPLETE",
+	4: "CHANGE_ORDER_ACTION_CANCEL",
+	5: "CHANGE_ORDER_ACTION_REFUND",
+}
+
+var ChangeOrderAction_value = map[string]int32{
+	"CHANGE_ORDER_ACTION_UNKNOWN":  0,
+	"CHANGE_ORDER_ACTION_PAY":      1,
+	"CHANGE_ORDER_ACTION_SHIP":     2,
+	"CHANGE_ORDER_ACTION_COMPLETE": 3,
+	"CHANGE_ORDER_ACTION_CANCEL":   4,
+	"CHANGE_ORDER_ACTION_REFUND":   5,
+}
+
+func (x ChangeOrderAction) String() string {
+	s, ok := ChangeOrderAction_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+
 type ChangeOrderStatusReq struct {
-	OrderId     int64  `protobuf:"varint,1,opt,name=order_id" json:"order_id,omitempty"`
-	OrderStatus uint32 `protobuf:"varint,2,opt,name=order_status" json:"order_status,omitempty"`
+	OrderId int64             `protobuf:"varint,1,opt,name=order_id" json:"order_id,omitempty"`
+	Action  ChangeOrderAction `protobuf:"varint,2,opt,name=action" json:"action,omitempty"`
 }
 
 func (x *ChangeOrderStatusReq) Reset() { *x = ChangeOrderStatusReq{} }
@@ -27,14 +106,15 @@ func (x *ChangeOrderStatusReq) GetOrderId() int64 {
 	return 0
 }
 
-func (x *ChangeOrderStatusReq) GetOrderStatus() uint32 {
+func (x *ChangeOrderStatusReq) GetAction() ChangeOrderAction {
 	if x != nil {
-		return x.OrderStatus
+		return x.Action
 	}
-	return 0
+	return ChangeOrderAction_CHANGE_ORDER_ACTION_UNKNOWN
 }
 
 type ChangeOrderStatusResp struct {
+	Changed bool `protobuf:"varint,1,opt,name=changed" json:"changed,omitempty"`
 }
 
 func (x *ChangeOrderStatusResp) Reset() { *x = ChangeOrderStatusResp{} }
@@ -45,12 +125,20 @@ func (x *ChangeOrderStatusResp) Marshal(in []byte) ([]byte, error) {
 
 func (x *ChangeOrderStatusResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
 
+func (x *ChangeOrderStatusResp) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
 type Address struct {
 	StreetAddress string `protobuf:"bytes,1,opt,name=street_address" json:"street_address,omitempty"`
 	City          string `protobuf:"bytes,2,opt,name=city" json:"city,omitempty"`
 	State         string `protobuf:"bytes,3,opt,name=state" json:"state,omitempty"`
 	Country       string `protobuf:"bytes,4,opt,name=country" json:"country,omitempty"`
 	ZipCode       string `protobuf:"bytes,5,opt,name=zip_code" json:"zip_code,omitempty"`
+	Phone         string `protobuf:"bytes,6,opt,name=phone" json:"phone,omitempty"`
 }
 
 func (x *Address) Reset() { *x = Address{} }
@@ -94,13 +182,20 @@ func (x *Address) GetZipCode() string {
 	return ""
 }
 
-// 订单项：只存储商品ID、数量、价格快照（目的是审计，不冗余存储商品详情，展示时从Product服务查询）
+func (x *Address) GetPhone() string {
+	if x != nil {
+		return x.Phone
+	}
+	return ""
+}
+
 type OrderItem struct {
 	ProductId        int64  `protobuf:"varint,1,opt,name=product_id" json:"product_id,omitempty"`
 	Quantity         int64  `protobuf:"varint,2,opt,name=quantity" json:"quantity,omitempty"`
-	SnapshotPrice    int64  `protobuf:"varint,3,opt,name=snapshot_price" json:"snapshot_price,omitempty"` // 商品原始单价快照
+	SnapshotPrice    int64  `protobuf:"varint,3,opt,name=snapshot_price" json:"snapshot_price,omitempty"`
 	SnapshotCurrency string `protobuf:"bytes,4,opt,name=snapshot_currency" json:"snapshot_currency,omitempty"`
-	ConvertedPrice   int64  `protobuf:"varint,5,opt,name=converted_price" json:"converted_price,omitempty"` // 转换为支付货币类型的价格
+	ConvertedPrice   int64  `protobuf:"varint,5,opt,name=converted_price" json:"converted_price,omitempty"`
+	SkuId            int64  `protobuf:"varint,6,opt,name=sku_id" json:"sku_id,omitempty"`
 }
 
 func (x *OrderItem) Reset() { *x = OrderItem{} }
@@ -144,13 +239,23 @@ func (x *OrderItem) GetConvertedPrice() int64 {
 	return 0
 }
 
+func (x *OrderItem) GetSkuId() int64 {
+	if x != nil {
+		return x.SkuId
+	}
+	return 0
+}
+
 type CreateOrderReq struct {
-	UserId   int64        `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	Currency string       `protobuf:"bytes,2,opt,name=currency" json:"currency,omitempty"` // 用户选择的支付货币
-	Address  *Address     `protobuf:"bytes,3,opt,name=address" json:"address,omitempty"`
-	Phone    string       `protobuf:"bytes,4,opt,name=phone" json:"phone,omitempty"`
-	Items    []*OrderItem `protobuf:"bytes,5,rep,name=items" json:"items,omitempty"`
-	OrderId  int64        `protobuf:"varint,6,opt,name=order_id" json:"order_id,omitempty"` // checkout 预生成的订单ID
+	UserId        int64        `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
+	Currency      string       `protobuf:"bytes,2,opt,name=currency" json:"currency,omitempty"`
+	Address       *Address     `protobuf:"bytes,3,opt,name=address" json:"address,omitempty"`
+	Items         []*OrderItem `protobuf:"bytes,5,rep,name=items" json:"items,omitempty"`
+	OrderId       int64        `protobuf:"varint,6,opt,name=order_id" json:"order_id,omitempty"`
+	OrderKind     string       `protobuf:"bytes,7,opt,name=order_kind" json:"order_kind,omitempty"`
+	ActivityId    int64        `protobuf:"varint,8,opt,name=activity_id" json:"activity_id,omitempty"`
+	Remark        string       `protobuf:"bytes,9,opt,name=remark" json:"remark,omitempty"`
+	PayableAmount int64        `protobuf:"varint,10,opt,name=payable_amount" json:"payable_amount,omitempty"`
 }
 
 func (x *CreateOrderReq) Reset() { *x = CreateOrderReq{} }
@@ -180,13 +285,6 @@ func (x *CreateOrderReq) GetAddress() *Address {
 	return nil
 }
 
-func (x *CreateOrderReq) GetPhone() string {
-	if x != nil {
-		return x.Phone
-	}
-	return ""
-}
-
 func (x *CreateOrderReq) GetItems() []*OrderItem {
 	if x != nil {
 		return x.Items
@@ -197,6 +295,34 @@ func (x *CreateOrderReq) GetItems() []*OrderItem {
 func (x *CreateOrderReq) GetOrderId() int64 {
 	if x != nil {
 		return x.OrderId
+	}
+	return 0
+}
+
+func (x *CreateOrderReq) GetOrderKind() string {
+	if x != nil {
+		return x.OrderKind
+	}
+	return ""
+}
+
+func (x *CreateOrderReq) GetActivityId() int64 {
+	if x != nil {
+		return x.ActivityId
+	}
+	return 0
+}
+
+func (x *CreateOrderReq) GetRemark() string {
+	if x != nil {
+		return x.Remark
+	}
+	return ""
+}
+
+func (x *CreateOrderReq) GetPayableAmount() int64 {
+	if x != nil {
+		return x.PayableAmount
 	}
 	return 0
 }
@@ -216,6 +342,40 @@ func (x *CreateOrderResp) GetOrderId() int64 {
 		return x.OrderId
 	}
 	return 0
+}
+
+type GetOrderReq struct {
+	OrderId int64 `protobuf:"varint,1,opt,name=order_id" json:"order_id,omitempty"`
+}
+
+func (x *GetOrderReq) Reset() { *x = GetOrderReq{} }
+
+func (x *GetOrderReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *GetOrderReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *GetOrderReq) GetOrderId() int64 {
+	if x != nil {
+		return x.OrderId
+	}
+	return 0
+}
+
+type GetOrderResp struct {
+	Order *Order `protobuf:"bytes,1,opt,name=order" json:"order,omitempty"`
+}
+
+func (x *GetOrderResp) Reset() { *x = GetOrderResp{} }
+
+func (x *GetOrderResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *GetOrderResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *GetOrderResp) GetOrder() *Order {
+	if x != nil {
+		return x.Order
+	}
+	return nil
 }
 
 type ListOrderReq struct {
@@ -254,13 +414,16 @@ func (x *ListOrderReq) GetLimit() int32 {
 type Order struct {
 	OrderId     int64        `protobuf:"varint,1,opt,name=order_id" json:"order_id,omitempty"`
 	UserId      int64        `protobuf:"varint,2,opt,name=user_id" json:"user_id,omitempty"`
-	OrderStatus uint32       `protobuf:"varint,3,opt,name=order_status" json:"order_status,omitempty"` // 订单状态 0 - 待支付 1 - 支付成功 2 - 支付失败 3 - 取消订单
+	OrderStatus OrderStatus  `protobuf:"varint,3,opt,name=order_status" json:"order_status,omitempty"`
 	Items       []*OrderItem `protobuf:"bytes,4,rep,name=items" json:"items,omitempty"`
 	TotalAmount int64        `protobuf:"varint,5,opt,name=total_amount" json:"total_amount,omitempty"`
-	Currency    string       `protobuf:"bytes,6,opt,name=currency" json:"currency,omitempty"` // 订单支付货币
+	Currency    string       `protobuf:"bytes,6,opt,name=currency" json:"currency,omitempty"`
 	Address     *Address     `protobuf:"bytes,7,opt,name=address" json:"address,omitempty"`
-	Phone       string       `protobuf:"bytes,8,opt,name=phone" json:"phone,omitempty"`
 	CreatedAt   int64        `protobuf:"varint,9,opt,name=created_at" json:"created_at,omitempty"`
+	ExpireAt    int64        `protobuf:"varint,10,opt,name=expire_at" json:"expire_at,omitempty"`
+	OrderKind   string       `protobuf:"bytes,11,opt,name=order_kind" json:"order_kind,omitempty"`
+	ActivityId  int64        `protobuf:"varint,12,opt,name=activity_id" json:"activity_id,omitempty"`
+	Remark      string       `protobuf:"bytes,13,opt,name=remark" json:"remark,omitempty"`
 }
 
 func (x *Order) Reset() { *x = Order{} }
@@ -283,11 +446,11 @@ func (x *Order) GetUserId() int64 {
 	return 0
 }
 
-func (x *Order) GetOrderStatus() uint32 {
+func (x *Order) GetOrderStatus() OrderStatus {
 	if x != nil {
 		return x.OrderStatus
 	}
-	return 0
+	return OrderStatus_ORDER_STATUS_UNKNOWN
 }
 
 func (x *Order) GetItems() []*OrderItem {
@@ -318,13 +481,6 @@ func (x *Order) GetAddress() *Address {
 	return nil
 }
 
-func (x *Order) GetPhone() string {
-	if x != nil {
-		return x.Phone
-	}
-	return ""
-}
-
 func (x *Order) GetCreatedAt() int64 {
 	if x != nil {
 		return x.CreatedAt
@@ -332,8 +488,37 @@ func (x *Order) GetCreatedAt() int64 {
 	return 0
 }
 
+func (x *Order) GetExpireAt() int64 {
+	if x != nil {
+		return x.ExpireAt
+	}
+	return 0
+}
+
+func (x *Order) GetOrderKind() string {
+	if x != nil {
+		return x.OrderKind
+	}
+	return ""
+}
+
+func (x *Order) GetActivityId() int64 {
+	if x != nil {
+		return x.ActivityId
+	}
+	return 0
+}
+
+func (x *Order) GetRemark() string {
+	if x != nil {
+		return x.Remark
+	}
+	return ""
+}
+
 type ListOrderResp struct {
-	Orders []*Order `protobuf:"bytes,1,rep,name=orders" json:"orders,omitempty"`
+	Orders     []*Order `protobuf:"bytes,1,rep,name=orders" json:"orders,omitempty"`
+	NextCursor int64    `protobuf:"varint,2,opt,name=next_cursor" json:"next_cursor,omitempty"`
 }
 
 func (x *ListOrderResp) Reset() { *x = ListOrderResp{} }
@@ -349,8 +534,16 @@ func (x *ListOrderResp) GetOrders() []*Order {
 	return nil
 }
 
+func (x *ListOrderResp) GetNextCursor() int64 {
+	if x != nil {
+		return x.NextCursor
+	}
+	return 0
+}
+
 type OrderService interface {
 	CreateOrder(ctx context.Context, req *CreateOrderReq) (res *CreateOrderResp, err error)
 	ChangeOrderStatus(ctx context.Context, req *ChangeOrderStatusReq) (res *ChangeOrderStatusResp, err error)
+	GetOrder(ctx context.Context, req *GetOrderReq) (res *GetOrderResp, err error)
 	ListOrder(ctx context.Context, req *ListOrderReq) (res *ListOrderResp, err error)
 }

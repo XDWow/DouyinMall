@@ -3,88 +3,116 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
+
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"time"
 )
 
 type CreateOrderUseCase struct {
-	repo domain.OrderRepository
-	log  logger.LoggerV1
+	repo       domain.OrderRepository
+	delayQueue domain.DelayQueue
+	log        logger.LoggerV1
 }
 
-// cmd 为什么要多这一层：
-// 1. proto 是协议输入，来源不可信；
-// 2. domain 是业务事实，存在即合法；
-// 3. 校验与决策属于 usecase，而不是 handler 或 domain；
-//
-// 因此调用链为：
-//
-//	handler: proto -> cmd
-//	usecase: cmd -> domain
-//
-// 通过引入 cmd，
-// 将“记得校验 domain 合法性”的流程纪律，
-// 转换为“domain 类型即业务事实，一定合法”的类型级约束。
-//
-// 好处是：
-// - 多入口（HTTP / gRPC / MQ / Job）可复用 usecase；
-// - 公共代码抽取不会引入非法 domain；
-// - 开发者看到 domain 就可以确信其合法性。
-//
-// 总结：
-// cmd 是业务的统一入口命令
-// 所有入口只负责翻译
-// 所有校验和决策（业务相关）都集中在 usecase
-// domain 只承载已经成立的业务事实
 type CreateOrderCmd struct {
-	OrderID  int64 // checkout 预生成的雪花ID，为0则由DB自增
-	UserID   int64
-	Currency string
-	Phone    string
-	Address  domain.Address
-	Items    []domain.OrderItem
+	OrderID       int64
+	UserID        int64
+	Currency      string
+	Remark        string
+	Address       domain.Address
+	OrderKind     string
+	ActivityID    int64
+	PayableAmount int64
+	Items         []domain.OrderItem
 }
 
-func NewCreateOrderUseCase(
-	repo domain.OrderRepository,
-	log logger.LoggerV1,
-) *CreateOrderUseCase {
-	return &CreateOrderUseCase{repo: repo, log: log}
+func NewCreateOrderUseCase(repo domain.OrderRepository, delayQueue domain.DelayQueue, log logger.LoggerV1) *CreateOrderUseCase {
+	return &CreateOrderUseCase{
+		repo:       repo,
+		delayQueue: delayQueue,
+		log:        log,
+	}
 }
 
-func (uc *CreateOrderUseCase) Execute(
-	ctx context.Context,
-	cmd CreateOrderCmd,
-) (int64, error) {
-	// 校验并转换
+func (uc *CreateOrderUseCase) Execute(ctx context.Context, cmd CreateOrderCmd) (int64, error) {
 	if cmd.UserID <= 0 {
-		return 0, errors.New("无效用户，创建订单失败")
+		return 0, errors.New("invalid user id")
 	}
 	if len(cmd.Items) == 0 {
-		return 0, errors.New("订单为空，创建失败")
+		return 0, errors.New("order items are required")
 	}
-	order := orderDomainToCmd(cmd)
+	if normalizeOrderKind(cmd.OrderKind) == domain.OrderKindSeckill && cmd.ActivityID <= 0 {
+		return 0, errors.New("seckill order requires activity id")
+	}
 
+	order := toDomainOrder(cmd)
 	if err := uc.repo.Save(ctx, &order); err != nil {
 		uc.log.Error("保存订单失败", logger.Error(err))
 		return 0, err
 	}
 
+	go func(orderID int64, expireAt time.Time) {
+		if uc.delayQueue == nil {
+			return
+		}
+
+		queueCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		if err := uc.delayQueue.Enqueue(queueCtx, orderID, expireAt); err != nil {
+			uc.log.Warn("订单超时任务入队失败",
+				logger.Error(err),
+				logger.Int64("orderID", orderID))
+		}
+	}(order.ID, order.ExpireAt)
+
 	return order.ID, nil
 }
 
-func orderDomainToCmd(cmd CreateOrderCmd) domain.Order {
+func toDomainOrder(cmd CreateOrderCmd) domain.Order {
+	total := int64(0)
+	for _, item := range cmd.Items {
+		total += item.Price * item.Quantity
+	}
+
+	payable := cmd.PayableAmount
+	if payable <= 0 {
+		payable = total
+	}
+	discount := total - payable
+	if discount < 0 {
+		discount = 0
+	}
+
 	return domain.Order{
-		ID:     cmd.OrderID,
-		UserID: cmd.UserID,
-		Phone:  cmd.Phone,
-		Status: domain.OrderStatusCreated,
+		ID:         cmd.OrderID,
+		UserID:     cmd.UserID,
+		Remark:     cmd.Remark,
+		Status:     domain.OrderStatusCreated,
+		OrderKind:  normalizeOrderKind(cmd.OrderKind),
+		ActivityID: cmd.ActivityID,
+		TotalAmount: domain.Amount{
+			Currency: cmd.Currency,
+			Total:    total,
+		},
 		PayableAmount: domain.Amount{
 			Currency: cmd.Currency,
+			Total:    payable,
+		},
+		DiscountAmount: domain.Amount{
+			Currency: cmd.Currency,
+			Total:    discount,
 		},
 		Addr:       cmd.Address,
 		OrderItems: cmd.Items,
 		ExpireAt:   time.Now().Add(30 * time.Minute),
 	}
+}
+
+func normalizeOrderKind(orderKind string) string {
+	if orderKind == "" {
+		return domain.OrderKindDirectBuy
+	}
+	return orderKind
 }

@@ -4,56 +4,58 @@ package agent;
 
 option go_package = "agent/v1;agentv1";
 
-// AgentService AI 客服服务
+// 客服服务
 // 四阶段 Pipeline：会话加载 → 意图识别+Query改写 → RAG检索 → 回复生成
 service AgentService {
-  // SendMessage 处理用户消息，返回 AI 回复
+  // 处理用户消息，返回 AI 回复
   rpc SendMessage(ChatRequest) returns (ChatResponse);
 
-  // GetChatHistory 获取某个会话的对话历史（分页）
+  // 流式对话：Pipeline 阶段状态 + 逐字生成 + 调试信息
+  rpc SendMessageStream(ChatRequest) returns (stream ChatStreamChunk);
+
+  // 获取某个会话的对话历史（分页）
   rpc GetChatHistory(GetChatHistoryRequest) returns (GetChatHistoryResponse);
 
-  // CreateSession 创建新对话会话
+  // 创建新对话会话
   rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
 
-  // ListSessions 获取用户的会话列表
+  // 获取用户的会话列表
   rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
 
-  // ClearSession 清空会话（重新开始对话）
+  // 清空会话（重新开始对话）
   rpc ClearSession(ClearSessionRequest) returns (ClearSessionResponse);
 }
 
-// ==================== 核心对话 ====================
-
 message ChatRequest {
   string session_id = 1;
-  int64  user_id    = 2;           // int64 与其他服务统一
+  int64  user_id    = 2;
   string message    = 3;
-  string channel    = 4;           // web / app / miniprogram
 }
 
 message ChatResponse {
-  string                reply      = 1;  // AI 回复内容
-  IntentType            intent     = 2;  // 识别出的意图
-  float                 confidence = 3;  // 置信度 0-1
-  repeated KnowledgeRef knowledge  = 4;  // 命中的知识条目（透明可解释）
-  repeated ToolExec     tool_execs = 5;  // 本次触发的工具调用链（Phase 2）
-  PipelineDebug         debug      = 6;  // Pipeline 各阶段耗时（调试用）
+  string                reply              = 1;  // AI 回复内容
+  IntentType            intent             = 2;  // 识别出的意图
+  reserved               3;                      // 原 confidence 字段已移除（内部指标，由 Prometheus 记录，不对外暴露）
+  reserved              "confidence";
+  repeated KnowledgeRef knowledge          = 4;  // 命中的知识条目（透明可解释）
+  repeated ToolExec     tool_execs         = 5;  // 本次触发的工具调用链（Phase 2）
+  repeated string       suggested_questions = 6; // 主动推荐的关联问题（2~3 个）
+  HandoffSummary        handoff            = 7;  // 转人工交接摘要（仅转人工时附带）
 }
 
-// PipelineDebug 四阶段 Pipeline 可观测数据
-// 面试亮点：全链路耗时透视，直接返回给前端可视化
-message PipelineDebug {
-  int64 intent_ms       = 1;   // 意图识别耗时
-  int64 embed_ms        = 2;   // Embedding 耗时
-  int64 vector_search_ms = 3;  // Milvus 向量检索耗时
-  int64 rerank_ms       = 4;   // LLM 重排耗时
-  int64 generate_ms     = 5;   // 回复生成耗时
-  int64 tool_ms         = 6;   // 工具调用耗时（Phase 2）
-  int64 total_ms        = 7;   // 总耗时
-  int32 knowledge_hits  = 8;   // RAG 命中条数
-  bool  cache_hit       = 9;   // 是否命中语义缓存
-  string rewritten_query = 10; // Query 改写结果（调试用）
+// 流式回复单个分片
+// STAGE_UPDATE: Pipeline 阶段状态推送
+message ChatStreamChunk {
+  ChunkType     type       = 1;
+  string        text       = 2;  // TEXT_DELTA 时为文本增量
+  string        stage      = 3;  // STAGE_UPDATE 时标识当前阶段
+  ChatResponse  final      = 4;  // DONE 时携带完整响应（含 debug/handoff/suggested_questions）
+}
+
+enum ChunkType {
+  STAGE_UPDATE = 0;  // Pipeline 阶段状态推送
+  TEXT_DELTA   = 1;  // 回复文本增量（逐字/逐句）
+  DONE         = 2;  // 结束标记
 }
 
 // ==================== 会话管理 ====================
@@ -119,11 +121,22 @@ message Message {
   string      created_at = 7;
 }
 
+// HandoffSummary AI → 人工客服的结构化交接摘要
+// 让人工客服一眼看清 AI 已做的事和用户诉求项
+message HandoffSummary {
+  string            core_issue        = 1;  // 一句话概括用户核心诉求
+  repeated string   ai_actions        = 2;  // AI 已经做了什么
+  string            escalation_reason = 3;  // 为什么需要转人工
+  string            user_emotion      = 4;  // neutral/mild_frustration/angry/urgent
+  map<string,string> entities         = 5;  // 关键实体（订单号、商品名等）
+  reserved 6; reserved "confidence_trend";
+}
+
 // KnowledgeRef RAG 命中的知识条目引用
 message KnowledgeRef {
   string id        = 1;
   string title     = 2;
-  string snippet   = 3;  // 内容摘要片段（非全文）
+  string content   = 3;  // chunk 完整内容
   string category  = 4;  // faq / product / policy / promotion
   float  relevance = 5;  // 相关性得分
 }

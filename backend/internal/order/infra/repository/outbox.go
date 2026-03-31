@@ -19,7 +19,8 @@ func NewOutboxRepository(db *gorm.DB) domain.OutboxRepository {
 	}
 }
 
-func (repo *outboxRepository) Add(ctx context.Context, eventType string, payload any) error {
+func (repo *outboxRepository) Add(ctx context.Context, eventType string, payload any) (int64, error) {
+	conn := db.DBFromContext(ctx, repo.db)
 	data, _ := json.Marshal(payload)
 	model := db.OutboxEventModel{
 		EventType:  eventType,
@@ -27,14 +28,18 @@ func (repo *outboxRepository) Add(ctx context.Context, eventType string, payload
 		Status:     db.EventStatusPending,
 		RetryCount: 0,
 	}
-	return repo.db.WithContext(ctx).Create(&model).Error
+	if err := conn.Create(&model).Error; err != nil {
+		return 0, err
+	}
+	return model.ID, nil
 }
 
-func (repo *outboxRepository) BatchAdd(ctx context.Context, eventType string, payloads []any) error {
+func (repo *outboxRepository) BatchAdd(ctx context.Context, eventType string, payloads []any) ([]int64, error) {
 	if len(payloads) == 0 {
-		return nil
+		return nil, nil
 	}
 
+	conn := db.DBFromContext(ctx, repo.db)
 	models := make([]db.OutboxEventModel, 0, len(payloads))
 	for _, payload := range payloads {
 		data, _ := json.Marshal(payload)
@@ -49,12 +54,21 @@ func (repo *outboxRepository) BatchAdd(ctx context.Context, eventType string, pa
 	// 调用 GORM 的批量插入接口
 	// 批量插入的收益来自：减少 网络RTT / 事务 / 连接开销
 	// 风险来自单次 SQL 太大、锁时间太长，所以控制批量大小 100（经验值，可以压测调参）
-	return repo.db.WithContext(ctx).CreateInBatches(models, 100).Error
+	if err := conn.CreateInBatches(models, 100).Error; err != nil {
+		return nil, err
+	}
+
+	ids := make([]int64, len(models))
+	for i := range models {
+		ids[i] = models[i].ID
+	}
+	return ids, nil
 }
 
 func (repo *outboxRepository) ListPending(ctx context.Context, offset, limit int) ([]domain.OutboxEvent, error) {
+	conn := db.DBFromContext(ctx, repo.db)
 	models := make([]db.OutboxEventModel, 0, limit)
-	res := repo.db.WithContext(ctx).
+	res := conn.
 		Where("status = ?", db.EventStatusPending).
 		Offset(offset).
 		Limit(limit).
@@ -75,7 +89,7 @@ func (repo *outboxRepository) ListPending(ctx context.Context, offset, limit int
 }
 
 func (repo *outboxRepository) MarkSent(ctx context.Context, id int64) error {
-	res := repo.db.WithContext(ctx).
+	res := db.DBFromContext(ctx, repo.db).
 		Where("id = ?", id).
 		Update("status", db.EventStatusSent)
 	if res.Error != nil {
@@ -91,8 +105,8 @@ func (repo *outboxRepository) BatchMarkSent(ctx context.Context, ids []int64) er
 	if len(ids) == 0 {
 		return nil
 	}
-	
-	res := repo.db.WithContext(ctx).
+
+	res := db.DBFromContext(ctx, repo.db).
 		Model(&db.OutboxEventModel{}).
 		Where("id IN ?", ids).
 		Update("status", db.EventStatusSent)
@@ -103,7 +117,7 @@ func (repo *outboxRepository) BatchMarkSent(ctx context.Context, ids []int64) er
 }
 
 func (repo *outboxRepository) MarkFailed(ctx context.Context, id int64) error {
-	res := repo.db.WithContext(ctx).
+	res := db.DBFromContext(ctx, repo.db).
 		Where("id = ?", id).
 		Update("status", db.EventStatusFailed)
 	if res.Error != nil {
@@ -117,10 +131,27 @@ func (repo *outboxRepository) MarkFailed(ctx context.Context, id int64) error {
 
 func (repo *outboxRepository) IncreaseRetry(ctx context.Context, id int64) (int, error) {
 	var retry int
-	err := repo.db.WithContext(ctx).
-		Where("id = ?", id).
-		Update("retry_count", gorm.Expr("retry_count + ?", 1)). // 原子+1
-		Scan(&retry).Error
+	err := db.DBFromContext(ctx, repo.db).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&db.OutboxEventModel{}).
+			Where("id = ?", id).
+			Update("retry_count", gorm.Expr("retry_count + ?", 1))
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domain.ErrRecordNotFound
+		}
+
+		var model db.OutboxEventModel
+		if err := tx.Select("retry_count").First(&model, id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return domain.ErrRecordNotFound
+			}
+			return err
+		}
+		retry = model.RetryCount
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}

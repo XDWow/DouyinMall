@@ -3,11 +3,14 @@ package mq
 import (
 	"context"
 	"encoding/json"
+
 	"github.com/IBM/sarama"
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 )
 
-const topicUpdateOrderStatus = "order_status_update"
+const (
+	topicUpdateOrderStatus = "order_status_update"
+)
 
 type SaramaProducer struct {
 	producer sarama.SyncProducer
@@ -28,8 +31,6 @@ func (p *SaramaProducer) SendMessage(ctx context.Context, evt domain.OrderStatus
 	return err
 }
 
-// SendMessages 批量发送消息（性能优化在发送层，保持消息独立性）
-// 返回每个消息的发送结果，失败被隔离而不是放大
 func (p *SaramaProducer) SendMessages(ctx context.Context, events []domain.OrderStatusUpdateEvent) []error {
 	if len(events) == 0 {
 		return nil
@@ -43,31 +44,32 @@ func (p *SaramaProducer) SendMessages(ctx context.Context, events []domain.Order
 			Value: sarama.StringEncoder(data),
 		})
 	}
+	return sendMessages(p.producer, messages)
+}
 
-	err := p.producer.SendMessages(messages) // mq批量发送api，以下三种结果：
-	// 全部成功
+func sendMessages(producer sarama.SyncProducer, messages []*sarama.ProducerMessage) []error {
+	err := producer.SendMessages(messages)
 	if err == nil {
 		return nil
 	}
 
 	if errs, ok := err.(sarama.ProducerErrors); ok {
-		// 部分失败或全部失败
-		results := make([]error, len(events))
+		results := make([]error, len(messages))
 		for _, e := range errs {
-			if e.Msg != nil {
-				for i, msg := range messages {
-					if msg == e.Msg {
-						results[i] = e.Err
-						break
-					}
+			if e.Msg == nil {
+				continue
+			}
+			for i, msg := range messages {
+				if msg == e.Msg {
+					results[i] = e.Err
+					break
 				}
 			}
 		}
 		return results
 	}
 
-	// 可能 kafka 都挂了，根本没发（非sarama.ProducerErrors），导致的全部失败
-	results := make([]error, len(events))
+	results := make([]error, len(messages))
 	for i := range results {
 		results[i] = err
 	}

@@ -29,18 +29,18 @@ type CouponIntegrationSuite struct {
 	db             *gorm.DB
 
 	// Repository
-	couponRepo      domain.CouponRepository
-	templateRepo    domain.CouponTemplateRepository
-	operationRepo   domain.CouponOperationRepository
+	couponRepo    domain.CouponRepository
+	templateRepo  domain.CouponTemplateRepository
+	operationRepo domain.CouponOperationRepository
 
 	// UseCase
-	issueCouponUC         *usecase.IssueCouponUseCase
-	listUserCouponsUC     *usecase.ListUserCouponsUseCase
-	evaluateUC            *usecase.EvaluateOrderCouponsUseCase
-	reserveUC             *usecase.ReserveCouponUseCase
-	commitUC              *usecase.CommitCouponUseCase
-	releaseUC             *usecase.ReleaseCouponUseCase
-	refundUC              *usecase.RefundCouponUseCase
+	issueCouponUC     *usecase.IssueCouponUseCase
+	listUserCouponsUC *usecase.ListUserCouponsUseCase
+	evaluateUC        *usecase.EvaluateOrderCouponsUseCase
+	reserveUC         *usecase.ReserveCouponUseCase
+	commitUC          *usecase.CommitCouponUseCase
+	releaseUC         *usecase.ReleaseCouponUseCase
+	refundUC          *usecase.RefundCouponUseCase
 
 	// Job
 	expireJob *job.ExpireCouponJob
@@ -310,6 +310,7 @@ func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAndRelease() {
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(coupons))
 	assert.Equal(s.T(), int64(0), coupons[0].OrderID)
+	assert.True(s.T(), coupons[0].UsedAt.IsZero())
 
 	s.T().Log("✅ 预扣-释放流程测试通过")
 }
@@ -349,11 +350,59 @@ func (s *CouponIntegrationSuite) TestCouponLifecycle_CommitAndRefund() {
 	coupons, _, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusUnused, 1, 10)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(coupons))
+	assert.Equal(s.T(), int64(0), coupons[0].OrderID)
+	assert.True(s.T(), coupons[0].UsedAt.IsZero())
 
 	s.T().Log("✅ 确认-退还流程测试通过")
 }
 
 // TestEvaluateOrderCoupons 测试评估订单可用券
+func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAllOrNothing() {
+	ctx := context.Background()
+	orderID := int64(66666)
+
+	output1, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
+		UserID:      s.testUserID,
+		TemplateID:  s.testTemplateID,
+		OperationID: "coupon:test:reserve_all_or_nothing_1",
+	})
+	require.NoError(s.T(), err)
+
+	output2, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
+		UserID:      s.testUserID,
+		TemplateID:  s.testTemplateID,
+		OperationID: "coupon:test:reserve_all_or_nothing_2",
+	})
+	require.NoError(s.T(), err)
+
+	_, err = s.reserveUC.Execute(ctx, usecase.ReserveCouponInput{
+		UserID:    s.testUserID,
+		CouponIDs: []int64{output1.CouponID},
+		OrderID:   55555,
+	})
+	require.NoError(s.T(), err)
+
+	reserveOutput, err := s.reserveUC.Execute(ctx, usecase.ReserveCouponInput{
+		UserID:    s.testUserID,
+		CouponIDs: []int64{output1.CouponID, output2.CouponID},
+		OrderID:   orderID,
+	})
+	require.NoError(s.T(), err)
+	assert.False(s.T(), reserveOutput.Success)
+	assert.Len(s.T(), reserveOutput.Failures, 1)
+	assert.Equal(s.T(), output1.CouponID, reserveOutput.Failures[0].CouponID)
+
+	lockedCoupons, _, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusLocked, 1, 10)
+	require.NoError(s.T(), err)
+	assert.Len(s.T(), lockedCoupons, 1)
+	assert.Equal(s.T(), int64(55555), lockedCoupons[0].OrderID)
+
+	unusedCoupons, _, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusUnused, 1, 10)
+	require.NoError(s.T(), err)
+	assert.Len(s.T(), unusedCoupons, 1)
+	assert.Equal(s.T(), output2.CouponID, unusedCoupons[0].ID)
+}
+
 func (s *CouponIntegrationSuite) TestEvaluateOrderCoupons() {
 	ctx := context.Background()
 

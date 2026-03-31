@@ -6,6 +6,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/db"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
+	"github.com/XDWow/DouyinMall/backend/internal/order/infra/queue"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/order/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/order/job"
@@ -16,54 +17,51 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+type ConsumerComponent interface {
+	Start() error
+}
+
 type App struct {
-	Server server.Server
-	Cron   *cron.Cron
+	Server    server.Server
+	Cron      *cron.Cron
+	Consumers []ConsumerComponent
 }
 
 func InitApp() *App {
 	wire.Build(
-		// 基础设施层
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitRedis,
+		ioc.InitPaymentClient,
 		ioc.InitKafkaClient,
 		ioc.InitKafkaSyncProducer,
-		ioc.InitInventoryClient, // 库存服务RPC客户端
-
-		// DB层
 		db.NewGormTxManager,
-
-		// Cache层
 		cache.NewRedisOrderCache,
-
-		// MQ层
 		mq.NewSaramaProducer,
-
-		// Repository层
+		queue.NewOrderDelayQueue,
 		repository.NewOrderRepository,
 		repository.NewOutboxRepository,
-
-		// UseCase层
 		usecase.NewCreateOrderUseCase,
+		usecase.NewGetOrderUseCase,
 		usecase.NewListUserOrderUseCase,
 		usecase.NewChangeOrderStatusUseCase,
 		usecase.NewBatchCancelOrderUseCase,
-
-		// Job层
+		job.NewDispatchOrderTimeoutJob,
 		job.NewCheckExpiredJob,
 		job.NewOutboxWorkerJob,
 		ioc.InitJobs,
-
-		// Transport层（Handler）
 		grpc.NewOrderHandler,
-
-		// gRPC Server
 		ioc.InitGRPCServer,
-
-		// 组装App
-		wire.Struct(new(App), "*"),
+		newApp,
 	)
 
 	return &App{}
+}
+
+func newApp(server server.Server, cron *cron.Cron) *App {
+	return &App{
+		Server:    server,
+		Cron:      cron,
+		Consumers: nil,
+	}
 }

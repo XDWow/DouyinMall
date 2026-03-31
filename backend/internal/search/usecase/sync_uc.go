@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/XDWow/DouyinMall/backend/internal/search/domain"
-	"github.com/XDWow/DouyinMall/backend/internal/search/infra/ai"
+	"github.com/XDWow/DouyinMall/backend/pkg/ai"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 

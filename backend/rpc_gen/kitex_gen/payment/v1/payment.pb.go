@@ -19,7 +19,6 @@ const (
 	PaymentStatus_PaymentStatusRefund  PaymentStatus = 4
 )
 
-// Enum value maps for PaymentStatus.
 var PaymentStatus_name = map[int32]string{
 	0: "PaymentStatusUnknown",
 	1: "PaymentStatusInit",
@@ -45,33 +44,28 @@ func (x PaymentStatus) String() string {
 }
 
 type NativePrePayRequest struct {
-	// 带一个 type，标记是扫码支付，还是 js 跳转支付，还是唤醒本地 APP
-	// type = "native"
 	Amt         *Amount `protobuf:"bytes,1,opt,name=amt" json:"amt,omitempty"`
 	BizTradeNo  string  `protobuf:"bytes,2,opt,name=biz_trade_no" json:"biz_trade_no,omitempty"`
 	Description string  `protobuf:"bytes,3,opt,name=description" json:"description,omitempty"`
 }
 
 func (x *NativePrePayRequest) Reset() { *x = NativePrePayRequest{} }
-
-func (x *NativePrePayRequest) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
-
+func (x *NativePrePayRequest) Marshal(in []byte) ([]byte, error) {
+	return prutal.MarshalAppend(in, x)
+}
 func (x *NativePrePayRequest) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
-
 func (x *NativePrePayRequest) GetAmt() *Amount {
 	if x != nil {
 		return x.Amt
 	}
 	return nil
 }
-
 func (x *NativePrePayRequest) GetBizTradeNo() string {
 	if x != nil {
 		return x.BizTradeNo
 	}
 	return ""
 }
-
 func (x *NativePrePayRequest) GetDescription() string {
 	if x != nil {
 		return x.Description
@@ -79,17 +73,15 @@ func (x *NativePrePayRequest) GetDescription() string {
 	return ""
 }
 
-// 支付方式不同，所以响应的含义也会有不同，这里就是一个能打开支付二维码的 url
 type NativePrePayResponse struct {
 	CodeUrl string `protobuf:"bytes,1,opt,name=code_url" json:"code_url,omitempty"`
 }
 
 func (x *NativePrePayResponse) Reset() { *x = NativePrePayResponse{} }
-
-func (x *NativePrePayResponse) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
-
+func (x *NativePrePayResponse) Marshal(in []byte) ([]byte, error) {
+	return prutal.MarshalAppend(in, x)
+}
 func (x *NativePrePayResponse) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
-
 func (x *NativePrePayResponse) GetCodeUrl() string {
 	if x != nil {
 		return x.CodeUrl
@@ -103,18 +95,14 @@ type Amount struct {
 }
 
 func (x *Amount) Reset() { *x = Amount{} }
-
 func (x *Amount) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
-
 func (x *Amount) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
-
 func (x *Amount) GetTotal() int64 {
 	if x != nil {
 		return x.Total
 	}
 	return 0
 }
-
 func (x *Amount) GetCurrency() string {
 	if x != nil {
 		return x.Currency
@@ -122,17 +110,15 @@ func (x *Amount) GetCurrency() string {
 	return ""
 }
 
-// 业务方的唯一 no，通用
 type GetPaymentRequest struct {
 	BizTradeNo string `protobuf:"bytes,1,opt,name=biz_trade_no" json:"biz_trade_no,omitempty"`
 }
 
 func (x *GetPaymentRequest) Reset() { *x = GetPaymentRequest{} }
-
-func (x *GetPaymentRequest) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
-
+func (x *GetPaymentRequest) Marshal(in []byte) ([]byte, error) {
+	return prutal.MarshalAppend(in, x)
+}
 func (x *GetPaymentRequest) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
-
 func (x *GetPaymentRequest) GetBizTradeNo() string {
 	if x != nil {
 		return x.BizTradeNo
@@ -141,16 +127,14 @@ func (x *GetPaymentRequest) GetBizTradeNo() string {
 }
 
 type GetPaymentResponse struct {
-	// 有需要再加字段
 	Status PaymentStatus `protobuf:"varint,1,opt,name=status" json:"status,omitempty"`
 }
 
 func (x *GetPaymentResponse) Reset() { *x = GetPaymentResponse{} }
-
-func (x *GetPaymentResponse) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
-
+func (x *GetPaymentResponse) Marshal(in []byte) ([]byte, error) {
+	return prutal.MarshalAppend(in, x)
+}
 func (x *GetPaymentResponse) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
-
 func (x *GetPaymentResponse) GetStatus() PaymentStatus {
 	if x != nil {
 		return x.Status
@@ -158,7 +142,47 @@ func (x *GetPaymentResponse) GetStatus() PaymentStatus {
 	return PaymentStatus_PaymentStatusUnknown
 }
 
+type ConfirmPaymentRequest struct {
+	BizTradeNo string `protobuf:"bytes,1,opt,name=biz_trade_no" json:"biz_trade_no,omitempty"`
+}
+
+func (x *ConfirmPaymentRequest) Reset() { *x = ConfirmPaymentRequest{} }
+func (x *ConfirmPaymentRequest) Marshal(in []byte) ([]byte, error) {
+	return prutal.MarshalAppend(in, x)
+}
+func (x *ConfirmPaymentRequest) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+func (x *ConfirmPaymentRequest) GetBizTradeNo() string {
+	if x != nil {
+		return x.BizTradeNo
+	}
+	return ""
+}
+
+type ConfirmPaymentResponse struct {
+	Status PaymentStatus `protobuf:"varint,1,opt,name=status" json:"status,omitempty"`
+	TxnId  string        `protobuf:"bytes,2,opt,name=txn_id" json:"txn_id,omitempty"`
+}
+
+func (x *ConfirmPaymentResponse) Reset() { *x = ConfirmPaymentResponse{} }
+func (x *ConfirmPaymentResponse) Marshal(in []byte) ([]byte, error) {
+	return prutal.MarshalAppend(in, x)
+}
+func (x *ConfirmPaymentResponse) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+func (x *ConfirmPaymentResponse) GetStatus() PaymentStatus {
+	if x != nil {
+		return x.Status
+	}
+	return PaymentStatus_PaymentStatusUnknown
+}
+func (x *ConfirmPaymentResponse) GetTxnId() string {
+	if x != nil {
+		return x.TxnId
+	}
+	return ""
+}
+
 type PaymentService interface {
 	NativePrepay(ctx context.Context, req *NativePrePayRequest) (res *NativePrePayResponse, err error)
 	GetPayment(ctx context.Context, req *GetPaymentRequest) (res *GetPaymentResponse, err error)
+	ConfirmPayment(ctx context.Context, req *ConfirmPaymentRequest) (res *ConfirmPaymentResponse, err error)
 }

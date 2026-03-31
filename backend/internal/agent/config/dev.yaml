@@ -1,30 +1,54 @@
 grpc:
   server:
     port: 8087
-    name: "agent"
+    name: "agent-service"
 
 etcd:
   endpoints:
-    - "localhost:2379"
+    - "douyinmall-etcd:2379"
 
 db:
-  dsn: "root:root@tcp(localhost:3306)/douyinmall_agent?charset=utf8mb4&parseTime=True&loc=Local"
+  dsn: "root:root@tcp(douyinmall-mysql:3306)/douyinmall_agent?charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "localhost:6379"
+  addr: "douyinmall-redis:6379"
 
 llm:
-  base_url: "https://api.openai.com/v1"
-  api_key: "${LLM_API_KEY}"
-  chat_model: "gpt-4o-mini"
-  timeout_seconds: 30
+  base_url: "https://apis.iflow.cn/v1"
+  api_key: ""  # 由环境变量 LLM_API_KEY 注入
+  nodes:
+    - name: "qwen3-max"
+      timeout_seconds: 60
+      rpm: 60
+      failure_threshold: 5
+      cooldown_seconds: 30
+    - name: "qwen3-max-preview"
+      timeout_seconds: 30
+      rpm: 120
+      failure_threshold: 3
+      cooldown_seconds: 15
 
 embedding:
-  base_url: "https://api.openai.com/v1"
-  api_key: "${EMBEDDING_API_KEY}"
-  model: "text-embedding-3-small"
+  base_url: "http://host.docker.internal:11434/api/embed"
+  model: "qwen3-embedding:0.6b"
+  timeout_seconds: 10
+
+reranker:
+  base_url: "https://api.siliconflow.cn/v1"
+  api_key: ""  # 由环境变量 SILICONFLOW_API_KEY 注入
+  model: "BAAI/bge-reranker-v2-m3"
   timeout_seconds: 10
 
 milvus:
-  addr: "localhost:19530"
-  collection: "agent_knowledge"
+  addr: "douyinmall-milvus:19530"
+
+kafka:
+  brokers:
+    - "douyinmall-kafka:9092"
+  producer_retry_max: 3
+  consumer_offsets_initial: "newest"
+
+# MCP 工具服务器（Tool Server）
+mcp:
+  endpoint: "http://douyinmall-mcpServer:9090/mcp"
+  timeout: "10s"

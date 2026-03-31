@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package seckill.v1;
+
+option go_package = "seckill/v1;seckillv1";
+
+service SeckillService {
+  rpc CreateActivity(CreateActivityReq) returns (CreateActivityResp);
+  rpc UpdateActivityStatus(UpdateActivityStatusReq) returns (UpdateActivityStatusResp);
+  rpc GetActivity(GetActivityReq) returns (GetActivityResp);
+  rpc SubmitSeckill(SubmitSeckillReq) returns (SubmitSeckillResp);
+  rpc GetSeckillResult(GetSeckillResultReq) returns (GetSeckillResultResp);
+}
+
+message SeckillActivity {
+  int64 id = 1;
+  string activity_name = 2;
+  int64 product_id = 3;
+  int64 sku_id = 4;
+  int64 seckill_price = 5;
+  int32 total_stock = 6;
+  int32 available_stock = 7;
+  int64 start_time = 8;
+  int64 end_time = 9;
+  string status = 10;
+  int32 limit_per_user = 11;
+}
+
+message CreateActivityReq {
+  string activity_name = 1;
+  int64 product_id = 2;
+  int64 sku_id = 3;
+  int64 seckill_price = 4;
+  int32 total_stock = 5;
+  int64 start_time = 6;
+  int64 end_time = 7;
+  string status = 8;
+  int32 limit_per_user = 9;
+}
+
+message CreateActivityResp {
+  int64 activity_id = 1;
+}
+
+message UpdateActivityStatusReq {
+  int64 activity_id = 1;
+  string status = 2;
+}
+
+message UpdateActivityStatusResp {}
+
+message GetActivityReq {
+  int64 activity_id = 1;
+}
+
+message GetActivityResp {
+  SeckillActivity activity = 1;
+}
+
+message SubmitSeckillReq {
+  int64 activity_id = 1;
+  int64 user_id = 2;
+}
+
+message SubmitSeckillResp {
+  string request_no = 1;
+  string status = 2;
+  string message = 3;
+}
+
+message GetSeckillResultReq {
+  string request_no = 1;
+}
+
+message GetSeckillResultResp {
+  string request_no = 1;
+  string status = 2;
+  int64 order_id = 3;
+  string fail_reason = 4;
+}

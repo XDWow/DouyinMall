@@ -5,6 +5,7 @@ package paymentservice
 import (
 	"context"
 	"errors"
+
 	paymentv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1"
 	v1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1"
 	client "github.com/cloudwego/kitex/client"
@@ -16,17 +17,12 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
-	"NativePrepay": kitex.NewMethodInfo(
-		nativePrepayHandler,
-		newNativePrepayArgs,
-		newNativePrepayResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingUnary),
-	),
-	"GetPayment": kitex.NewMethodInfo(
-		getPaymentHandler,
-		newGetPaymentArgs,
-		newGetPaymentResult,
+	"NativePrepay": kitex.NewMethodInfo(nativePrepayHandler, newNativePrepayArgs, newNativePrepayResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
+	"GetPayment":   kitex.NewMethodInfo(getPaymentHandler, newGetPaymentArgs, newGetPaymentResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
+	"ConfirmPayment": kitex.NewMethodInfo(
+		confirmPaymentHandler,
+		newConfirmPaymentArgs,
+		newConfirmPaymentResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingUnary),
 	),
@@ -38,33 +34,13 @@ var (
 	paymentServiceServiceInfoForStreamClient = NewServiceInfoForStreamClient()
 )
 
-// for server
-func serviceInfo() *kitex.ServiceInfo {
-	return paymentServiceServiceInfo
-}
+func serviceInfo() *kitex.ServiceInfo { return paymentServiceServiceInfo }
+func serviceInfoForStreamClient() *kitex.ServiceInfo { return paymentServiceServiceInfoForStreamClient }
+func serviceInfoForClient() *kitex.ServiceInfo { return paymentServiceServiceInfoForClient }
 
-// for stream client
-func serviceInfoForStreamClient() *kitex.ServiceInfo {
-	return paymentServiceServiceInfoForStreamClient
-}
-
-// for client
-func serviceInfoForClient() *kitex.ServiceInfo {
-	return paymentServiceServiceInfoForClient
-}
-
-// NewServiceInfo creates a new ServiceInfo containing all methods
-func NewServiceInfo() *kitex.ServiceInfo {
-	return newServiceInfo(false, true, true)
-}
-
-// NewServiceInfo creates a new ServiceInfo containing non-streaming methods
-func NewServiceInfoForClient() *kitex.ServiceInfo {
-	return newServiceInfo(false, false, true)
-}
-func NewServiceInfoForStreamClient() *kitex.ServiceInfo {
-	return newServiceInfo(true, true, false)
-}
+func NewServiceInfo() *kitex.ServiceInfo { return newServiceInfo(false, true, true) }
+func NewServiceInfoForClient() *kitex.ServiceInfo { return newServiceInfo(false, false, true) }
+func NewServiceInfoForStreamClient() *kitex.ServiceInfo { return newServiceInfo(true, true, false) }
 
 func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreamingMethods bool) *kitex.ServiceInfo {
 	serviceName := "PaymentService"
@@ -79,13 +55,11 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		}
 		methods[name] = m
 	}
-	extra := map[string]interface{}{
-		"PackageName": "payment.v1",
-	}
+	extra := map[string]interface{}{"PackageName": "payment.v1"}
 	if hasStreaming {
 		extra["streaming"] = hasStreaming
 	}
-	svcInfo := &kitex.ServiceInfo{
+	return &kitex.ServiceInfo{
 		ServiceName:     serviceName,
 		HandlerType:     handlerType,
 		Methods:         methods,
@@ -93,7 +67,6 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		KiteXGenVersion: "v0.15.4",
 		Extra:           extra,
 	}
-	return svcInfo
 }
 
 func nativePrepayHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -114,97 +87,11 @@ func nativePrepayHandler(ctx context.Context, handler interface{}, arg, result i
 		if err != nil {
 			return err
 		}
-		realResult := result.(*NativePrepayResult)
-		realResult.Success = success
+		result.(*NativePrepayResult).Success = success
 		return nil
 	default:
 		return errInvalidMessageType
 	}
-}
-func newNativePrepayArgs() interface{} {
-	return &NativePrepayArgs{}
-}
-
-func newNativePrepayResult() interface{} {
-	return &NativePrepayResult{}
-}
-
-type NativePrepayArgs struct {
-	Req *v1.NativePrePayRequest
-}
-
-func (p *NativePrepayArgs) Marshal(out []byte) ([]byte, error) {
-	if !p.IsSetReq() {
-		return out, nil
-	}
-	return proto.Marshal(p.Req)
-}
-
-func (p *NativePrepayArgs) Unmarshal(in []byte) error {
-	msg := new(v1.NativePrePayRequest)
-	if err := proto.Unmarshal(in, msg); err != nil {
-		return err
-	}
-	p.Req = msg
-	return nil
-}
-
-var NativePrepayArgs_Req_DEFAULT *v1.NativePrePayRequest
-
-func (p *NativePrepayArgs) GetReq() *v1.NativePrePayRequest {
-	if !p.IsSetReq() {
-		return NativePrepayArgs_Req_DEFAULT
-	}
-	return p.Req
-}
-
-func (p *NativePrepayArgs) IsSetReq() bool {
-	return p.Req != nil
-}
-
-func (p *NativePrepayArgs) GetFirstArgument() interface{} {
-	return p.Req
-}
-
-type NativePrepayResult struct {
-	Success *v1.NativePrePayResponse
-}
-
-var NativePrepayResult_Success_DEFAULT *v1.NativePrePayResponse
-
-func (p *NativePrepayResult) Marshal(out []byte) ([]byte, error) {
-	if !p.IsSetSuccess() {
-		return out, nil
-	}
-	return proto.Marshal(p.Success)
-}
-
-func (p *NativePrepayResult) Unmarshal(in []byte) error {
-	msg := new(v1.NativePrePayResponse)
-	if err := proto.Unmarshal(in, msg); err != nil {
-		return err
-	}
-	p.Success = msg
-	return nil
-}
-
-func (p *NativePrepayResult) GetSuccess() *v1.NativePrePayResponse {
-	if !p.IsSetSuccess() {
-		return NativePrepayResult_Success_DEFAULT
-	}
-	return p.Success
-}
-
-func (p *NativePrepayResult) SetSuccess(x interface{}) {
-	p.Success = x.(*v1.NativePrePayResponse)
-}
-
-func (p *NativePrepayResult) IsSetSuccess() bool {
-	return p.Success != nil
-}
-
-func (p *NativePrepayResult) GetResult() interface{} {
-	return p.Success
 }
 
 func getPaymentHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -225,32 +112,91 @@ func getPaymentHandler(ctx context.Context, handler interface{}, arg, result int
 		if err != nil {
 			return err
 		}
-		realResult := result.(*GetPaymentResult)
-		realResult.Success = success
+		result.(*GetPaymentResult).Success = success
 		return nil
 	default:
 		return errInvalidMessageType
 	}
 }
-func newGetPaymentArgs() interface{} {
-	return &GetPaymentArgs{}
+
+func confirmPaymentHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	switch s := arg.(type) {
+	case *streaming.Args:
+		st := s.Stream
+		req := new(v1.ConfirmPaymentRequest)
+		if err := st.RecvMsg(req); err != nil {
+			return err
+		}
+		resp, err := handler.(paymentv1.PaymentService).ConfirmPayment(ctx, req)
+		if err != nil {
+			return err
+		}
+		return st.SendMsg(resp)
+	case *ConfirmPaymentArgs:
+		success, err := handler.(paymentv1.PaymentService).ConfirmPayment(ctx, s.Req)
+		if err != nil {
+			return err
+		}
+		result.(*ConfirmPaymentResult).Success = success
+		return nil
+	default:
+		return errInvalidMessageType
+	}
 }
 
-func newGetPaymentResult() interface{} {
-	return &GetPaymentResult{}
+func newNativePrepayArgs() interface{}   { return &NativePrepayArgs{} }
+func newNativePrepayResult() interface{} { return &NativePrepayResult{} }
+func newGetPaymentArgs() interface{}     { return &GetPaymentArgs{} }
+func newGetPaymentResult() interface{}   { return &GetPaymentResult{} }
+func newConfirmPaymentArgs() interface{} { return &ConfirmPaymentArgs{} }
+func newConfirmPaymentResult() interface{} {
+	return &ConfirmPaymentResult{}
 }
 
-type GetPaymentArgs struct {
-	Req *v1.GetPaymentRequest
-}
+type NativePrepayArgs struct{ Req *v1.NativePrePayRequest }
 
-func (p *GetPaymentArgs) Marshal(out []byte) ([]byte, error) {
-	if !p.IsSetReq() {
+func (p *NativePrepayArgs) Marshal(out []byte) ([]byte, error) {
+	if p.Req == nil {
 		return out, nil
 	}
 	return proto.Marshal(p.Req)
 }
+func (p *NativePrepayArgs) Unmarshal(in []byte) error {
+	msg := new(v1.NativePrePayRequest)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Req = msg
+	return nil
+}
+func (p *NativePrepayArgs) GetFirstArgument() interface{} { return p.Req }
 
+type NativePrepayResult struct{ Success *v1.NativePrePayResponse }
+
+func (p *NativePrepayResult) Marshal(out []byte) ([]byte, error) {
+	if p.Success == nil {
+		return out, nil
+	}
+	return proto.Marshal(p.Success)
+}
+func (p *NativePrepayResult) Unmarshal(in []byte) error {
+	msg := new(v1.NativePrePayResponse)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Success = msg
+	return nil
+}
+func (p *NativePrepayResult) GetResult() interface{} { return p.Success }
+
+type GetPaymentArgs struct{ Req *v1.GetPaymentRequest }
+
+func (p *GetPaymentArgs) Marshal(out []byte) ([]byte, error) {
+	if p.Req == nil {
+		return out, nil
+	}
+	return proto.Marshal(p.Req)
+}
 func (p *GetPaymentArgs) Unmarshal(in []byte) error {
 	msg := new(v1.GetPaymentRequest)
 	if err := proto.Unmarshal(in, msg); err != nil {
@@ -259,37 +205,16 @@ func (p *GetPaymentArgs) Unmarshal(in []byte) error {
 	p.Req = msg
 	return nil
 }
+func (p *GetPaymentArgs) GetFirstArgument() interface{} { return p.Req }
 
-var GetPaymentArgs_Req_DEFAULT *v1.GetPaymentRequest
-
-func (p *GetPaymentArgs) GetReq() *v1.GetPaymentRequest {
-	if !p.IsSetReq() {
-		return GetPaymentArgs_Req_DEFAULT
-	}
-	return p.Req
-}
-
-func (p *GetPaymentArgs) IsSetReq() bool {
-	return p.Req != nil
-}
-
-func (p *GetPaymentArgs) GetFirstArgument() interface{} {
-	return p.Req
-}
-
-type GetPaymentResult struct {
-	Success *v1.GetPaymentResponse
-}
-
-var GetPaymentResult_Success_DEFAULT *v1.GetPaymentResponse
+type GetPaymentResult struct{ Success *v1.GetPaymentResponse }
 
 func (p *GetPaymentResult) Marshal(out []byte) ([]byte, error) {
-	if !p.IsSetSuccess() {
+	if p.Success == nil {
 		return out, nil
 	}
 	return proto.Marshal(p.Success)
 }
-
 func (p *GetPaymentResult) Unmarshal(in []byte) error {
 	msg := new(v1.GetPaymentResponse)
 	if err := proto.Unmarshal(in, msg); err != nil {
@@ -298,52 +223,74 @@ func (p *GetPaymentResult) Unmarshal(in []byte) error {
 	p.Success = msg
 	return nil
 }
+func (p *GetPaymentResult) GetResult() interface{} { return p.Success }
 
-func (p *GetPaymentResult) GetSuccess() *v1.GetPaymentResponse {
-	if !p.IsSetSuccess() {
-		return GetPaymentResult_Success_DEFAULT
+type ConfirmPaymentArgs struct{ Req *v1.ConfirmPaymentRequest }
+
+func (p *ConfirmPaymentArgs) Marshal(out []byte) ([]byte, error) {
+	if p.Req == nil {
+		return out, nil
 	}
-	return p.Success
+	return proto.Marshal(p.Req)
 }
-
-func (p *GetPaymentResult) SetSuccess(x interface{}) {
-	p.Success = x.(*v1.GetPaymentResponse)
-}
-
-func (p *GetPaymentResult) IsSetSuccess() bool {
-	return p.Success != nil
-}
-
-func (p *GetPaymentResult) GetResult() interface{} {
-	return p.Success
-}
-
-type kClient struct {
-	c client.Client
-}
-
-func newServiceClient(c client.Client) *kClient {
-	return &kClient{
-		c: c,
+func (p *ConfirmPaymentArgs) Unmarshal(in []byte) error {
+	msg := new(v1.ConfirmPaymentRequest)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
 	}
+	p.Req = msg
+	return nil
+}
+func (p *ConfirmPaymentArgs) GetFirstArgument() interface{} { return p.Req }
+
+type ConfirmPaymentResult struct{ Success *v1.ConfirmPaymentResponse }
+
+func (p *ConfirmPaymentResult) Marshal(out []byte) ([]byte, error) {
+	if p.Success == nil {
+		return out, nil
+	}
+	return proto.Marshal(p.Success)
+}
+func (p *ConfirmPaymentResult) Unmarshal(in []byte) error {
+	msg := new(v1.ConfirmPaymentResponse)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Success = msg
+	return nil
+}
+func (p *ConfirmPaymentResult) GetResult() interface{} { return p.Success }
+
+type kClient struct{ c client.Client }
+
+func newServiceClient(c client.Client) *kClient { return &kClient{c: c} }
+
+func (p *kClient) NativePrepay(ctx context.Context, req *v1.NativePrePayRequest) (*v1.NativePrePayResponse, error) {
+	var args NativePrepayArgs
+	args.Req = req
+	var result NativePrepayResult
+	if err := p.c.Call(ctx, "NativePrepay", &args, &result); err != nil {
+		return nil, err
+	}
+	return result.Success, nil
 }
 
-func (p *kClient) NativePrepay(ctx context.Context, Req *v1.NativePrePayRequest) (r *v1.NativePrePayResponse, err error) {
-	var _args NativePrepayArgs
-	_args.Req = Req
-	var _result NativePrepayResult
-	if err = p.c.Call(ctx, "NativePrepay", &_args, &_result); err != nil {
-		return
+func (p *kClient) GetPayment(ctx context.Context, req *v1.GetPaymentRequest) (*v1.GetPaymentResponse, error) {
+	var args GetPaymentArgs
+	args.Req = req
+	var result GetPaymentResult
+	if err := p.c.Call(ctx, "GetPayment", &args, &result); err != nil {
+		return nil, err
 	}
-	return _result.GetSuccess(), nil
+	return result.Success, nil
 }
 
-func (p *kClient) GetPayment(ctx context.Context, Req *v1.GetPaymentRequest) (r *v1.GetPaymentResponse, err error) {
-	var _args GetPaymentArgs
-	_args.Req = Req
-	var _result GetPaymentResult
-	if err = p.c.Call(ctx, "GetPayment", &_args, &_result); err != nil {
-		return
+func (p *kClient) ConfirmPayment(ctx context.Context, req *v1.ConfirmPaymentRequest) (*v1.ConfirmPaymentResponse, error) {
+	var args ConfirmPaymentArgs
+	args.Req = req
+	var result ConfirmPaymentResult
+	if err := p.c.Call(ctx, "ConfirmPayment", &args, &result); err != nil {
+		return nil, err
 	}
-	return _result.GetSuccess(), nil
+	return result.Success, nil
 }

@@ -17,7 +17,7 @@ type IDGenerator interface {
 
 // ==================== Proto → Domain 转换 ====================
 
-// buildOrderLines 将前端传入的 CheckoutItem 与 Product RPC 响应合并为 OrderLine，
+// buildOrderLines 将前端传入的 CheckoutItem 与 Product 详情合并为 OrderLine，
 // 直接在构建时分流：可购买的放 available，失效的放 unavailable。
 // InStock 作为可购买判断，库存数量的强校验在 PlaceOrder.ReserveStock 里做。
 func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Product) (available, unavailable []domain.OrderLine) {
@@ -184,6 +184,7 @@ func toOrderAddress(addr domain.Address) *orderv1.Address {
 		City:          addr.City,
 		State:         addr.Province,
 		ZipCode:       addr.ZipCode,
+		Phone:         addr.Phone,
 	}
 }
 
@@ -236,7 +237,7 @@ func sumSelectedCouponDiscount(coupons []domain.CouponOption, selectedIDs []int6
 
 // operationID 生成库存操作的幂等ID
 func operationID(orderID int64, action string) string {
-	return fmt.Sprintf("%d:%s", orderID, action)
+	return fmt.Sprintf("order_%d_%s", orderID, action)
 }
 
 // toInsufficientStockError 将 inventory 服务返回的库存不足明细转为 domain 结构化错误。

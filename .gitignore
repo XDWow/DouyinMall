@@ -1,7 +1,36 @@
+.env
+
+# IDE
+.idea/
+
+# Go cache / local build outputs
+.gocache/
+**/.gocache/
+.bin/
+**/.bin/
 *.exe
 *.dll
 *.so
 *.dylib
 *.test
+*.out
+coverage
 
 backend/.gocache/
+# Logs / local reports
+*.log
+.k6-*.txt
+backend/.k6-*.txt
+
+# Documentation and design notes
+backend/docs/
+backend/internal/agent/docs/
+**/DESIGN.md
+**/ARCHITECTURE.md
+**/SOLUTION.md
+**/BATCH_CANCEL_README.md
+**/CACHE_DESIGN.md
+**/*设计*.md
+**/*手册*.md
+frontend/checkout-demo.html
+frontend/payment.html

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
@@ -37,7 +38,7 @@ type ListUserOrderResult struct {
 func (uc *ListUserOrderUseCase) Execute(cmd ListUserOrderCmd) (*ListUserOrderResult, error) {
 	// cmd不可信，参数校验
 	if cmd.UserID <= 0 || cmd.Cursor < 0 || cmd.Limit <= 0 {
-		return nil, nil
+		return nil, errors.New("invalid list order query")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

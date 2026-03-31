@@ -8,7 +8,7 @@ package main
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/checkout/ioc"
-	transportgrpc "github.com/XDWow/DouyinMall/backend/internal/checkout/transport/grpc"
+	"github.com/XDWow/DouyinMall/backend/internal/checkout/transport/grpc"
 	"github.com/XDWow/DouyinMall/backend/internal/checkout/usecase"
 	"github.com/cloudwego/kitex/server"
 )
@@ -16,26 +16,19 @@ import (
 // Injectors from wire.go:
 
 func InitApp() *App {
-	loggerV1 := ioc.InitLogger()
+	client := ioc.InitProductClient()
+	couponserviceClient := ioc.InitCouponClient()
+	previewOrderUseCase := usecase.NewPreviewOrderUseCase(client, couponserviceClient)
+	inventoryserviceClient := ioc.InitInventoryClient()
+	orderserviceClient := ioc.InitOrderClient()
+	paymentserviceClient := ioc.InitPaymentClient()
 	idGenerator := ioc.InitIDGenerator()
-	productClient := ioc.InitProductClient()
-	inventoryClient := ioc.InitInventoryClient()
-	couponClient := ioc.InitCouponClient()
-	orderClient := ioc.InitOrderClient()
-	paymentClient := ioc.InitPaymentClient()
-	previewOrderUseCase := usecase.NewPreviewOrderUseCase(productClient, couponClient)
-	placeOrderUseCase := usecase.NewPlaceOrderUseCase(
-		productClient,
-		inventoryClient,
-		couponClient,
-		orderClient,
-		paymentClient,
-		idGenerator,
-		loggerV1,
-	)
-	checkoutHandler := transportgrpc.NewCheckoutHandler(previewOrderUseCase, placeOrderUseCase)
-	grpcServer := ioc.InitGRPCServer(checkoutHandler)
-	app := newApp(grpcServer)
+	loggerV1 := ioc.InitLogger()
+	placeOrderUseCase := usecase.NewPlaceOrderUseCase(client, inventoryserviceClient, couponserviceClient, orderserviceClient, paymentserviceClient, idGenerator, loggerV1)
+	payOrderUseCase := usecase.NewPayOrderUseCase(orderserviceClient, paymentserviceClient)
+	checkoutHandler := grpc.NewCheckoutHandler(previewOrderUseCase, placeOrderUseCase, payOrderUseCase)
+	server := ioc.InitGRPCServer(checkoutHandler)
+	app := newApp(server)
 	return app
 }
 
