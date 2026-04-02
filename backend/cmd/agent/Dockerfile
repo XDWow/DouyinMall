@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine AS builder
+﻿FROM golang:1.25-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go env -w GOPROXY=https://goproxy.cn,direct && go mod download
@@ -11,3 +11,5 @@ WORKDIR /app
 COPY --from=builder /app/agent .
 COPY --from=builder /app/internal/agent/config/dev.yaml ./internal/agent/config/dev.yaml
 ENTRYPOINT ["./agent", "--config", "internal/agent/config/dev.yaml"]
+
+

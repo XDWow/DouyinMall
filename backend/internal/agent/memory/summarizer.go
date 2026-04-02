@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"strings"
 )
 
@@ -16,25 +17,31 @@ func (s *FallbackSummarizer) Summarize(_ context.Context, session *Session) (str
 		return "", nil
 	}
 
+	const limit = 320
+
 	var builder strings.Builder
-	builder.WriteString("会话摘要：")
+	builder.WriteString("Conversation summary: ")
+
 	for _, message := range session.Messages {
 		role := string(message.Role)
 		if role == "" {
 			role = "unknown"
 		}
-		builder.WriteString(role)
-		builder.WriteString(":")
-		builder.WriteString(strings.TrimSpace(message.Content))
-		builder.WriteString("；")
-		if builder.Len() >= 320 {
+		content := strings.TrimSpace(message.Content)
+		if content == "" {
+			continue
+		}
+
+		builder.WriteString(fmt.Sprintf("[%s] %s; ", role, content))
+		if builder.Len() >= limit {
 			break
 		}
 	}
+
 	summary := builder.String()
 	runes := []rune(summary)
-	if len(runes) <= 320 {
+	if len(runes) <= limit {
 		return summary, nil
 	}
-	return string(runes[:320]) + "...", nil
+	return string(runes[:limit]) + "...", nil
 }

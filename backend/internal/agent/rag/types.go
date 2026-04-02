@@ -41,4 +41,3 @@ func ToDocument(chunk Chunk) *schema.Document {
 	}
 	return doc.WithScore(chunk.Score)
 }
-

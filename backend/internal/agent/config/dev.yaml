@@ -3,52 +3,101 @@ grpc:
     port: 8087
     name: "agent-service"
 
-etcd:
-  endpoints:
-    - "douyinmall-etcd:2379"
+http:
+  addr: ":18087"
+  prefix: "/api/agent"
+  read_timeout_seconds: 30
+  write_timeout_seconds: 120
+  idle_timeout_seconds: 120
 
 db:
   dsn: "root:root@tcp(douyinmall-mysql:3306)/douyinmall_agent?charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
   addr: "douyinmall-redis:6379"
+  password: ""
+  db: 0
+
+etcd:
+  endpoints:
+    - "douyinmall-etcd:2379"
+
+mcp:
+  servers:
+    - name: "order"
+      endpoint: "http://localhost:19092/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "search"
+      endpoint: "http://localhost:19093/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "cart"
+      endpoint: "http://localhost:19094/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "product"
+      endpoint: "http://localhost:19095/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "inventory"
+      endpoint: "http://localhost:19096/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "aftersale"
+      endpoint: "http://localhost:19097/mcp"
+      timeout_seconds: 10
+      enabled: true
+
+tenant:
+  default_id: "default"
+
+feature_flags:
+  order_query: true
+  return_policy: true
+  inventory: true
+  product_info: true
+  return_exchange_apply: true
 
 llm:
   base_url: "https://apis.iflow.cn/v1"
-  api_key: ""  # 由环境变量 LLM_API_KEY 注入
-  nodes:
-    - name: "qwen3-max"
-      timeout_seconds: 60
-      rpm: 60
-      failure_threshold: 5
-      cooldown_seconds: 30
-    - name: "qwen3-max-preview"
-      timeout_seconds: 30
-      rpm: 120
-      failure_threshold: 3
-      cooldown_seconds: 15
+  api_key: ""
+  model: "qwen3-max"
+  timeout_seconds: 60
+  temperature: 0.2
+  max_tokens: 512
 
 embedding:
-  base_url: "http://host.docker.internal:11434/api/embed"
+  base_url: "http://host.docker.internal:11434/v1"
+  api_key: ""
   model: "qwen3-embedding:0.6b"
-  timeout_seconds: 10
+  timeout_seconds: 15
 
-reranker:
-  base_url: "https://api.siliconflow.cn/v1"
-  api_key: ""  # 由环境变量 SILICONFLOW_API_KEY 注入
-  model: "BAAI/bge-reranker-v2-m3"
-  timeout_seconds: 10
+workflow:
+  rate_limit_per_minute: 30
+  conversation_window: 8
+  l0_cache_ttl_seconds: 600
+  retrieve_top_k: 8
+  retrieve_min_score: 0.35
+  rerank_top_k: 4
+  tool_parallelism: 4
+  confidence_threshold: 0.62
+  summary_trigger_turns: 12
+  max_answer_tokens: 512
+  stream_buffer: 16
+  checkpoint_ttl_seconds: 604800
+  interrupt_before_nodes: []
+  interrupt_after_nodes: []
 
-milvus:
-  addr: "douyinmall-milvus:19530"
-
-kafka:
-  brokers:
-    - "douyinmall-kafka:9092"
-  producer_retry_max: 3
-  consumer_offsets_initial: "newest"
-
-# MCP 工具服务器（Tool Server）
-mcp:
-  endpoint: "http://douyinmall-mcpServer:9090/mcp"
-  timeout: "10s"
+observability:
+  log:
+    level: "info"
+    file: ""
+  metrics:
+    path: "/metrics"
+  trace:
+    enabled: false
+    service_name: "agent-service"
+    endpoint: ""
+    insecure: true
+    sample_ratio: 1.0

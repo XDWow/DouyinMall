@@ -10,9 +10,23 @@ etcd:
 
 grpc:
   server:
-    name: product.service
-    port: 8092
+    name: order.service
+    port: 8095
     etcdTTL: 60
+
+mcp:
+  server:
+    addr: ":19092"
+    name: "order-mcp"
+    version: "1.0.0"
+  upstream:
+    service_name: "order.service"
+    direct_addr: "127.0.0.1:8095"
+  tools:
+    - key: "query_order"
+      name: "query_order"
+      description: "Query the current user's orders."
+      enabled: true
 
 kafka:
   brokers:

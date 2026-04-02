@@ -1,0 +1,29 @@
+db:
+  dsn: "root:root@tcp(localhost:13316)/DouyinMall"
+
+etcd:
+  endpoints:
+    - "localhost:12379"
+
+grpc:
+  server:
+    name: "aftersale.service"
+    port: 8097
+
+mcp:
+  server:
+    addr: ":19097"
+    name: "aftersale-mcp"
+    version: "1.0.0"
+  upstream:
+    service_name: "aftersale.service"
+    direct_addr: "127.0.0.1:8097"
+  tools:
+    - key: "create_after_sale_request"
+      name: "create_after_sale_request"
+      description: "Create an after-sale request for return or exchange."
+      enabled: true
+    - key: "get_after_sale_request"
+      name: "get_after_sale_request"
+      description: "Get after-sale request detail by request number."
+      enabled: true

@@ -5,16 +5,21 @@ import "time"
 type Intent string
 
 const (
-	IntentUnknown         Intent = "unknown"
-	IntentFAQ             Intent = "faq"
-	IntentProductSearch   Intent = "product_search"
-	IntentOrderQuery      Intent = "order_query"
-	IntentAddToCart       Intent = "add_to_cart"
-	IntentPolicy          Intent = "policy"
-	IntentComplaint       Intent = "complaint"
-	IntentHandoff         Intent = "handoff"
-	IntentChitchat        Intent = "chitchat"
-	IntentUnsupported     Intent = "unsupported"
+	IntentUnknown             Intent = "unknown"
+	IntentFAQ                 Intent = "faq"
+	IntentProductSearch       Intent = "product_search"
+	IntentOrderQuery          Intent = "order_query"
+	IntentAddToCart           Intent = "add_to_cart"
+	IntentPolicy              Intent = "policy"
+	IntentComplaint           Intent = "complaint"
+	IntentHandoff             Intent = "handoff"
+	IntentChitchat            Intent = "chitchat"
+	IntentUnsupported         Intent = "unsupported"
+	IntentReturnPolicy        Intent = "return_policy"
+	IntentInventoryQuery      Intent = "inventory_query"
+	IntentProductInfo         Intent = "product_info"
+	IntentReturnExchangeApply Intent = "return_exchange_apply"
+	IntentFallback            Intent = "fallback"
 )
 
 type Role string
@@ -88,20 +93,30 @@ type Session struct {
 	UpdatedAt   time.Time     `json:"updated_at"`
 }
 
+type SessionList struct {
+	Sessions []Session `json:"sessions"`
+	Total    int       `json:"total"`
+}
+
+type HistoryList struct {
+	Messages []Message `json:"messages"`
+	Total    int       `json:"total"`
+}
+
 type KnowledgeRef struct {
-	ID        string            `json:"id"`
-	Title     string            `json:"title"`
-	Snippet   string            `json:"snippet"`
-	Category  string            `json:"category"`
-	Score     float64           `json:"score"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
+	ID       string            `json:"id"`
+	Title    string            `json:"title"`
+	Snippet  string            `json:"snippet"`
+	Category string            `json:"category"`
+	Score    float64           `json:"score"`
+	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
 type ToolCallPlan struct {
-	Name      string            `json:"name"`
-	Arguments map[string]any    `json:"arguments,omitempty"`
-	Reason    string            `json:"reason,omitempty"`
-	RawJSON   string            `json:"raw_json,omitempty"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+	Reason    string         `json:"reason,omitempty"`
+	RawJSON   string         `json:"raw_json,omitempty"`
 }
 
 type ToolExecution struct {
@@ -140,4 +155,3 @@ type StreamEvent struct {
 	Event string `json:"event"`
 	Data  any    `json:"data,omitempty"`
 }
-

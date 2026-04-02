@@ -11,8 +11,22 @@ etcd:
 grpc:
   server:
     name: product.service
-    port: 8092
+    port: 8096
     etcdTTL: 60
+
+mcp:
+  server:
+    addr: ":19095"
+    name: "product-mcp"
+    version: "1.0.0"
+  upstream:
+    service_name: "product.service"
+    direct_addr: "127.0.0.1:8096"
+  tools:
+    - key: "get_product"
+      name: "get_product"
+      description: "Get product base information by product id."
+      enabled: true
 
 kafka:
   brokers:

@@ -13,6 +13,20 @@ grpc:
     name: inventory.service
     port: 8094
 
+mcp:
+  server:
+    addr: ":19096"
+    name: "inventory-mcp"
+    version: "1.0.0"
+  upstream:
+    service_name: "inventory.service"
+    direct_addr: "127.0.0.1:8094"
+  tools:
+    - key: "get_inventory"
+      name: "get_inventory"
+      description: "Get inventory stock by product id."
+      enabled: true
+
 kafka:
   brokers:
     - "localhost:9092"

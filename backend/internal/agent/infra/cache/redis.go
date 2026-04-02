@@ -2,78 +2,227 @@ package cache
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-type AgentCache interface {
-	Get(ctx context.Context, key string) (string, error)
-	MGet(ctx context.Context, keys ...string) ([]string, error) // 批量查询，缺失的 key 返回空字符串
-	Set(ctx context.Context, key string, val string, ttl time.Duration) error
-	Del(ctx context.Context, keys ...string) error
-	Eval(ctx context.Context, script string, keys []string, args ...any) (any, error)
-	RPush(ctx context.Context, key string, vals ...string) error
-	LRange(ctx context.Context, key string, start, stop int64) ([]string, error)
-	LTrim(ctx context.Context, key string, start, stop int64) error
-	Expire(ctx context.Context, key string, ttl time.Duration) error
+const (
+	semanticIndexKeyPrefix = "agent:semantic:index"
+	semanticItemKeyPrefix  = "agent:semantic:item:"
+	exactItemKeyPrefix     = "agent:exact:item:"
+	checkpointKeyPrefix    = "agent:checkpoint:"
+	rateKeyPrefix          = "agent:rate:"
+)
+
+type RedisExactCache struct {
+	rdb redis.Cmdable
 }
 
-type agentRedisCache struct {
-	client redis.Cmdable
+func NewRedisExactCache(rdb redis.Cmdable) *RedisExactCache {
+	return &RedisExactCache{rdb: rdb}
 }
 
-// NewAgentRedis 创建通用 Redis 访问层
-func NewAgentRedis(client redis.Cmdable) AgentCache {
-	return &agentRedisCache{client: client}
-}
-
-func (a *agentRedisCache) Get(ctx context.Context, key string) (string, error) {
-	return a.client.Get(ctx, key).Result()
-}
-
-func (a *agentRedisCache) MGet(ctx context.Context, keys ...string) ([]string, error) {
-	vals, err := a.client.MGet(ctx, keys...).Result()
+func (c *RedisExactCache) Lookup(ctx context.Context, tenantID string, userID int64, query string) (*ExactCacheItem, error) {
+	key := exactCacheKey(tenantID, userID, query)
+	raw, err := c.rdb.Get(ctx, key).Bytes()
 	if err != nil {
+		if err == redis.Nil {
+			return nil, nil
+		}
 		return nil, err
 	}
-	res := make([]string, len(vals))
-	for i, v := range vals {
-		if s, ok := v.(string); ok {
-			res[i] = s
-		} // nil（key 不存在）保持空字符串
+
+	var item ExactCacheItem
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return nil, err
 	}
-	return res, nil
+	return &item, nil
 }
 
-func (a *agentRedisCache) Set(ctx context.Context, key string, val string, ttl time.Duration) error {
-	return a.client.Set(ctx, key, val, ttl).Err()
-}
-
-func (a *agentRedisCache) Del(ctx context.Context, keys ...string) error {
-	return a.client.Del(ctx, keys...).Err()
-}
-
-func (a *agentRedisCache) Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
-	return a.client.Eval(ctx, script, keys, args...).Result()
-}
-
-func (a *agentRedisCache) RPush(ctx context.Context, key string, vals ...string) error {
-	args := make([]any, len(vals))
-	for i, v := range vals {
-		args[i] = v
+func (c *RedisExactCache) Store(ctx context.Context, item *ExactCacheItem, ttl time.Duration) error {
+	if item == nil {
+		return nil
 	}
-	return a.client.RPush(ctx, key, args...).Err()
+	if item.CreatedAt.IsZero() {
+		item.CreatedAt = time.Now()
+	}
+	raw, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	return c.rdb.Set(ctx, exactCacheKey(item.TenantID, item.UserID, item.Query), raw, ttl).Err()
 }
 
-func (a *agentRedisCache) LRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
-	return a.client.LRange(ctx, key, start, stop).Result()
+type RedisSemanticCache struct {
+	rdb      redis.Cmdable
+	maxItems int64
 }
 
-func (a *agentRedisCache) LTrim(ctx context.Context, key string, start, stop int64) error {
-	return a.client.LTrim(ctx, key, start, stop).Err()
+func NewRedisSemanticCache(rdb redis.Cmdable) *RedisSemanticCache {
+	return &RedisSemanticCache{
+		rdb:      rdb,
+		maxItems: 256,
+	}
 }
 
-func (a *agentRedisCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
-	return a.client.Expire(ctx, key, ttl).Err()
+func (c *RedisSemanticCache) Lookup(ctx context.Context, vector []float64, threshold float64, limit int) (*SemanticCacheItem, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+
+	ids, err := c.rdb.ZRevRange(ctx, semanticIndexKeyPrefix, 0, int64(limit-1)).Result()
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
+	type candidate struct {
+		item  *SemanticCacheItem
+		score float64
+	}
+	candidates := make([]candidate, 0, len(ids))
+	for _, id := range ids {
+		raw, err := c.rdb.Get(ctx, semanticItemKeyPrefix+id).Bytes()
+		if err != nil {
+			continue
+		}
+
+		var item SemanticCacheItem
+		if err := json.Unmarshal(raw, &item); err != nil {
+			continue
+		}
+		score := cosineSimilarity(item.Vector, vector)
+		if score >= threshold {
+			candidates = append(candidates, candidate{item: &item, score: score})
+		}
+	}
+
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].score > candidates[j].score
+	})
+	return candidates[0].item, nil
+}
+
+func (c *RedisSemanticCache) Store(ctx context.Context, item *SemanticCacheItem, ttl time.Duration) error {
+	if item == nil {
+		return nil
+	}
+	if item.ID == "" {
+		item.ID = hashVector(item.Vector, item.Query)
+	}
+	if item.CreatedAt.IsZero() {
+		item.CreatedAt = time.Now()
+	}
+
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+
+	pipe := c.rdb.Pipeline()
+	pipe.Set(ctx, semanticItemKeyPrefix+item.ID, payload, ttl)
+	pipe.ZAdd(ctx, semanticIndexKeyPrefix, redis.Z{
+		Score:  float64(item.CreatedAt.UnixMilli()),
+		Member: item.ID,
+	})
+	pipe.ZRemRangeByRank(ctx, semanticIndexKeyPrefix, 0, -(c.maxItems + 1))
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+type RedisRateLimiter struct {
+	rdb redis.Cmdable
+}
+
+func NewRedisRateLimiter(rdb redis.Cmdable) *RedisRateLimiter {
+	return &RedisRateLimiter{rdb: rdb}
+}
+
+func (r *RedisRateLimiter) AllowUser(ctx context.Context, userID int64, limit int64, window time.Duration) (bool, error) {
+	key := fmt.Sprintf("%s%d", rateKeyPrefix, userID)
+	count, err := r.rdb.Incr(ctx, key).Result()
+	if err != nil {
+		return false, err
+	}
+	if count == 1 {
+		_ = r.rdb.Expire(ctx, key, window).Err()
+	}
+	return count <= limit, nil
+}
+
+type RedisCheckpointStore struct {
+	rdb redis.Cmdable
+	ttl time.Duration
+}
+
+func NewRedisCheckpointStore(rdb redis.Cmdable, ttl time.Duration) *RedisCheckpointStore {
+	if ttl <= 0 {
+		ttl = 7 * 24 * time.Hour
+	}
+	return &RedisCheckpointStore{rdb: rdb, ttl: ttl}
+}
+
+func (s *RedisCheckpointStore) Get(ctx context.Context, checkPointID string) ([]byte, bool, error) {
+	data, err := s.rdb.Get(ctx, checkpointKeyPrefix+checkPointID).Bytes()
+	if err != nil {
+		if err == redis.Nil {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return data, true, nil
+}
+
+func (s *RedisCheckpointStore) Set(ctx context.Context, checkPointID string, checkPoint []byte) error {
+	return s.rdb.Set(ctx, checkpointKeyPrefix+checkPointID, checkPoint, s.ttl).Err()
+}
+
+func cosineSimilarity(a, b []float64) float64 {
+	if len(a) == 0 || len(b) == 0 || len(a) != len(b) {
+		return 0
+	}
+	var dot, normA, normB float64
+	for i := range a {
+		dot += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
+}
+
+func hashVector(vector []float64, query string) string {
+	raw, _ := json.Marshal(struct {
+		Query  string    `json:"query"`
+		Vector []float64 `json:"vector"`
+	}{
+		Query:  query,
+		Vector: vector,
+	})
+	sum := sha1.Sum(raw)
+	return hex.EncodeToString(sum[:8])
+}
+
+func exactCacheKey(tenantID string, userID int64, query string) string {
+	normalized := normalizeExactQuery(query)
+	raw := fmt.Sprintf("%s:%d:%s", tenantID, userID, normalized)
+	sum := sha1.Sum([]byte(raw))
+	return exactItemKeyPrefix + hex.EncodeToString(sum[:])
+}
+
+func normalizeExactQuery(query string) string {
+	query = strings.ToLower(strings.TrimSpace(query))
+	return strings.Join(strings.Fields(query), " ")
 }

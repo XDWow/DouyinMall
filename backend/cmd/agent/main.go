@@ -1,55 +1,93 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"os"
+	"log"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
+	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 func main() {
-	initViper()
+	cfg := initConfig()
 
-	app := InitApp()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	// 启动 Kafka 消费者（异步消息落库）
-	if err := app.Consumer.Start(); err != nil {
-		fmt.Printf("警告: Kafka 消费者启动失败: %v，消息将仅存于 Redis\n", err)
+	app, err := NewApp(ctx, cfg)
+	if err != nil {
+		log.Fatalf("init agent app failed: %v", err)
 	}
 
+	errCh := make(chan error, 1)
 	go func() {
-		fmt.Printf("Agent gRPC 服务启动在: %d\n", viper.GetInt("grpc.server.port"))
-		if err := app.Server.Run(); err != nil {
-			panic(fmt.Errorf("gRPC 服务启动失败: %w", err))
-		}
+		errCh <- app.Start()
 	}()
 
-	// 优雅退出
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
-	fmt.Println("正在关闭 Agent 服务...")
-	app.Consumer.Stop()
-	if err := app.Server.Stop(); err != nil {
-		fmt.Printf("关闭 gRPC 服务失败: %v\n", err)
+	select {
+	case err = <-errCh:
+		if err != nil {
+			log.Fatalf("agent server stopped with error: %v", err)
+		}
+	case <-ctx.Done():
 	}
-	fmt.Println("Agent 服务已关闭")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := app.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("shutdown agent app failed: %v", err)
+	}
 }
 
-func initViper() {
-	pflag.String("config", "internal/agent/config/dev.yaml", "配置文件路径")
+func initConfig() agentconfig.Config {
+	configPath := pflag.String("config", "internal/agent/config/dev.yaml", "agent config file path")
 	pflag.Parse()
-	viper.SetConfigFile(pflag.Lookup("config").Value.String())
-	viper.WatchConfig()
+
+	viper.SetConfigFile(*configPath)
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+	bindEnv()
+
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("读取配置文件失败: %w", err))
+		panic(fmt.Errorf("read config file failed: %w", err))
 	}
 
-	viper.AutomaticEnv()
-	viper.BindEnv("llm.api_key", "LLM_API_KEY")
-	viper.BindEnv("reranker.api_key", "SILICONFLOW_API_KEY")
+	var cfg agentconfig.Config
+	if err := viper.Unmarshal(&cfg); err != nil {
+		panic(fmt.Errorf("unmarshal config failed: %w", err))
+	}
+	return cfg
+}
+
+func bindEnv() {
+	mustBindEnv("http.addr", "HTTP_ADDR")
+	mustBindEnv("grpc.server.port", "GRPC_PORT")
+	mustBindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
+	mustBindEnv("db.dsn", "DB_DSN")
+	mustBindEnv("redis.addr", "REDIS_ADDR")
+	mustBindEnv("redis.password", "REDIS_PASSWORD")
+	mustBindEnv("redis.db", "REDIS_DB")
+	mustBindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	mustBindEnv("llm.base_url", "LLM_BASE_URL")
+	mustBindEnv("llm.api_key", "LLM_API_KEY")
+	mustBindEnv("llm.model", "LLM_MODEL")
+	mustBindEnv("embedding.base_url", "EMBEDDING_BASE_URL")
+	mustBindEnv("embedding.api_key", "EMBEDDING_API_KEY")
+	mustBindEnv("embedding.model", "EMBEDDING_MODEL")
+	mustBindEnv("observability.trace.enabled", "OTEL_TRACE_ENABLED")
+	mustBindEnv("observability.trace.endpoint", "OTEL_EXPORTER_OTLP_ENDPOINT")
+	mustBindEnv("observability.trace.service_name", "OTEL_SERVICE_NAME")
+}
+
+func mustBindEnv(key string, envs ...string) {
+	args := append([]string{key}, envs...)
+	if err := viper.BindEnv(args...); err != nil {
+		panic(fmt.Errorf("bind env for %s failed: %w", key, err))
+	}
 }

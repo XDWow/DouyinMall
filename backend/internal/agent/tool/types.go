@@ -1,7 +1,7 @@
 package tool
 
 import (
-	"context"
+	"encoding/json"
 	"time"
 
 	einotool "github.com/cloudwego/eino/components/tool"
@@ -26,16 +26,34 @@ type ProductSummary struct {
 	InStock      bool     `json:"in_stock"`
 }
 
-type Gateway interface {
-	QueryOrders(ctx context.Context, userID int64, orderID int64, limit int) ([]OrderSummary, error)
-	SearchProducts(ctx context.Context, query string, limit int) ([]ProductSummary, error)
-	AddToCart(ctx context.Context, userID int64, productID int64, quantity int64) error
-}
-
-type Toolset interface {
-	Tools() []einotool.BaseTool
-}
-
 type ExecutionRecorder interface {
 	Record(exec dto.ToolExecution)
+}
+
+type ToolExecutionMode string
+
+const (
+	ToolExecutionSerial           ToolExecutionMode = "serial"
+	ToolExecutionParallelReadOnly ToolExecutionMode = "parallel_readonly"
+)
+
+type ToolPolicy struct {
+	ReadOnly         bool
+	RequiresOrdering bool
+}
+
+type registeredInvokableTool struct {
+	invokable einotool.InvokableTool
+	policy    ToolPolicy
+}
+
+func toolArgumentsJSON(plan dto.ToolCallPlan) (string, error) {
+	if plan.RawJSON != "" {
+		return plan.RawJSON, nil
+	}
+	payload, err := json.Marshal(plan.Arguments)
+	if err != nil {
+		return "", err
+	}
+	return string(payload), nil
 }

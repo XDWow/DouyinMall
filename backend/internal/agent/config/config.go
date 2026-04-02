@@ -1,19 +1,37 @@
 package config
 
-type AgentConfig struct {
-	GRPC   GRPCConfig   `mapstructure:"grpc"`
-	DB     DBConfig     `mapstructure:"db"`
-	Redis  RedisConfig  `mapstructure:"redis"`
-	Etcd   EtcdConfig   `mapstructure:"etcd"`
-	LLM    LLMConfig    `mapstructure:"llm"`
-	Embed  EmbedConfig  `mapstructure:"embedding"`
-	Milvus MilvusConfig `mapstructure:"milvus"`
-	Kafka  KafkaConfig  `mapstructure:"kafka"`
+type Config struct {
+	GRPC          GRPCConfig          `mapstructure:"grpc"`
+	HTTP          HTTPConfig          `mapstructure:"http"`
+	DB            DBConfig            `mapstructure:"db"`
+	Redis         RedisConfig         `mapstructure:"redis"`
+	Etcd          EtcdConfig          `mapstructure:"etcd"`
+	MCP           MCPConfig           `mapstructure:"mcp"`
+	Tenant        TenantConfig        `mapstructure:"tenant"`
+	FeatureFlags  FeatureFlagsConfig  `mapstructure:"feature_flags"`
+	LLM           LLMConfig           `mapstructure:"llm"`
+	Embedding     EmbeddingConfig     `mapstructure:"embedding"`
+	Workflow      WorkflowConfig      `mapstructure:"workflow"`
+	Observability ObservabilityConfig `mapstructure:"observability"`
 }
 
+type AgentConfig = Config
+
 type GRPCConfig struct {
+	Server GRPCServerConfig `mapstructure:"server"`
+}
+
+type GRPCServerConfig struct {
 	Port int    `mapstructure:"port"`
 	Name string `mapstructure:"name"`
+}
+
+type HTTPConfig struct {
+	Addr                string `mapstructure:"addr"`
+	Prefix              string `mapstructure:"prefix"`
+	ReadTimeoutSeconds  int    `mapstructure:"read_timeout_seconds"`
+	WriteTimeoutSeconds int    `mapstructure:"write_timeout_seconds"`
+	IdleTimeoutSeconds  int    `mapstructure:"idle_timeout_seconds"`
 }
 
 type DBConfig struct {
@@ -21,33 +39,90 @@ type DBConfig struct {
 }
 
 type RedisConfig struct {
-	Addr string `mapstructure:"addr"`
+	Addr     string `mapstructure:"addr"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
 }
 
 type EtcdConfig struct {
 	Endpoints []string `mapstructure:"endpoints"`
 }
 
+type MCPConfig struct {
+	Servers []MCPServerConfig `mapstructure:"servers"`
+}
+
+type MCPServerConfig struct {
+	Name           string `mapstructure:"name"`
+	Endpoint       string `mapstructure:"endpoint"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
+	Enabled        bool   `mapstructure:"enabled"`
+}
+
+type TenantConfig struct {
+	DefaultID string `mapstructure:"default_id"`
+}
+
+type FeatureFlagsConfig struct {
+	OrderQuery          bool `mapstructure:"order_query"`
+	ReturnPolicy        bool `mapstructure:"return_policy"`
+	Inventory           bool `mapstructure:"inventory"`
+	ProductInfo         bool `mapstructure:"product_info"`
+	ReturnExchangeApply bool `mapstructure:"return_exchange_apply"`
+}
+
 type LLMConfig struct {
-	BaseURL string `mapstructure:"base_url"`
-	APIKey  string `mapstructure:"api_key"`
+	BaseURL        string  `mapstructure:"base_url"`
+	APIKey         string  `mapstructure:"api_key"`
+	Model          string  `mapstructure:"model"`
+	TimeoutSeconds int     `mapstructure:"timeout_seconds"`
+	Temperature    float32 `mapstructure:"temperature"`
+	MaxTokens      int     `mapstructure:"max_tokens"`
 }
 
-type EmbedConfig struct {
-	BaseURL string `mapstructure:"base_url"`
-	Model   string `mapstructure:"model"`
-	Timeout int    `mapstructure:"timeout_seconds"`
+type EmbeddingConfig struct {
+	BaseURL        string `mapstructure:"base_url"`
+	APIKey         string `mapstructure:"api_key"`
+	Model          string `mapstructure:"model"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
 }
 
-type MilvusConfig struct {
-	Addr string `mapstructure:"addr"`
+type WorkflowConfig struct {
+	RateLimitPerMinute   int64    `mapstructure:"rate_limit_per_minute"`
+	ConversationWindow   int      `mapstructure:"conversation_window"`
+	L0CacheTTLSeconds    int      `mapstructure:"l0_cache_ttl_seconds"`
+	RetrieveTopK         int      `mapstructure:"retrieve_top_k"`
+	RetrieveMinScore     float64  `mapstructure:"retrieve_min_score"`
+	RerankTopK           int      `mapstructure:"rerank_top_k"`
+	ToolParallelism      int      `mapstructure:"tool_parallelism"`
+	ConfidenceThreshold  float64  `mapstructure:"confidence_threshold"`
+	SummaryTriggerTurns  int      `mapstructure:"summary_trigger_turns"`
+	MaxAnswerTokens      int      `mapstructure:"max_answer_tokens"`
+	StreamBuffer         int      `mapstructure:"stream_buffer"`
+	CheckpointTTLSeconds int      `mapstructure:"checkpoint_ttl_seconds"`
+	InterruptBeforeNodes []string `mapstructure:"interrupt_before_nodes"`
+	InterruptAfterNodes  []string `mapstructure:"interrupt_after_nodes"`
 }
 
-type KafkaConfig struct {
-	// Brokers Kafka broker 地址列表，支持单字符串或字符串数组
-	Brokers []string `mapstructure:"brokers"`
-	// ProducerRetryMax 生产者发送失败最大重试次数，默认 3
-	ProducerRetryMax int `mapstructure:"producer_retry_max"`
-	// ConsumerOffsetsInitial 消费者起始 offset："newest"（默认）或 "oldest"
-	ConsumerOffsetsInitial string `mapstructure:"consumer_offsets_initial"`
+type ObservabilityConfig struct {
+	Log     LogConfig     `mapstructure:"log"`
+	Metrics MetricsConfig `mapstructure:"metrics"`
+	Trace   TraceConfig   `mapstructure:"trace"`
+}
+
+type LogConfig struct {
+	Level string `mapstructure:"level"`
+	File  string `mapstructure:"file"`
+}
+
+type MetricsConfig struct {
+	Path string `mapstructure:"path"`
+}
+
+type TraceConfig struct {
+	Enabled     bool    `mapstructure:"enabled"`
+	ServiceName string  `mapstructure:"service_name"`
+	Endpoint    string  `mapstructure:"endpoint"`
+	Insecure    bool    `mapstructure:"insecure"`
+	SampleRatio float64 `mapstructure:"sample_ratio"`
 }

@@ -49,4 +49,3 @@ type Store interface {
 type Summarizer interface {
 	Summarize(ctx context.Context, session *Session) (string, error)
 }
-

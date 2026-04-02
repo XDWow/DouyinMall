@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package aftersale;
+
+option go_package = "aftersale/v1;aftersalev1";
+
+service AfterSaleService {
+    rpc CreateAfterSaleRequest(CreateAfterSaleRequestReq) returns (CreateAfterSaleRequestResp) {}
+    rpc GetAfterSaleRequest(GetAfterSaleRequestReq) returns (GetAfterSaleRequestResp) {}
+}
+
+enum AfterSaleRequestType {
+    AFTER_SALE_REQUEST_TYPE_UNKNOWN = 0;
+    AFTER_SALE_REQUEST_TYPE_RETURN = 1;
+    AFTER_SALE_REQUEST_TYPE_EXCHANGE = 2;
+}
+
+enum AfterSaleRequestStatus {
+    AFTER_SALE_REQUEST_STATUS_UNKNOWN = 0;
+    AFTER_SALE_REQUEST_STATUS_PENDING_REVIEW = 1;
+    AFTER_SALE_REQUEST_STATUS_APPROVED = 2;
+    AFTER_SALE_REQUEST_STATUS_REJECTED = 3;
+    AFTER_SALE_REQUEST_STATUS_CANCELED = 4;
+    AFTER_SALE_REQUEST_STATUS_COMPLETED = 5;
+}
+
+message AfterSaleRequest {
+    string request_no = 1;
+    int64 user_id = 2;
+    int64 order_id = 3;
+    int64 item_id = 4;
+    AfterSaleRequestType request_type = 5;
+    string reason = 6;
+    AfterSaleRequestStatus status = 7;
+    int64 created_at = 8;
+}
+
+message CreateAfterSaleRequestReq {
+    int64 user_id = 1;
+    int64 order_id = 2;
+    int64 item_id = 3;
+    AfterSaleRequestType request_type = 4;
+    string reason = 5;
+    string session_id = 6;
+    string trace_id = 7;
+    string metadata_json = 8;
+}
+
+message CreateAfterSaleRequestResp {
+    AfterSaleRequest request = 1;
+}
+
+message GetAfterSaleRequestReq {
+    string request_no = 1;
+}
+
+message GetAfterSaleRequestResp {
+    AfterSaleRequest request = 1;
+}

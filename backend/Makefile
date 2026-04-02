@@ -1,5 +1,5 @@
 .PHONY: \
-	gen-user gen-product gen-search gen-cart gen-merchant gen-order go-payment go-checkout \
+	gen-user gen-product gen-search gen-cart gen-merchant gen-order gen-aftersale go-payment go-checkout \
 	build-user \
 	test test-coverage test-integration-search test-integration \
 	test-e2e-checkout test-e2e-seckill test-e2e-core \
@@ -23,6 +23,9 @@ gen-merchant:
 
 gen-order:
 	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/order.proto
+
+gen-aftersale:
+	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/aftersale.proto
 
 go-payment:
 	kitex -module github.com/XDWow/DouyinMall/backend -I ./idl --gen-path ./rpc_gen/kitex_gen ./idl/payment.proto

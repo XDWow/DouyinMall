@@ -11,5 +11,19 @@ etcd:
 grpc:
   server:
     name: cart.service
-    port: 8094
+    port: 8099
     etcdTTL: 60
+
+mcp:
+  server:
+    addr: ":19094"
+    name: "cart-mcp"
+    version: "1.0.0"
+  upstream:
+    service_name: "cart.service"
+    direct_addr: "127.0.0.1:8099"
+  tools:
+    - key: "add_to_cart"
+      name: "add_to_cart"
+      description: "Add a product into the current user's cart."
+      enabled: true

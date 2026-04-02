@@ -59,4 +59,3 @@ func (r *VectorRetriever) Retrieve(ctx context.Context, query string, opts ...ei
 	}
 	return documents, nil
 }
-
