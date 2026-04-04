@@ -8,7 +8,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/coupon/domain"
 )
 
-// ==================== 领券用例 ====================
+// ==================== 棰嗗埜鐢ㄤ緥 ====================
 
 type IssueCouponUseCase struct {
 	templateRepo  domain.CouponTemplateRepository
@@ -31,15 +31,14 @@ func NewIssueCouponUseCase(
 type IssueCouponInput struct {
 	UserID      int64
 	TemplateID  int64
-	OperationID string // 幂等键（必须带 coupon: 前缀）
-}
+	OperationID string // 骞傜瓑閿紙蹇呴』甯?coupon: 鍓嶇紑锛?}
 
 type IssueCouponOutput struct {
-	CouponID int64 // 一次只发一张券
+	CouponID int64 // 涓€娆″彧鍙戜竴寮犲埜
 }
 
 func (uc *IssueCouponUseCase) Execute(ctx context.Context, input IssueCouponInput) (*IssueCouponOutput, error) {
-	// 校验参数
+	// 鏍￠獙鍙傛暟
 	if input.UserID <= 0 {
 		return nil, errors.New("invalid user_id")
 	}
@@ -50,17 +49,17 @@ func (uc *IssueCouponUseCase) Execute(ctx context.Context, input IssueCouponInpu
 		return nil, errors.New("operation_id is required")
 	}
 
-	// 1. 幂等检查：查询是否已发放过
+	// 1. 骞傜瓑妫€鏌ワ細鏌ヨ鏄惁宸插彂鏀捐繃
 	operation, err := uc.operationRepo.GetByOperationID(ctx, input.OperationID)
 	if err != nil && err != domain.ErrOperationNotFound {
 		return nil, err
 	}
-	// 如果已发放，直接返回之前的券ID（幂等）
+	// 濡傛灉宸插彂鏀撅紝鐩存帴杩斿洖涔嬪墠鐨勫埜ID锛堝箓绛夛級
 	if operation != nil {
 		return &IssueCouponOutput{CouponID: operation.UserCouponID}, nil
 	}
 
-	// 2. 检查模板是否可发放
+	// 2. 妫€鏌ユā鏉挎槸鍚﹀彲鍙戞斁
 	template, err := uc.templateRepo.GetByID(ctx, input.TemplateID)
 	if err != nil {
 		return nil, err
@@ -69,8 +68,7 @@ func (uc *IssueCouponUseCase) Execute(ctx context.Context, input IssueCouponInpu
 		return nil, domain.ErrCouponCannotIssue
 	}
 
-	// 3. 检查用户限领数量
-	count, err := uc.couponRepo.CountByUserAndTemplate(ctx, input.UserID, input.TemplateID)
+	// 3. 妫€鏌ョ敤鎴烽檺棰嗘暟閲?	count, err := uc.couponRepo.CountByUserAndTemplate(ctx, input.UserID, input.TemplateID)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +76,7 @@ func (uc *IssueCouponUseCase) Execute(ctx context.Context, input IssueCouponInpu
 		return nil, domain.ErrCouponLimitExceeded
 	}
 
-	// 4. 发放用户优惠券（一次只发一张）
+	// 4. 鍙戞斁鐢ㄦ埛浼樻儬鍒革紙涓€娆″彧鍙戜竴寮狅級
 	validFrom, validTo := template.CalculateValidTime()
 	coupon := &domain.Coupon{
 		UserID:         input.UserID,
@@ -93,22 +91,21 @@ func (uc *IssueCouponUseCase) Execute(ctx context.Context, input IssueCouponInpu
 		return nil, err
 	}
 
-	// 5. 记录幂等操作（必须成功，否则影响幂等性）
+	// 5. 璁板綍骞傜瓑鎿嶄綔锛堝繀椤绘垚鍔燂紝鍚﹀垯褰卞搷骞傜瓑鎬э級
 	if err := uc.operationRepo.Create(ctx, &domain.CouponOperation{
 		OperationID:  input.OperationID,
 		UserCouponID: couponID,
 		Type:         "ISSUE",
 	}); err != nil {
-		// TODO: 这里失败应该回滚券的发放，实际应该在事务中完成
-		// 当前实现：如果失败，下次重试时会因为券已存在导致重复发券
+		// TODO: 杩欓噷澶辫触搴旇鍥炴粴鍒哥殑鍙戞斁锛屽疄闄呭簲璇ュ湪浜嬪姟涓畬鎴?		// 褰撳墠瀹炵幇锛氬鏋滃け璐ワ紝涓嬫閲嶈瘯鏃朵細鍥犱负鍒稿凡瀛樺湪瀵艰嚧閲嶅鍙戝埜
 		return nil, err
 	}
 
-	// 6. 增加模板已发放数量（非强一致，允许少量超发）
-	if err := uc.templateRepo.IncrIssuedCount(ctx, input.TemplateID); err != nil {
-		// 这里失败不回滚券的发放，接受少量超发
-		// 因为计数不准确的影响 < 发券失败的影响
-	}
+	// 6. 澧炲姞妯℃澘宸插彂鏀炬暟閲忥紙闈炲己涓€鑷达紝鍏佽灏戦噺瓒呭彂锛?	if err := uc.templateRepo.IncrIssuedCount(ctx, input.TemplateID); err != nil {
+		// 杩欓噷澶辫触涓嶅洖婊氬埜鐨勫彂鏀撅紝鎺ュ彈灏戦噺瓒呭彂
+		// 鍥犱负璁℃暟涓嶅噯纭殑褰卞搷 < 鍙戝埜澶辫触鐨勫奖鍝?	}
 
 	return &IssueCouponOutput{CouponID: couponID}, nil
 }
+
+

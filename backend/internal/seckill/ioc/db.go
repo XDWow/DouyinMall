@@ -24,3 +24,5 @@ func InitDB() *gorm.DB {
 	}
 	return database
 }
+
+

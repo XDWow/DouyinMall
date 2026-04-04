@@ -13,7 +13,7 @@ import (
 	searchv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/search/v1"
 )
 
-// SearchHandler 搜索服务 gRPC handler
+// SearchHandler 鎼滅储鏈嶅姟 gRPC handler
 type SearchHandler struct {
 	searchProductsUC  *usecase.SearchProductsUseCase
 	searchMerchantsUC *usecase.SearchMerchantsUseCase
@@ -141,13 +141,13 @@ func (h *SearchHandler) AISearchProducts(ctx context.Context, req *searchv1.AISe
 }
 
 func (h *SearchHandler) InitES(ctx context.Context, req *searchv1.InitESReq) (*searchv1.InitESResp, error) {
-	resp := &searchv1.InitESResp{Success: true, Message: "操作成功", IndicesCreated: true}
+	resp := &searchv1.InitESResp{Success: true, Message: "鎿嶄綔鎴愬姛", IndicesCreated: true}
 
 	if req.GetRecreateIndices() {
 		if err := es.InitIndices(h.esClient); err != nil {
-			return &searchv1.InitESResp{Success: false, Message: fmt.Sprintf("重建索引失败: %v", err)}, nil
+			return &searchv1.InitESResp{Success: false, Message: fmt.Sprintf("閲嶅缓绱㈠紩澶辫触: %v", err)}, nil
 		}
-		resp.Message = "索引已重建"
+		resp.Message = "绱㈠紩宸查噸寤?
 	}
 
 	if req.GetSyncProducts() {
@@ -155,25 +155,25 @@ func (h *SearchHandler) InitES(ctx context.Context, req *searchv1.InitESReq) (*s
 		if batchSize <= 0 {
 			batchSize = 1000
 		}
-		log.Printf("开始同步商品数据，批次大小: %d", batchSize)
+		log.Printf("寮€濮嬪悓姝ュ晢鍝佹暟鎹紝鎵规澶у皬: %d", batchSize)
 		s, f, errs := h.syncProductsFromRPC(ctx, batchSize)
 		resp.ProductsSynced = s
 		resp.ProductsFailed = f
 		resp.Errors = append(resp.Errors, errs...)
 		if f > 0 {
 			resp.Success = false
-			resp.Message = fmt.Sprintf("部分同步失败（成功: %d, 失败: %d）", s, f)
+			resp.Message = fmt.Sprintf("閮ㄥ垎鍚屾澶辫触锛堟垚鍔? %d, 澶辫触: %d锛?, s, f)
 		}
 	}
 
 	if req.GetSyncMerchants() {
-		resp.Errors = append(resp.Errors, "商家数据同步暂未实现")
+		resp.Errors = append(resp.Errors, "鍟嗗鏁版嵁鍚屾鏆傛湭瀹炵幇")
 	}
 
 	return resp, nil
 }
 
-// syncProductsFromRPC 从 Product Service 拉取全量数据同步到 ES
+// syncProductsFromRPC 浠?Product Service 鎷夊彇鍏ㄩ噺鏁版嵁鍚屾鍒?ES
 func (h *SearchHandler) syncProductsFromRPC(ctx context.Context, batchSize int64) (success, failed int64, errors []string) {
 	page := int64(1)
 	for {
@@ -181,7 +181,7 @@ func (h *SearchHandler) syncProductsFromRPC(ctx context.Context, batchSize int64
 			Page: page, PageSize: batchSize,
 		})
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("拉取第 %d 页失败: %v", page, err))
+			errors = append(errors, fmt.Sprintf("鎷夊彇绗?%d 椤靛け璐? %v", page, err))
 			break
 		}
 		products := resp.GetProducts()
@@ -220,3 +220,5 @@ func productProtoToDoc(p *productv1.Product) domain.ProductDocument {
 		MerchantName: p.GetMerchantName(),
 	}
 }
+
+

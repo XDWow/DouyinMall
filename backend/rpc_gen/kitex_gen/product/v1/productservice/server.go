@@ -22,3 +22,5 @@ func NewServer(handler productv1.ProductService, opts ...server.Option) server.S
 func RegisterService(svr server.Server, handler productv1.ProductService, opts ...server.RegisterOption) error {
 	return svr.RegisterService(serviceInfo(), handler, opts...)
 }
+
+

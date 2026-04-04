@@ -53,3 +53,5 @@ func initViperWatch() {
 	_ = viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
 	_ = viper.BindEnv("canal.enabled", "CANAL_ENABLED")
 }
+
+

@@ -11,3 +11,5 @@ type PaymentRepository interface {
 	GetPayment(ctx context.Context, bizTradeNo string) (Payment, error)
 	FindExpiredPayment(ctx context.Context, limit int, t time.Time) ([]Payment, error)
 }
+
+

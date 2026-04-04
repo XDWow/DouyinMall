@@ -28,3 +28,5 @@ func InitGRPCServer(handler *transportgrpc.Handler) server.Server {
 		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: serviceName}),
 	)
 }
+
+

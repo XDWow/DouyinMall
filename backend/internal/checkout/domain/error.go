@@ -6,77 +6,79 @@ import (
 )
 
 var (
-	// ErrInvalidInput 请求参数不合法（空商品列表等）
+	// ErrInvalidInput 璇锋眰鍙傛暟涓嶅悎娉曪紙绌哄晢鍝佸垪琛ㄧ瓑锛?
 	ErrInvalidInput = errors.New("invalid input")
 
-	// ErrPriceChanged 从 PreviewOrder 到 PlaceOrder 期间商品价格上涨
-	// 需要用户重新进入结算页确认新价格
+	// ErrPriceChanged 浠?PreviewOrder 鍒?PlaceOrder 鏈熼棿鍟嗗搧浠锋牸涓婃定
+	// 闇€瑕佺敤鎴烽噸鏂拌繘鍏ョ粨绠楅〉纭鏂颁环鏍?
 	ErrPriceChanged = errors.New("price has changed, please re-confirm")
 
-	// ErrInsufficientStock 降级兜底：resp 无明细时用
+	// ErrInsufficientStock 闄嶇骇鍏滃簳锛歳esp 鏃犳槑缁嗘椂鐢?
 	ErrInsufficientStock = errors.New("insufficient stock")
 
-	// ErrOrderCreateFailed 创建订单失败（Order 服务返回，Saga 补偿触发）
+	// ErrOrderCreateFailed 鍒涘缓璁㈠崟澶辫触锛圤rder 鏈嶅姟杩斿洖锛孲aga 琛ュ伩瑙﹀彂锛?
 	ErrOrderCreateFailed = errors.New("failed to create order")
 
-	// ErrPaymentCreateFailed 创建支付单失败（Payment 服务返回，Saga 补偿触发）
+	// ErrPaymentCreateFailed 鍒涘缓鏀粯鍗曞け璐ワ紙Payment 鏈嶅姟杩斿洖锛孲aga 琛ュ伩瑙﹀彂锛?
 	ErrPaymentCreateFailed = errors.New("failed to create payment")
 	ErrOrderNotPayable     = errors.New("order is not payable")
 	ErrOrderExpired        = errors.New("order has expired")
 	ErrOrderForbidden      = errors.New("order does not belong to current user")
 )
 
-// UnavailableItem 单个失效商品的详情
+// UnavailableItem 鍗曚釜澶辨晥鍟嗗搧鐨勮鎯?
 type UnavailableItem struct {
 	ProductID int64
 	Name      string
-	Reason    string // "商品已下架" / "库存不足"
+	Reason    string // "鍟嗗搧宸蹭笅鏋? / "搴撳瓨涓嶈冻"
 }
 
-// UnavailableItemsError 附带具体失效商品列表的结构化错误。
-// 前端收到后展示弹框，用户确认移除失效商品后重新提交。
+// UnavailableItemsError 闄勫甫鍏蜂綋澶辨晥鍟嗗搧鍒楄〃鐨勭粨鏋勫寲閿欒銆?
+// 鍓嶇鏀跺埌鍚庡睍绀哄脊妗嗭紝鐢ㄦ埛纭绉婚櫎澶辨晥鍟嗗搧鍚庨噸鏂版彁浜ゃ€?
 type UnavailableItemsError struct {
 	Items []UnavailableItem
 }
 
 func (e *UnavailableItemsError) Error() string {
-	return fmt.Sprintf("%d 件商品已失效，请确认后重新提交", len(e.Items))
+	return fmt.Sprintf("%d 浠跺晢鍝佸凡澶辨晥锛岃纭鍚庨噸鏂版彁浜?, len(e.Items))
 }
 
-// ==================== 库存不足 ====================
+// ==================== 搴撳瓨涓嶈冻 ====================
 
-// InsufficientStockItem 单个库存不足商品的详情
+// InsufficientStockItem 鍗曚釜搴撳瓨涓嶈冻鍟嗗搧鐨勮鎯?
 type InsufficientStockItem struct {
 	ProductID int64
 	Name      string
-	Requested int64 // 用户下单数量
-	Available int64 // 可用库存 = 实际库存 - Redis 预扣库存
+	Requested int64 // 鐢ㄦ埛涓嬪崟鏁伴噺
+	Available int64 // 鍙敤搴撳瓨 = 瀹為檯搴撳瓨 - Redis 棰勬墸搴撳瓨
 }
 
-// InsufficientStockError 预扣库存失败，inventory 服务直接返回不足明细。
-// 前端可展示 "XX 库存仅剩 N 件" 让用户调整数量或移除。
+// InsufficientStockError 棰勬墸搴撳瓨澶辫触锛宨nventory 鏈嶅姟鐩存帴杩斿洖涓嶈冻鏄庣粏銆?
+// 鍓嶇鍙睍绀?"XX 搴撳瓨浠呭墿 N 浠? 璁╃敤鎴疯皟鏁存暟閲忔垨绉婚櫎銆?
 type InsufficientStockError struct {
 	Items []InsufficientStockItem
 }
 
 func (e *InsufficientStockError) Error() string {
-	return fmt.Sprintf("%d 件商品库存不足", len(e.Items))
+	return fmt.Sprintf("%d 浠跺晢鍝佸簱瀛樹笉瓒?, len(e.Items))
 }
 
-// ==================== 优惠券不可用 ====================
+// ==================== 浼樻儬鍒镐笉鍙敤 ====================
 
-// CouponFailureItem 单张券预扣失败的详情
+// CouponFailureItem 鍗曞紶鍒搁鎵ｅけ璐ョ殑璇︽儏
 type CouponFailureItem struct {
 	CouponID int64
-	Reason   string // 来自 coupon 服务返回的 reason
+	Reason   string // 鏉ヨ嚜 coupon 鏈嶅姟杩斿洖鐨?reason
 }
 
-// CouponUnavailableError 批量预扣优惠券失败的结构化错误。
-// coupon 服务事务内批量预扣，全部失败或部分失败时返回失败明细。
+// CouponUnavailableError 鎵归噺棰勬墸浼樻儬鍒稿け璐ョ殑缁撴瀯鍖栭敊璇€?
+// coupon 鏈嶅姟浜嬪姟鍐呮壒閲忛鎵ｏ紝鍏ㄩ儴澶辫触鎴栭儴鍒嗗け璐ユ椂杩斿洖澶辫触鏄庣粏銆?
 type CouponUnavailableError struct {
 	Failures []CouponFailureItem
 }
 
 func (e *CouponUnavailableError) Error() string {
-	return fmt.Sprintf("%d 张优惠券不可用", len(e.Failures))
+	return fmt.Sprintf("%d 寮犱紭鎯犲埜涓嶅彲鐢?, len(e.Failures))
 }
+
+

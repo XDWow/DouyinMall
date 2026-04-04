@@ -13,3 +13,5 @@ type ProductRepo interface {
 	UpdateProduct(ctx context.Context, product domain.Product) (productID int64, err error)
 	DeleteProduct(ctx context.Context, id, userID int64) (err error)
 }
+
+

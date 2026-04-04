@@ -13,10 +13,12 @@ type DoubleWriteCallback struct {
 
 func (d *DoubleWriteCallback) create() func(db *gorm.DB) {
 	return func(db *gorm.DB) {
-		// 你这里希望完成双写
-		// 这里只有一个 db 过来，你要么是 src，要么是 dst
-		// 做不到动态切换
-		// 这里你改不了的
+		// 浣犺繖閲屽笇鏈涘畬鎴愬弻鍐?
+		// 杩欓噷鍙湁涓€涓?db 杩囨潵锛屼綘瑕佷箞鏄?src锛岃涔堟槸 dst
+		// 鍋氫笉鍒板姩鎬佸垏鎹?
+		// 杩欓噷浣犳敼涓嶄簡鐨?
 		// d.src.Create(db.Statement.Model).Error
 	}
 }
+
+

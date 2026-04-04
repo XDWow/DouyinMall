@@ -285,3 +285,5 @@ type AfterSaleService interface {
 	CreateAfterSaleRequest(ctx context.Context, req *CreateAfterSaleRequestReq) (res *CreateAfterSaleRequestResp, err error)
 	GetAfterSaleRequest(ctx context.Context, req *GetAfterSaleRequestReq) (res *GetAfterSaleRequestResp, err error)
 }
+
+

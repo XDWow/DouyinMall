@@ -8,7 +8,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/search/domain"
 )
 
-// rowMap 是 binlog 事件中的一行数据（map[columnName]value）
+// rowMap 鏄?binlog 浜嬩欢涓殑涓€琛屾暟鎹紙map[columnName]value锛?
 func parseRowToSyncEvent(rowMap map[string]interface{}, action domain.EventAction) (domain.SyncEvent, error) {
 	event := domain.SyncEvent{
 		Type:   domain.EventTypeProduct,
@@ -25,7 +25,7 @@ func parseRowToSyncEvent(rowMap map[string]interface{}, action domain.EventActio
 		return event, nil
 	}
 
-	// CREATE/UPDATE 操作需要完整数据
+	// CREATE/UPDATE 鎿嶄綔闇€瑕佸畬鏁存暟鎹?
 	doc := &domain.ProductDocument{
 		ID: id,
 	}
@@ -45,17 +45,17 @@ func parseRowToSyncEvent(rowMap map[string]interface{}, action domain.EventActio
 		doc.MerchantID = merchantID
 	}
 
-	// Description（可能为 NULL）
+	// Description锛堝彲鑳戒负 NULL锛?
 	if desc, ok := rowMap["description"].(string); ok && desc != "" {
 		doc.Description = desc
 	}
 
-	// Picture（可能为 NULL）
+	// Picture锛堝彲鑳戒负 NULL锛?
 	if pic, ok := rowMap["picture"].(string); ok && pic != "" {
 		doc.Picture = pic
 	}
 
-	// SlideImgs（JSON 字符串 → []string）
+	// SlideImgs锛圝SON 瀛楃涓?鈫?[]string锛?
 	if slideImgsStr, ok := rowMap["slide_imgs"].(string); ok && slideImgsStr != "" {
 		var slideImgs []string
 		if err := json.Unmarshal([]byte(slideImgsStr), &slideImgs); err == nil {
@@ -63,7 +63,7 @@ func parseRowToSyncEvent(rowMap map[string]interface{}, action domain.EventActio
 		}
 	}
 
-	// Categories（JSON 字符串 → []string）
+	// Categories锛圝SON 瀛楃涓?鈫?[]string锛?
 	if categoriesStr, ok := rowMap["categories"].(string); ok && categoriesStr != "" {
 		var categories []string
 		if err := json.Unmarshal([]byte(categoriesStr), &categories); err == nil {
@@ -71,12 +71,12 @@ func parseRowToSyncEvent(rowMap map[string]interface{}, action domain.EventActio
 		}
 	}
 
-	// MerchantName（可能为 NULL）
+	// MerchantName锛堝彲鑳戒负 NULL锛?
 	if merchantName, ok := rowMap["merchant_name"].(string); ok && merchantName != "" {
 		doc.MerchantName = merchantName
 	}
 
-	// CreatedAt（time.Time → Unix 时间戳）
+	// CreatedAt锛坱ime.Time 鈫?Unix 鏃堕棿鎴筹級
 	if createdAt, ok := rowMap["created_at"].(time.Time); ok {
 		doc.CreatedTime = createdAt.Unix()
 	} else if createdAtStr, ok := rowMap["created_at"].(string); ok {
@@ -85,7 +85,7 @@ func parseRowToSyncEvent(rowMap map[string]interface{}, action domain.EventActio
 		}
 	}
 
-	// UpdatedAt（time.Time → Unix 时间戳）
+	// UpdatedAt锛坱ime.Time 鈫?Unix 鏃堕棿鎴筹級
 	if updatedAt, ok := rowMap["updated_at"].(time.Time); ok {
 		doc.UpdatedTime = updatedAt.Unix()
 	} else if updatedAtStr, ok := rowMap["updated_at"].(string); ok {
@@ -111,3 +111,5 @@ func parseInt64FromRow(rowMap map[string]interface{}, key string) (int64, error)
 	}
 	return 0, nil
 }
+
+

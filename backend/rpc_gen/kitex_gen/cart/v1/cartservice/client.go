@@ -83,3 +83,5 @@ func (p *kCartServiceClient) DecrementQty(ctx context.Context, Req *v1.Decrement
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.DecrementQty(ctx, Req)
 }
+
+

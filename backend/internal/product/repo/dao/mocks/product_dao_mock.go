@@ -129,3 +129,5 @@ func (mr *MockProductDaoMockRecorder) Update(ctx, product any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockProductDao)(nil).Update), ctx, product)
 }
+
+

@@ -96,7 +96,6 @@ type WorkflowConfig struct {
 	RerankTopK           int      `mapstructure:"rerank_top_k"`
 	ToolParallelism      int      `mapstructure:"tool_parallelism"`
 	ConfidenceThreshold  float64  `mapstructure:"confidence_threshold"`
-	SummaryTriggerTurns  int      `mapstructure:"summary_trigger_turns"`
 	MaxAnswerTokens      int      `mapstructure:"max_answer_tokens"`
 	StreamBuffer         int      `mapstructure:"stream_buffer"`
 	CheckpointTTLSeconds int      `mapstructure:"checkpoint_ttl_seconds"`

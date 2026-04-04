@@ -1,4 +1,4 @@
-﻿//go:build legacy_agent
+//go:build legacy_agent
 
 package orchestrator
 
@@ -22,7 +22,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/dto"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/memory"
-	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/tool"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
@@ -1164,4 +1164,6 @@ func cleanJSON(raw string) string {
 	raw = strings.TrimSuffix(raw, "```")
 	return strings.TrimSpace(raw)
 }
+
+
 

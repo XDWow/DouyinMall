@@ -15,20 +15,18 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitFallbackLLMClient 鏋勫缓甯﹀閿欓摼鐨?LLM 瀹㈡埛绔?
+// InitFallbackLLMClient 閺嬪嫬缂撶敮锕€顔愰柨娆撴懠閻?LLM 鐎广垺鍩涚粩?
 //
-// nodes 鍒囩墖鎸変紭鍏堢骇鎺掑垪锛氫富妯″瀷 鈫?澶囩敤妯″瀷锛堝彲閰嶇疆浠绘剰鏁伴噺锛夆啋 妯℃澘鍏滃簳
-// 瓒呮椂鐢?openaiClient 鐨?http.Client.Timeout 鎺у埗锛孯esilientClient 鍙鐔旀柇 + 闄愭祦
-//
-// 渚濊禆 viper key锛?
+// nodes 閸掑洨澧栭幐澶夌喘閸忓牏楠囬幒鎺戝灙閿涙矮瀵屽Ο鈥崇€?閳?婢跺洨鏁ゅΟ鈥崇€烽敍鍫濆讲闁板秶鐤嗘禒缁樺壈閺佷即鍣洪敍澶嗗晪 濡剝婢橀崗婊冪俺
+// 鐡掑懏妞傞悽?openaiClient 閻?http.Client.Timeout 閹貉冨煑閿涘esilientClient 閸欘亞顓搁悢鏃€鏌?+ 闂勬劖绁?//
+// 娓氭繆绂?viper key閿?
 //
 //	llm.base_url / llm.api_key
-//	llm.nodes: 鑺傜偣鍒楄〃锛屾瘡椤瑰寘鍚細
-//	  name              妯″瀷鍚嶇О
-//	  timeout_seconds   http 瓒呮椂锛堥粯璁?30s锛?
-//	  rpm               RPM 闄愬埗锛堥粯璁?60锛?
-//	  failure_threshold 鐔旀柇闃堝€硷紙榛樿 5锛?
-//	  cooldown_seconds  鐔旀柇鍐峰嵈锛堥粯璁?30s锛?
+//	llm.nodes: 閼哄倻鍋ｉ崚妤勩€冮敍灞剧槨妞ょ懓瀵橀崥顐窗
+//	  name              濡€崇€烽崥宥囆?//	  timeout_seconds   http 鐡掑懏妞傞敍鍫ョ帛鐠?30s閿?
+//	  rpm               RPM 闂勬劕鍩楅敍鍫ョ帛鐠?60閿?
+//	  failure_threshold 閻旀梹鏌囬梼鍫濃偓纭风礄姒涙顓?5閿?
+//	  cooldown_seconds  閻旀梹鏌囬崘宄板祱閿涘牓绮拋?30s閿?
 func InitFallbackLLMClient(log logger.LoggerV1, metrics *usecase.PipelineMetrics, cmd redis.Cmdable) *infraai.FallbackLLMClient {
 	baseURL := viper.GetString("llm.base_url")
 	apiKey := viper.GetString("llm.api_key")
@@ -42,7 +40,7 @@ func InitFallbackLLMClient(log logger.LoggerV1, metrics *usecase.PipelineMetrics
 	}
 	var cfgs []nodeCfg
 	if err := viper.UnmarshalKey("llm.nodes", &cfgs); err != nil || len(cfgs) == 0 {
-		// 鍏煎鏃ч厤缃細llm.chat_model 鍗曡妭鐐?+ 鍙€?llm.fallback_model
+		// 閸忕厧顔愰弮褔鍘ょ純顕嗙窗llm.chat_model 閸楁洝濡悙?+ 閸欘垶鈧?llm.fallback_model
 		cfgs = []nodeCfg{
 			{
 				Name:             viper.GetString("llm.chat_model"),
@@ -63,7 +61,7 @@ func InitFallbackLLMClient(log logger.LoggerV1, metrics *usecase.PipelineMetrics
 		}
 	}
 
-	log.Info("LLM 瀹归敊閾惧垵濮嬪寲",
+	log.Info("LLM 鐎瑰綊鏁婇柧鎯у灥婵瀵?,
 		logger.String("base_url", baseURL),
 		logger.Int("node_count", len(cfgs)))
 	nodes := make([]infraai.CSLLMClient, 0, len(cfgs))
@@ -84,8 +82,8 @@ func InitFallbackLLMClient(log logger.LoggerV1, metrics *usecase.PipelineMetrics
 		if rpm == 0 {
 			rpm = 60
 		}
-		// 姣忎釜鑺傜偣鐙珛鐨?Redis 婊戝姩绐楀彛闄愭祦鍣紝澶氬疄渚嬪叡浜鏁?
-		log.Info("LLM 鑺傜偣娉ㄥ唽",
+		// 濮ｅ繋閲滈懞鍌滃仯閻欘剛鐝涢惃?Redis 濠婃垵濮╃粣妤€褰涢梽鎰ウ閸ｎ煉绱濇径姘杽娓氬鍙℃禍顐ヮ吀閺?
+		log.Info("LLM 閼哄倻鍋ｅ▔銊ュ斀",
 			logger.String("model", c.Name),
 			logger.String("base_url", baseURL),
 			logger.Int("timeout_s", c.TimeoutSeconds),
@@ -110,7 +108,7 @@ func InitFallbackLLMClient(log logger.LoggerV1, metrics *usecase.PipelineMetrics
 	return infraai.NewFallbackLLMClient(log, metrics, nodes...)
 }
 
-// InitEmbedder 鍒濆鍖?Embedding 瀹㈡埛绔紙璇箟缂撳瓨 + RAG 鍚戦噺鍖栵級
+// InitEmbedder 閸掓繂顫愰崠?Embedding 鐎广垺鍩涚粩顖ょ礄鐠囶厺绠熺紓鎾崇摠 + RAG 閸氭垿鍣洪崠鏍电礆
 func InitEmbedder() ai.Embedder {
 	return ai.NewEmbeddingClient(ai.EmbeddingConfig{
 		BaseURL: viper.GetString("embedding.base_url"),
@@ -119,9 +117,9 @@ func InitEmbedder() ai.Embedder {
 	})
 }
 
-// InitReranker 鍒濆鍖?cross-encoder 閲嶆帓瀹㈡埛绔?
-// 鍏煎 SiliconFlow / Jina 鐨?/rerank API锛堟帹鑽愭ā鍨嬶細BAAI/bge-reranker-v2-m3锛?
-// 渚濊禆 viper key锛歳eranker.base_url / reranker.api_key / reranker.model / reranker.timeout_seconds
+// InitReranker 閸掓繂顫愰崠?cross-encoder 闁插秵甯撶€广垺鍩涚粩?
+// 閸忕厧顔?SiliconFlow / Jina 閻?/rerank API閿涘牊甯归懡鎰侀崹瀣剁窗BAAI/bge-reranker-v2-m3閿?
+// 娓氭繆绂?viper key閿涙eranker.base_url / reranker.api_key / reranker.model / reranker.timeout_seconds
 func InitReranker() ai.Reranker {
 	return ai.NewRerankClient(ai.RerankConfig{
 		BaseURL: viper.GetString("reranker.base_url"),
@@ -130,3 +128,5 @@ func InitReranker() ai.Reranker {
 		Timeout: time.Duration(viper.GetInt("reranker.timeout_seconds")) * time.Second,
 	})
 }
+
+

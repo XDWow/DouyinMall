@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AgentHandler BFF 层 HTTP 处理器，代理前端请求到 Agent gRPC 微服务
+// AgentHandler BFF 灞?HTTP 澶勭悊鍣紝浠ｇ悊鍓嶇璇锋眰鍒?Agent gRPC 寰湇鍔?
 type AgentHandler struct {
 	agentClient  agentservice.Client
 	streamClient agentservice.StreamClient
@@ -22,7 +22,7 @@ func NewAgentHandler(agentClient agentservice.Client, streamClient agentservice.
 	return &AgentHandler{agentClient: agentClient, streamClient: streamClient}
 }
 
-// RegisterRoutes 注册路由到 gin 引擎
+// RegisterRoutes 娉ㄥ唽璺敱鍒?gin 寮曟搸
 func (h *AgentHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/chat", h.SendMessage)
 	rg.POST("/chat/stream", h.SendMessageStream)
@@ -32,18 +32,18 @@ func (h *AgentHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.DELETE("/session", h.ClearSession)
 }
 
-// ==================== 同步对话 ====================
+// ==================== 鍚屾瀵硅瘽 ====================
 
 type chatReq struct {
 	SessionID string `json:"session_id" binding:"required"`
 	Message   string `json:"message" binding:"required"`
 }
 
-// SendMessage POST /agent/api/chat — 同步对话
+// SendMessage POST /agent/api/chat 鈥?鍚屾瀵硅瘽
 func (h *AgentHandler) SendMessage(c *gin.Context) {
 	var req chatReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "参数错误: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "鍙傛暟閿欒: " + err.Error()})
 		return
 	}
 
@@ -55,42 +55,42 @@ func (h *AgentHandler) SendMessage(c *gin.Context) {
 		Message:   req.Message,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "服务调用失败"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "鏈嶅姟璋冪敤澶辫触"})
 		return
 	}
 
 	c.JSON(http.StatusOK, ginx.Result{Code: 0, Data: toChatResp(resp)})
 }
 
-// ==================== 流式对话（SSE）====================
+// ==================== 娴佸紡瀵硅瘽锛圫SE锛?===================
 
-// SendMessageStream POST /agent/api/chat/stream — SSE 流式对话
-// 事件类型：stage（阶段推送）、delta（文本增量）、done（结束，携带完整响应）、error
+// SendMessageStream POST /agent/api/chat/stream 鈥?SSE 娴佸紡瀵硅瘽
+// 浜嬩欢绫诲瀷锛歴tage锛堥樁娈垫帹閫侊級銆乨elta锛堟枃鏈閲忥級銆乨one锛堢粨鏉燂紝鎼哄甫瀹屾暣鍝嶅簲锛夈€乪rror
 func (h *AgentHandler) SendMessageStream(c *gin.Context) {
 	var req chatReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "参数错误: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "鍙傛暟閿欒: " + err.Error()})
 		return
 	}
 
 	userID := getUserID(c)
 
-	// 建立 gRPC server-side streaming
+	// 寤虹珛 gRPC server-side streaming
 	stream, err := h.streamClient.SendMessageStream(c.Request.Context(), &agentv1.ChatRequest{
 		SessionId: req.SessionID,
 		UserId:    userID,
 		Message:   req.Message,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "建立流式连接失败"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "寤虹珛娴佸紡杩炴帴澶辫触"})
 		return
 	}
 
-	// 设置 SSE 头
+	// 璁剧疆 SSE 澶?
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no") // 关闭 Nginx 缓冲
+	c.Header("X-Accel-Buffering", "no") // 鍏抽棴 Nginx 缂撳啿
 	c.Status(http.StatusOK)
 
 	flusher, ok := c.Writer.(http.Flusher)
@@ -105,7 +105,7 @@ func (h *AgentHandler) SendMessageStream(c *gin.Context) {
 			if err == io.EOF {
 				break
 			}
-			writeSSE(c.Writer, flusher, "error", map[string]string{"msg": "流式读取失败"})
+			writeSSE(c.Writer, flusher, "error", map[string]string{"msg": "娴佸紡璇诲彇澶辫触"})
 			break
 		}
 
@@ -121,17 +121,17 @@ func (h *AgentHandler) SendMessageStream(c *gin.Context) {
 	}
 }
 
-// ==================== 会话管理 ====================
+// ==================== 浼氳瘽绠＄悊 ====================
 
 type createSessionReq struct {
 	Channel string `json:"channel" binding:"required"`
 }
 
-// CreateSession POST /agent/api/session — 创建新会话
+// CreateSession POST /agent/api/session 鈥?鍒涘缓鏂颁細璇?
 func (h *AgentHandler) CreateSession(c *gin.Context) {
 	var req createSessionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "参数错误: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "鍙傛暟閿欒: " + err.Error()})
 		return
 	}
 
@@ -142,14 +142,14 @@ func (h *AgentHandler) CreateSession(c *gin.Context) {
 		Channel: req.Channel,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "创建会话失败"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "鍒涘缓浼氳瘽澶辫触"})
 		return
 	}
 
 	c.JSON(http.StatusOK, ginx.Result{Code: 0, Data: gin.H{"session_id": resp.GetSessionId()}})
 }
 
-// ListSessions GET /agent/api/sessions?limit=10&offset=0 — 会话列表
+// ListSessions GET /agent/api/sessions?limit=10&offset=0 鈥?浼氳瘽鍒楄〃
 func (h *AgentHandler) ListSessions(c *gin.Context) {
 	userID := getUserID(c)
 
@@ -168,7 +168,7 @@ func (h *AgentHandler) ListSessions(c *gin.Context) {
 		Offset: offset,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "获取会话列表失败"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "鑾峰彇浼氳瘽鍒楄〃澶辫触"})
 		return
 	}
 
@@ -189,11 +189,11 @@ func (h *AgentHandler) ListSessions(c *gin.Context) {
 	}})
 }
 
-// GetChatHistory GET /agent/api/history?session_id=xxx&limit=20&offset=0 — 对话历史
+// GetChatHistory GET /agent/api/history?session_id=xxx&limit=20&offset=0 鈥?瀵硅瘽鍘嗗彶
 func (h *AgentHandler) GetChatHistory(c *gin.Context) {
 	sessionID := c.Query("session_id")
 	if sessionID == "" {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "session_id 不能为空"})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "session_id 涓嶈兘涓虹┖"})
 		return
 	}
 
@@ -212,7 +212,7 @@ func (h *AgentHandler) GetChatHistory(c *gin.Context) {
 		Offset:    offset,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "获取对话历史失败"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "鑾峰彇瀵硅瘽鍘嗗彶澶辫触"})
 		return
 	}
 
@@ -235,11 +235,11 @@ func (h *AgentHandler) GetChatHistory(c *gin.Context) {
 	}})
 }
 
-// ClearSession DELETE /agent/api/session?session_id=xxx — 清空会话
+// ClearSession DELETE /agent/api/session?session_id=xxx 鈥?娓呯┖浼氳瘽
 func (h *AgentHandler) ClearSession(c *gin.Context) {
 	sessionID := c.Query("session_id")
 	if sessionID == "" {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "session_id 不能为空"})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "session_id 涓嶈兘涓虹┖"})
 		return
 	}
 
@@ -247,16 +247,16 @@ func (h *AgentHandler) ClearSession(c *gin.Context) {
 		SessionId: sessionID,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "清空会话失败"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "娓呯┖浼氳瘽澶辫触"})
 		return
 	}
 
 	c.JSON(http.StatusOK, ginx.Result{Code: 0, Data: gin.H{"success": resp.GetSuccess()}})
 }
 
-// ==================== 辅助函数 ====================
+// ==================== 杈呭姪鍑芥暟 ====================
 
-// getUserID 从 gin context 中提取 JWT 解析后的 user_id
+// getUserID 浠?gin context 涓彁鍙?JWT 瑙ｆ瀽鍚庣殑 user_id
 func getUserID(c *gin.Context) int64 {
 	claims, exists := c.Get("claims")
 	if !exists {
@@ -278,14 +278,14 @@ func parseInt32Query(c *gin.Context, key string) (int32, error) {
 	return n, err
 }
 
-// writeSSE 写入一条 SSE 事件
+// writeSSE 鍐欏叆涓€鏉?SSE 浜嬩欢
 func writeSSE(w http.ResponseWriter, flusher http.Flusher, event string, data any) {
 	payload, _ := json.Marshal(data)
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, payload)
 	flusher.Flush()
 }
 
-// toChatResp 将 gRPC ChatResponse 转为前端友好的 JSON 结构
+// toChatResp 灏?gRPC ChatResponse 杞负鍓嶇鍙嬪ソ鐨?JSON 缁撴瀯
 func toChatResp(resp *agentv1.ChatResponse) gin.H {
 	if resp == nil {
 		return gin.H{}
@@ -297,7 +297,7 @@ func toChatResp(resp *agentv1.ChatResponse) gin.H {
 		"suggested_questions": resp.GetSuggestedQuestions(),
 	}
 
-	// 知识引用
+	// 鐭ヨ瘑寮曠敤
 	if refs := resp.GetKnowledge(); len(refs) > 0 {
 		knowledge := make([]gin.H, 0, len(refs))
 		for _, ref := range refs {
@@ -312,7 +312,7 @@ func toChatResp(resp *agentv1.ChatResponse) gin.H {
 		result["knowledge"] = knowledge
 	}
 
-	// 转人工摘要
+	// 杞汉宸ユ憳瑕?
 	if h := resp.GetHandoff(); h != nil {
 		result["handoff"] = gin.H{
 			"core_issue":        h.GetCoreIssue(),
@@ -325,3 +325,5 @@ func toChatResp(resp *agentv1.ChatResponse) gin.H {
 
 	return result
 }
+
+

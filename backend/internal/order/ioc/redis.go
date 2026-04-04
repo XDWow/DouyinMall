@@ -15,3 +15,5 @@ func InitRedis() redis.Cmdable {
 		Addr: c.Addr,
 	})
 }
+
+

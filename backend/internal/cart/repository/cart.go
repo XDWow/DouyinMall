@@ -44,7 +44,7 @@ func (r *cachedCartRepository) productField(productID int64) string {
 	return strconv.FormatInt(productID, 10)
 }
 
-// 业务性能比数据一致性，正确性重要，也就是容忍一些数据错误，选择 write-behind
+// 涓氬姟鎬ц兘姣旀暟鎹竴鑷存€э紝姝ｇ‘鎬ч噸瑕侊紝涔熷氨鏄蹇嶄竴浜涙暟鎹敊璇紝閫夋嫨 write-behind
 func (r *cachedCartRepository) AddItems(ctx context.Context, userID int64, items []domain.CartItem) error {
 	key := r.cartKey(userID)
 	fields := make([]string, len(items))
@@ -58,7 +58,7 @@ func (r *cachedCartRepository) AddItems(ctx context.Context, userID int64, items
 	for i, item := range items {
 		productIDs[i] = item.ProductID
 	}
-	// 单条 INSERT ... ON CONFLICT 批量写 MySQL
+	// 鍗曟潯 INSERT ... ON CONFLICT 鎵归噺鍐?MySQL
 	go r.asyncUpsertIncrementBatch(userID, productIDs)
 	return nil
 }
@@ -167,7 +167,7 @@ func (r *cachedCartRepository) DecrementQty(ctx context.Context, userID, product
 	return newQty, nil
 }
 
-// ----------------- 辅助方法 ---------------------
+// ----------------- 杈呭姪鏂规硶 ---------------------
 
 func (r *cachedCartRepository) mapToCart(userID int64, result map[string]string) domain.Cart {
 	items := make([]domain.CartItem, 0, len(result))
@@ -198,7 +198,7 @@ func (r *cachedCartRepository) asyncWriteToMySQL(userID int64, item domain.CartI
 
 	err := r.dao.Upsert(ctx, daoItem)
 	if err != nil {
-		r.logger.Error("异步写 MySQL 失败", logger.Int64("user_id", userID), logger.Int64("product_id", item.ProductID), logger.Error(err))
+		r.logger.Error("寮傛鍐?MySQL 澶辫触", logger.Int64("user_id", userID), logger.Int64("product_id", item.ProductID), logger.Error(err))
 	}
 }
 
@@ -206,7 +206,7 @@ func (r *cachedCartRepository) asyncUpsertIncrementBatch(userID int64, productID
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := r.dao.UpsertIncrementBatch(ctx, userID, productIDs); err != nil {
-		r.logger.Error("异步批量累加 MySQL 失败", logger.Int64("user_id", userID), logger.Error(err))
+		r.logger.Error("寮傛鎵归噺绱姞 MySQL 澶辫触", logger.Int64("user_id", userID), logger.Error(err))
 	}
 }
 
@@ -214,7 +214,7 @@ func (r *cachedCartRepository) asyncDeleteByProductIDs(userID int64, productIDs 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := r.dao.DeleteByProductIDs(ctx, userID, productIDs); err != nil {
-		r.logger.Error("异步批量删除 MySQL 失败", logger.Int64("user_id", userID), logger.Error(err))
+		r.logger.Error("寮傛鎵归噺鍒犻櫎 MySQL 澶辫触", logger.Int64("user_id", userID), logger.Error(err))
 	}
 }
 
@@ -224,7 +224,7 @@ func (r *cachedCartRepository) asyncIncrementToMySQL(userID, productID int64) {
 
 	err := r.dao.IncrementQuantity(ctx, userID, productID)
 	if err != nil {
-		r.logger.Error("异步增加 MySQL 失败", logger.Int64("user_id", userID), logger.Int64("product_id", productID), logger.Error(err))
+		r.logger.Error("寮傛澧炲姞 MySQL 澶辫触", logger.Int64("user_id", userID), logger.Int64("product_id", productID), logger.Error(err))
 	}
 }
 
@@ -234,7 +234,7 @@ func (r *cachedCartRepository) asyncDecrementToMySQL(userID, productID int64) {
 
 	err := r.dao.DecrementQuantity(ctx, userID, productID)
 	if err != nil {
-		r.logger.Error("异步减少 MySQL 失败", logger.Int64("user_id", userID), logger.Int64("product_id", productID), logger.Error(err))
+		r.logger.Error("寮傛鍑忓皯 MySQL 澶辫触", logger.Int64("user_id", userID), logger.Int64("product_id", productID), logger.Error(err))
 	}
 }
 
@@ -244,7 +244,7 @@ func (r *cachedCartRepository) asyncEmptyCart(userID int64) {
 
 	err := r.dao.DeleteByUserID(ctx, userID)
 	if err != nil {
-		r.logger.Error("异步清空购物车失败", logger.Int64("user_id", userID), logger.Error(err))
+		r.logger.Error("寮傛娓呯┖璐墿杞﹀け璐?, logger.Int64("user_id", userID), logger.Error(err))
 	}
 }
 
@@ -258,6 +258,8 @@ func (r *cachedCartRepository) asyncWriteBackToRedis(userID int64, daoItems []da
 		fieldValues[r.productField(item.ProductID)] = item.Quantity
 	}
 	if err := r.cache.HSetBatch(ctx, key, fieldValues); err != nil {
-		r.logger.Error("批量回写 Redis 失败", logger.Int64("user_id", userID), logger.Error(err))
+		r.logger.Error("鎵归噺鍥炲啓 Redis 澶辫触", logger.Int64("user_id", userID), logger.Error(err))
 	}
 }
+
+

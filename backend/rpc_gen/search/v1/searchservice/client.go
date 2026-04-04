@@ -77,3 +77,5 @@ func (p *kSearchServiceClient) AISearchProducts(ctx context.Context, Req *v1.AIS
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.AISearchProducts(ctx, Req)
 }
+
+

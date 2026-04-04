@@ -23,7 +23,7 @@ func InitGRPCServer(agentHandler *handler.AgentHandler) server.Server {
 	}
 	r, err := etcd.NewEtcdRegistry(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 etcd 娉ㄥ唽涓績澶辫触: %w", err))
+		panic(fmt.Errorf("閸掓稑缂?etcd 濞夈劌鍞芥稉顓炵妇婢惰精瑙? %w", err))
 	}
 
 	port := viper.GetInt("grpc.server.port")
@@ -40,3 +40,5 @@ func InitGRPCServer(agentHandler *handler.AgentHandler) server.Server {
 	)
 	return svr
 }
+
+

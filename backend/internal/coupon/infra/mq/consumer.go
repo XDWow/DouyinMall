@@ -12,7 +12,7 @@ import (
 
 const TopicOrderStatusUpdate = "order_status_update"
 
-// OrderStatusUpdateEvent 订单状态变更事件
+// OrderStatusUpdateEvent 璁㈠崟鐘舵€佸彉鏇翠簨浠?
 type OrderStatusUpdateEvent struct {
 	OrderID int64       `json:"order_id"`
 	Status  OrderStatus `json:"status"`
@@ -22,34 +22,34 @@ type OrderStatus uint8
 
 const (
 	OrderStatusUnknown   OrderStatus = iota
-	OrderStatusCreated               // 1: 待支付
-	OrderStatusPaid                  // 2: 已支付（需要确认优惠券）
-	OrderStatusShipped               // 4: 已发货
-	OrderStatusCompleted             // 5: 已完成
-	OrderStatusCanceled              // 6: 已取消（需要释放优惠券）
-	OrderStatusRefunded              // 7: 已退款（需要退还优惠券）
+	OrderStatusCreated               // 1: 寰呮敮浠?
+	OrderStatusPaid                  // 2: 宸叉敮浠橈紙闇€瑕佺‘璁や紭鎯犲埜锛?
+	OrderStatusShipped               // 4: 宸插彂璐?
+	OrderStatusCompleted             // 5: 宸插畬鎴?
+	OrderStatusCanceled              // 6: 宸插彇娑堬紙闇€瑕侀噴鏀句紭鎯犲埜锛?
+	OrderStatusRefunded              // 7: 宸查€€娆撅紙闇€瑕侀€€杩樹紭鎯犲埜锛?
 )
 
 /*
-OrderConsumer 订单状态变更消费者
+OrderConsumer 璁㈠崟鐘舵€佸彉鏇存秷璐硅€?
 
-职责：
-1. 监听订单状态变更消息
-2. 根据订单状态执行优惠券操作：
-  - 支付成功(Paid) → 确认使用优惠券（Locked → Used）
-  - 订单取消(Canceled) → 释放优惠券（Locked → Unused）
-  - 订单退款(Refunded) → 退还优惠券（Used → Unused）
+鑱岃矗锛?
+1. 鐩戝惉璁㈠崟鐘舵€佸彉鏇存秷鎭?
+2. 鏍规嵁璁㈠崟鐘舵€佹墽琛屼紭鎯犲埜鎿嶄綔锛?
+  - 鏀粯鎴愬姛(Paid) 鈫?纭浣跨敤浼樻儬鍒革紙Locked 鈫?Used锛?
+  - 璁㈠崟鍙栨秷(Canceled) 鈫?閲婃斁浼樻儬鍒革紙Locked 鈫?Unused锛?
+  - 璁㈠崟閫€娆?Refunded) 鈫?閫€杩樹紭鎯犲埜锛圲sed 鈫?Unused锛?
 
-设计原则：
-- 幂等性：利用UpdateStatusByOrderID的条件更新保证幂等
-- 容错性：使用本地重试 + 统一ACK（saramax.Handler内置3次重试）
-- 解耦：只负责消息路由，业务逻辑在UseCase层
+璁捐鍘熷垯锛?
+- 骞傜瓑鎬э細鍒╃敤UpdateStatusByOrderID鐨勬潯浠舵洿鏂颁繚璇佸箓绛?
+- 瀹归敊鎬э細浣跨敤鏈湴閲嶈瘯 + 缁熶竴ACK锛坰aramax.Handler鍐呯疆3娆￠噸璇曪級
+- 瑙ｈ€︼細鍙礋璐ｆ秷鎭矾鐢憋紝涓氬姟閫昏緫鍦║seCase灞?
 */
 type OrderConsumer struct {
 	client    sarama.Client
-	commitUC  *usecase.CommitCouponUseCase  // 确认使用
-	releaseUC *usecase.ReleaseCouponUseCase // 释放（取消）
-	refundUC  *usecase.RefundCouponUseCase  // 退还（退款）
+	commitUC  *usecase.CommitCouponUseCase  // 纭浣跨敤
+	releaseUC *usecase.ReleaseCouponUseCase // 閲婃斁锛堝彇娑堬級
+	refundUC  *usecase.RefundCouponUseCase  // 閫€杩橈紙閫€娆撅級
 	logger    logger.LoggerV1
 }
 
@@ -83,27 +83,27 @@ func (c *OrderConsumer) Start() error {
 				saramax.NewHandler[OrderStatusUpdateEvent](c.logger, c.Consume),
 			)
 			if err != nil {
-				c.logger.Error("优惠券消费者异常退出", logger.Error(err))
-				// 短暂等待后重试，避免疯狂重连
+				c.logger.Error("浼樻儬鍒告秷璐硅€呭紓甯搁€€鍑?, logger.Error(err))
+				// 鐭殏绛夊緟鍚庨噸璇曪紝閬垮厤鐤媯閲嶈繛
 				time.Sleep(time.Second)
 			}
 		}
 	}()
 
-	c.logger.Info("OrderConsumer已启动",
+	c.logger.Info("OrderConsumer宸插惎鍔?,
 		logger.String("topic", TopicOrderStatusUpdate),
 		logger.String("consumerGroup", "coupon-consumer"))
 
 	return nil
 }
 
-// Consume 消息路由：根据状态分发到不同处理方法
-// 返回nil表示ACK，返回error会触发saramax.Handler的重试逻辑（最多3次）
+// Consume 娑堟伅璺敱锛氭牴鎹姸鎬佸垎鍙戝埌涓嶅悓澶勭悊鏂规硶
+// 杩斿洖nil琛ㄧずACK锛岃繑鍥瀍rror浼氳Е鍙憇aramax.Handler鐨勯噸璇曢€昏緫锛堟渶澶?娆★級
 func (c *OrderConsumer) Consume(msg *sarama.ConsumerMessage, evt OrderStatusUpdateEvent) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	c.logger.Info("收到订单状态变更消息",
+	c.logger.Info("鏀跺埌璁㈠崟鐘舵€佸彉鏇存秷鎭?,
 		logger.Int64("orderID", evt.OrderID),
 		logger.Int("status", int(evt.Status)),
 		logger.String("topic", msg.Topic),
@@ -118,58 +118,60 @@ func (c *OrderConsumer) Consume(msg *sarama.ConsumerMessage, evt OrderStatusUpda
 	case OrderStatusRefunded:
 		return c.handleRefunded(ctx, evt)
 	default:
-		// 其他状态不需要处理，直接ACK
+		// 鍏朵粬鐘舵€佷笉闇€瑕佸鐞嗭紝鐩存帴ACK
 		return nil
 	}
 }
 
-// 订单支付成功 → 确认使用优惠券（Locked → Used）
+// 璁㈠崟鏀粯鎴愬姛 鈫?纭浣跨敤浼樻儬鍒革紙Locked 鈫?Used锛?
 func (c *OrderConsumer) handlePaid(ctx context.Context, evt OrderStatusUpdateEvent) error {
 	err := c.commitUC.Execute(ctx, usecase.CommitCouponInput{
 		OrderID: evt.OrderID,
 	})
 	if err != nil {
-		c.logger.Error("确认使用优惠券失败",
+		c.logger.Error("纭浣跨敤浼樻儬鍒稿け璐?,
 			logger.Int64("orderID", evt.OrderID),
 			logger.Error(err))
-		return err // 返回error触发重试
+		return err // 杩斿洖error瑙﹀彂閲嶈瘯
 	}
 
-	c.logger.Info("确认使用优惠券成功",
+	c.logger.Info("纭浣跨敤浼樻儬鍒告垚鍔?,
 		logger.Int64("orderID", evt.OrderID))
 	return nil
 }
 
-// 订单取消 → 释放优惠券（Locked → Unused）
+// 璁㈠崟鍙栨秷 鈫?閲婃斁浼樻儬鍒革紙Locked 鈫?Unused锛?
 func (c *OrderConsumer) handleCanceled(ctx context.Context, evt OrderStatusUpdateEvent) error {
 	err := c.releaseUC.Execute(ctx, usecase.ReleaseCouponInput{
 		OrderID: evt.OrderID,
 	})
 	if err != nil {
-		c.logger.Error("释放优惠券失败",
+		c.logger.Error("閲婃斁浼樻儬鍒稿け璐?,
 			logger.Int64("orderID", evt.OrderID),
 			logger.Error(err))
-		return err // 返回error触发重试
+		return err // 杩斿洖error瑙﹀彂閲嶈瘯
 	}
 
-	c.logger.Info("释放优惠券成功",
+	c.logger.Info("閲婃斁浼樻儬鍒告垚鍔?,
 		logger.Int64("orderID", evt.OrderID))
 	return nil
 }
 
-// 订单退款 → 退还优惠券（Used → Unused）
+// 璁㈠崟閫€娆?鈫?閫€杩樹紭鎯犲埜锛圲sed 鈫?Unused锛?
 func (c *OrderConsumer) handleRefunded(ctx context.Context, evt OrderStatusUpdateEvent) error {
 	err := c.refundUC.Execute(ctx, usecase.RefundCouponInput{
 		OrderID: evt.OrderID,
 	})
 	if err != nil {
-		c.logger.Error("退还优惠券失败",
+		c.logger.Error("閫€杩樹紭鎯犲埜澶辫触",
 			logger.Int64("orderID", evt.OrderID),
 			logger.Error(err))
-		return err // 返回error触发重试
+		return err // 杩斿洖error瑙﹀彂閲嶈瘯
 	}
 
-	c.logger.Info("退还优惠券成功",
+	c.logger.Info("閫€杩樹紭鎯犲埜鎴愬姛",
 		logger.Int64("orderID", evt.OrderID))
 	return nil
 }
+
+

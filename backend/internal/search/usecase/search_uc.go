@@ -7,7 +7,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// SearchProductsUseCase 普通商品搜索（关键词 + 筛选 + 排序）
+// SearchProductsUseCase 鏅€氬晢鍝佹悳绱紙鍏抽敭璇?+ 绛涢€?+ 鎺掑簭锛?
 type SearchProductsUseCase struct {
 	productRepo domain.ProductRepo
 	l           logger.LoggerV1
@@ -21,7 +21,7 @@ func (uc *SearchProductsUseCase) Execute(ctx context.Context, req *domain.Search
 	return uc.productRepo.SearchProducts(ctx, req)
 }
 
-// SearchMerchantsUseCase 商家搜索
+// SearchMerchantsUseCase 鍟嗗鎼滅储
 type SearchMerchantsUseCase struct {
 	merchantRepo domain.MerchantRepo
 	l            logger.LoggerV1
@@ -35,7 +35,7 @@ func (uc *SearchMerchantsUseCase) Execute(ctx context.Context, req *domain.Searc
 	return uc.merchantRepo.SearchMerchants(ctx, req)
 }
 
-// SuggestUseCase 搜索建议（自动补全）
+// SuggestUseCase 鎼滅储寤鸿锛堣嚜鍔ㄨˉ鍏級
 type SuggestUseCase struct {
 	productRepo  domain.ProductRepo
 	merchantRepo domain.MerchantRepo
@@ -53,7 +53,7 @@ func (uc *SuggestUseCase) MerchantSuggest(ctx context.Context, keyword string, l
 	return uc.merchantRepo.SearchMerchantSuggest(ctx, keyword, limit)
 }
 
-// AggregationsUseCase 聚合统计
+// AggregationsUseCase 鑱氬悎缁熻
 type AggregationsUseCase struct {
 	productRepo domain.ProductRepo
 }
@@ -65,3 +65,5 @@ func NewAggregationsUseCase(productRepo domain.ProductRepo) *AggregationsUseCase
 func (uc *AggregationsUseCase) Execute(ctx context.Context, req *domain.SearchProductsReq) (*domain.SearchAggregationsResp, error) {
 	return uc.productRepo.GetAggregations(ctx, req)
 }
+
+

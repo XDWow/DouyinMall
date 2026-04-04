@@ -34,12 +34,14 @@ func (repo *couponTemplateRepository) GetByID(ctx context.Context, id int64) (do
 	return *templateEntityToDomain(&model), nil
 }
 
-// IncrIssuedCount 原子增加已发放数量（使用数据库层面的原子操作）
+// IncrIssuedCount 鍘熷瓙澧炲姞宸插彂鏀炬暟閲忥紙浣跨敤鏁版嵁搴撳眰闈㈢殑鍘熷瓙鎿嶄綔锛?
 func (repo *couponTemplateRepository) IncrIssuedCount(ctx context.Context, id int64) error {
-	// 使用 UPDATE ... SET issued_count = issued_count + 1 实现原子操作
+	// 浣跨敤 UPDATE ... SET issued_count = issued_count + 1 瀹炵幇鍘熷瓙鎿嶄綔
 	return repo.db.WithContext(ctx).
 		Model(&db.CouponTemplate{}).
 		Where("id = ?", id).
 		UpdateColumn("issued_count", gorm.Expr("issued_count + ?", 1)).
 		Error
 }
+
+

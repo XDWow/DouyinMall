@@ -53,3 +53,5 @@ func (p *kAfterSaleServiceClient) GetAfterSaleRequest(ctx context.Context, Req *
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetAfterSaleRequest(ctx, Req)
 }
+
+

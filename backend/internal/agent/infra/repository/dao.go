@@ -8,15 +8,14 @@ import (
 )
 
 type SessionDO struct {
-	ID         uint64    `gorm:"primaryKey;autoIncrement"`
-	SessionID  string    `gorm:"uniqueIndex;type:varchar(64);not null"`
-	UserID     int64     `gorm:"index;not null"`
-	Channel    string    `gorm:"type:varchar(32);not null"`
-	Status     string    `gorm:"type:varchar(16);not null"`
-	Summary    string    `gorm:"type:text"`
-	TotalTurns int       `gorm:"not null;default:0"`
-	CreatedAt  time.Time `gorm:"autoCreateTime"`
-	UpdatedAt  time.Time `gorm:"autoUpdateTime"`
+	ID          uint64    `gorm:"primaryKey;autoIncrement"`
+	SessionID   string    `gorm:"uniqueIndex;type:varchar(64);not null"`
+	UserID      int64     `gorm:"index;not null"`
+	Status      string    `gorm:"type:varchar(16);not null"`
+	LastMessage string    `gorm:"type:varchar(255);not null;default:''"`
+	TotalTurns  int       `gorm:"not null;default:0"`
+	CreatedAt   time.Time `gorm:"autoCreateTime"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 }
 
 func (SessionDO) TableName() string { return "agent_sessions" }

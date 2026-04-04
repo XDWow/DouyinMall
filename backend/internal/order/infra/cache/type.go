@@ -18,3 +18,5 @@ type OrderCache interface {
 	ZClaimByScore(ctx context.Context, key, max string, limit int64) ([]string, error)
 	ZRem(ctx context.Context, key string, members ...string) error
 }
+
+

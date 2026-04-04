@@ -1116,3 +1116,5 @@ func (p *kClient) Query(ctx context.Context, Req *v1.QueryUserReq) (r *v1.QueryU
 	}
 	return _result.GetSuccess(), nil
 }
+
+

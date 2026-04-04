@@ -86,3 +86,5 @@ func (uc *CreateAfterSaleRequestUseCase) Execute(ctx context.Context, cmd Create
 func newRequestNo() string {
 	return "AS-" + strings.ToUpper(uuid.NewString()[:8])
 }
+
+

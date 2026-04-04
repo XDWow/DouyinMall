@@ -9,15 +9,11 @@ import (
 	"github.com/cloudwego/prutal"
 )
 
-// 优惠券类型
-type CouponType int32
+// 浼樻儬鍒哥被鍨?type CouponType int32
 
 const (
 	CouponType_COUPON_TYPE_UNSPECIFIED CouponType = 0
-	CouponType_COUPON_TYPE_AMOUNT      CouponType = 1 // 满减券
-	CouponType_COUPON_TYPE_PERCENT     CouponType = 2 // 折扣券
-	CouponType_COUPON_TYPE_FIXED       CouponType = 3 // 立减券，无门槛
-)
+	CouponType_COUPON_TYPE_AMOUNT      CouponType = 1 // 婊″噺鍒?	CouponType_COUPON_TYPE_PERCENT     CouponType = 2 // 鎶樻墸鍒?	CouponType_COUPON_TYPE_FIXED       CouponType = 3 // 绔嬪噺鍒革紝鏃犻棬妲?)
 
 // Enum value maps for CouponType.
 var CouponType_name = map[int32]string{
@@ -42,16 +38,12 @@ func (x CouponType) String() string {
 	return strconv.Itoa(int(x))
 }
 
-// 优惠券状态
-type UserCouponStatus int32
+// 浼樻儬鍒哥姸鎬?type UserCouponStatus int32
 
 const (
 	UserCouponStatus_USER_COUPON_STATUS_UNSPECIFIED UserCouponStatus = 0
-	UserCouponStatus_USER_COUPON_STATUS_UNUSED      UserCouponStatus = 1 // 未使用
-	UserCouponStatus_USER_COUPON_STATUS_LOCKED      UserCouponStatus = 2 // 已锁定（预扣中），实例通过状态预扣，防止超卖
-	UserCouponStatus_USER_COUPON_STATUS_USED        UserCouponStatus = 3 // 已使用
-	UserCouponStatus_USER_COUPON_STATUS_EXPIRED     UserCouponStatus = 4 // 已过期
-)
+	UserCouponStatus_USER_COUPON_STATUS_UNUSED      UserCouponStatus = 1 // 鏈娇鐢?	UserCouponStatus_USER_COUPON_STATUS_LOCKED      UserCouponStatus = 2 // 宸查攣瀹氾紙棰勬墸涓級锛屽疄渚嬮€氳繃鐘舵€侀鎵ｏ紝闃叉瓒呭崠
+	UserCouponStatus_USER_COUPON_STATUS_USED        UserCouponStatus = 3 // 宸蹭娇鐢?	UserCouponStatus_USER_COUPON_STATUS_EXPIRED     UserCouponStatus = 4 // 宸茶繃鏈?)
 
 // Enum value maps for UserCouponStatus.
 var UserCouponStatus_name = map[int32]string{
@@ -78,23 +70,15 @@ func (x UserCouponStatus) String() string {
 	return strconv.Itoa(int(x))
 }
 
-// 优惠券模板（管理员创建的券规则）
+// 浼樻儬鍒告ā鏉匡紙绠＄悊鍛樺垱寤虹殑鍒歌鍒欙級
 type CouponTemplate struct {
 	Id             int64      `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`
-	Name           string     `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`                          // 券名称
-	Type           CouponType `protobuf:"varint,3,opt,name=type" json:"type,omitempty"`                         // 券类型
-	Threshold      int64      `protobuf:"varint,4,opt,name=threshold" json:"threshold,omitempty"`               // 使用门槛（分），0表示无门槛
-	DiscountValue  int64      `protobuf:"varint,5,opt,name=discount_value" json:"discount_value,omitempty"`     // 优惠值：满减/立减是金额（分），折扣是百分比（80表示8折）
-	MaxDiscount    int64      `protobuf:"varint,6,opt,name=max_discount" json:"max_discount,omitempty"`         // 折扣券最大优惠金额（分），0表示不限
-	ValidDays      int64      `protobuf:"varint,7,opt,name=valid_days" json:"valid_days,omitempty"`             // 领取后有效天数（0表示使用固定时间）
-	ValidStartTime int64      `protobuf:"varint,8,opt,name=valid_start_time" json:"valid_start_time,omitempty"` // 固定生效开始时间（unix秒）
-	ValidEndTime   int64      `protobuf:"varint,9,opt,name=valid_end_time" json:"valid_end_time,omitempty"`     // 固定生效结束时间（unix秒）
-	TotalCount     int32      `protobuf:"varint,10,opt,name=total_count" json:"total_count,omitempty"`          // 发行总量（-1表示不限）
-	IssuedCount    int32      `protobuf:"varint,11,opt,name=issued_count" json:"issued_count,omitempty"`        // 已发放数量
-	PerUserLimit   int32      `protobuf:"varint,12,opt,name=per_user_limit" json:"per_user_limit,omitempty"`    // 每人限领数量
-	ProductIds     []int64    `protobuf:"varint,13,rep,packed,name=product_ids" json:"product_ids,omitempty"`   // 适用商品ID（空表示全场通用）
-	CategoryIds    []int64    `protobuf:"varint,14,rep,packed,name=category_ids" json:"category_ids,omitempty"` // 适用分类ID（空表示全场通用）
-	Enabled        bool       `protobuf:"varint,15,opt,name=enabled" json:"enabled,omitempty"`                  // 是否启用
+	Name           string     `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`                          // 鍒稿悕绉?	Type           CouponType `protobuf:"varint,3,opt,name=type" json:"type,omitempty"`                         // 鍒哥被鍨?	Threshold      int64      `protobuf:"varint,4,opt,name=threshold" json:"threshold,omitempty"`               // 浣跨敤闂ㄦ锛堝垎锛夛紝0琛ㄧず鏃犻棬妲?	DiscountValue  int64      `protobuf:"varint,5,opt,name=discount_value" json:"discount_value,omitempty"`     // 浼樻儬鍊硷細婊″噺/绔嬪噺鏄噾棰濓紙鍒嗭級锛屾姌鎵ｆ槸鐧惧垎姣旓紙80琛ㄧず8鎶橈級
+	MaxDiscount    int64      `protobuf:"varint,6,opt,name=max_discount" json:"max_discount,omitempty"`         // 鎶樻墸鍒告渶澶т紭鎯犻噾棰濓紙鍒嗭級锛?琛ㄧず涓嶉檺
+	ValidDays      int64      `protobuf:"varint,7,opt,name=valid_days" json:"valid_days,omitempty"`             // 棰嗗彇鍚庢湁鏁堝ぉ鏁帮紙0琛ㄧず浣跨敤鍥哄畾鏃堕棿锛?	ValidStartTime int64      `protobuf:"varint,8,opt,name=valid_start_time" json:"valid_start_time,omitempty"` // 鍥哄畾鐢熸晥寮€濮嬫椂闂达紙unix绉掞級
+	ValidEndTime   int64      `protobuf:"varint,9,opt,name=valid_end_time" json:"valid_end_time,omitempty"`     // 鍥哄畾鐢熸晥缁撴潫鏃堕棿锛坲nix绉掞級
+	TotalCount     int32      `protobuf:"varint,10,opt,name=total_count" json:"total_count,omitempty"`          // 鍙戣鎬婚噺锛?1琛ㄧず涓嶉檺锛?	IssuedCount    int32      `protobuf:"varint,11,opt,name=issued_count" json:"issued_count,omitempty"`        // 宸插彂鏀炬暟閲?	PerUserLimit   int32      `protobuf:"varint,12,opt,name=per_user_limit" json:"per_user_limit,omitempty"`    // 姣忎汉闄愰鏁伴噺
+	ProductIds     []int64    `protobuf:"varint,13,rep,packed,name=product_ids" json:"product_ids,omitempty"`   // 閫傜敤鍟嗗搧ID锛堢┖琛ㄧず鍏ㄥ満閫氱敤锛?	CategoryIds    []int64    `protobuf:"varint,14,rep,packed,name=category_ids" json:"category_ids,omitempty"` // 閫傜敤鍒嗙被ID锛堢┖琛ㄧず鍏ㄥ満閫氱敤锛?	Enabled        bool       `protobuf:"varint,15,opt,name=enabled" json:"enabled,omitempty"`                  // 鏄惁鍚敤
 	CreatedAt      int64      `protobuf:"varint,16,opt,name=created_at" json:"created_at,omitempty"`
 	UpdatedAt      int64      `protobuf:"varint,17,opt,name=updated_at" json:"updated_at,omitempty"`
 }
@@ -224,17 +208,13 @@ func (x *CouponTemplate) GetUpdatedAt() int64 {
 	return 0
 }
 
-// 用户优惠券（用户领取的券实例）
-type UserCoupon struct {
-	Id             int64            `protobuf:"varint,1,opt,name=id" json:"id,omitempty"` // 用户券ID（唯一）
-	UserId         int64            `protobuf:"varint,2,opt,name=user_id" json:"user_id,omitempty"`
+// 鐢ㄦ埛浼樻儬鍒革紙鐢ㄦ埛棰嗗彇鐨勫埜瀹炰緥锛?type UserCoupon struct {
+	Id             int64            `protobuf:"varint,1,opt,name=id" json:"id,omitempty"` // 鐢ㄦ埛鍒窱D锛堝敮涓€锛?	UserId         int64            `protobuf:"varint,2,opt,name=user_id" json:"user_id,omitempty"`
 	TemplateId     int64            `protobuf:"varint,3,opt,name=template_id" json:"template_id,omitempty"`
-	Template       *CouponTemplate  `protobuf:"bytes,4,opt,name=template" json:"template,omitempty"` // 券模板详情（冗余，方便展示）
+	Template       *CouponTemplate  `protobuf:"bytes,4,opt,name=template" json:"template,omitempty"` // 鍒告ā鏉胯鎯咃紙鍐椾綑锛屾柟渚垮睍绀猴級
 	Status         UserCouponStatus `protobuf:"varint,5,opt,name=status" json:"status,omitempty"`
-	LockedOrderId  int64            `protobuf:"varint,6,opt,name=locked_order_id" json:"locked_order_id,omitempty"`   // 锁定的订单ID（预扣时设置）
-	UsedOrderId    int64            `protobuf:"varint,7,opt,name=used_order_id" json:"used_order_id,omitempty"`       // 使用的订单ID（核销时设置）
-	ValidStartTime int64            `protobuf:"varint,8,opt,name=valid_start_time" json:"valid_start_time,omitempty"` // 生效开始时间
-	ValidEndTime   int64            `protobuf:"varint,9,opt,name=valid_end_time" json:"valid_end_time,omitempty"`     // 生效结束时间
+	LockedOrderId  int64            `protobuf:"varint,6,opt,name=locked_order_id" json:"locked_order_id,omitempty"`   // 閿佸畾鐨勮鍗旾D锛堥鎵ｆ椂璁剧疆锛?	UsedOrderId    int64            `protobuf:"varint,7,opt,name=used_order_id" json:"used_order_id,omitempty"`       // 浣跨敤鐨勮鍗旾D锛堟牳閿€鏃惰缃級
+	ValidStartTime int64            `protobuf:"varint,8,opt,name=valid_start_time" json:"valid_start_time,omitempty"` // 鐢熸晥寮€濮嬫椂闂?	ValidEndTime   int64            `protobuf:"varint,9,opt,name=valid_end_time" json:"valid_end_time,omitempty"`     // 鐢熸晥缁撴潫鏃堕棿
 	CreatedAt      int64            `protobuf:"varint,10,opt,name=created_at" json:"created_at,omitempty"`
 	UsedAt         int64            `protobuf:"varint,11,opt,name=used_at" json:"used_at,omitempty"`
 }
@@ -322,12 +302,11 @@ func (x *UserCoupon) GetUsedAt() int64 {
 	return 0
 }
 
-// 订单商品
+// 璁㈠崟鍟嗗搧
 type OrderItem struct {
 	ProductId  int64 `protobuf:"varint,1,opt,name=product_id" json:"product_id,omitempty"`
 	CategoryId int64 `protobuf:"varint,2,opt,name=category_id" json:"category_id,omitempty"`
-	Price      int64 `protobuf:"varint,3,opt,name=price" json:"price,omitempty"` // 单价（分）
-	Quantity   int32 `protobuf:"varint,4,opt,name=quantity" json:"quantity,omitempty"`
+	Price      int64 `protobuf:"varint,3,opt,name=price" json:"price,omitempty"` // 鍗曚环锛堝垎锛?	Quantity   int32 `protobuf:"varint,4,opt,name=quantity" json:"quantity,omitempty"`
 }
 
 func (x *OrderItem) Reset() { *x = OrderItem{} }
@@ -364,11 +343,9 @@ func (x *OrderItem) GetQuantity() int32 {
 	return 0
 }
 
-// 查询用户优惠券列表
-type ListUserCouponsReq struct {
+// 鏌ヨ鐢ㄦ埛浼樻儬鍒稿垪琛?type ListUserCouponsReq struct {
 	UserId   int64            `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	Status   UserCouponStatus `protobuf:"varint,2,opt,name=status" json:"status,omitempty"` // 筛选状态（0表示全部）
-	Page     int32            `protobuf:"varint,3,opt,name=page" json:"page,omitempty"`
+	Status   UserCouponStatus `protobuf:"varint,2,opt,name=status" json:"status,omitempty"` // 绛涢€夌姸鎬侊紙0琛ㄧず鍏ㄩ儴锛?	Page     int32            `protobuf:"varint,3,opt,name=page" json:"page,omitempty"`
 	PageSize int32            `protobuf:"varint,4,opt,name=page_size" json:"page_size,omitempty"`
 }
 
@@ -431,10 +408,9 @@ func (x *ListUserCouponsResp) GetTotal() int32 {
 	return 0
 }
 
-// 查询订单可用优惠券
-type ListAvailableCouponsReq struct {
+// 鏌ヨ璁㈠崟鍙敤浼樻儬鍒?type ListAvailableCouponsReq struct {
 	UserId int64        `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	Items  []*OrderItem `protobuf:"bytes,2,rep,name=items" json:"items,omitempty"` // 订单商品列表
+	Items  []*OrderItem `protobuf:"bytes,2,rep,name=items" json:"items,omitempty"` // 璁㈠崟鍟嗗搧鍒楄〃
 }
 
 func (x *ListAvailableCouponsReq) Reset() { *x = ListAvailableCouponsReq{} }
@@ -460,7 +436,7 @@ func (x *ListAvailableCouponsReq) GetItems() []*OrderItem {
 }
 
 type ListAvailableCouponsResp struct {
-	Coupons []*UserCoupon `protobuf:"bytes,1,rep,name=coupons" json:"coupons,omitempty"` // 可用的券，给用户选择，这里不做自动计算最优惠策略了吧
+	Coupons []*UserCoupon `protobuf:"bytes,1,rep,name=coupons" json:"coupons,omitempty"` // 鍙敤鐨勫埜锛岀粰鐢ㄦ埛閫夋嫨锛岃繖閲屼笉鍋氳嚜鍔ㄨ绠楁渶浼樻儬绛栫暐浜嗗惂
 }
 
 func (x *ListAvailableCouponsResp) Reset() { *x = ListAvailableCouponsResp{} }
@@ -478,13 +454,13 @@ func (x *ListAvailableCouponsResp) GetCoupons() []*UserCoupon {
 	return nil
 }
 
-// 批量预扣优惠券（事务内批量更新，全部成功或全部失败）
-// 状态机保证幂等：Unused->Locked，重复调用检查 status 和 order_id
+// 鎵归噺棰勬墸浼樻儬鍒革紙浜嬪姟鍐呮壒閲忔洿鏂帮紝鍏ㄩ儴鎴愬姛鎴栧叏閮ㄥけ璐ワ級
+// 鐘舵€佹満淇濊瘉骞傜瓑锛歎nused->Locked锛岄噸澶嶈皟鐢ㄦ鏌?status 鍜?order_id
 type ReserveCouponReq struct {
 	UserId        int64        `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	UserCouponIds []int64      `protobuf:"varint,2,rep,packed,name=user_coupon_ids" json:"user_coupon_ids,omitempty"` // 用户券ID列表（批量）
-	OrderId       int64        `protobuf:"varint,3,opt,name=order_id" json:"order_id,omitempty"`                      // 订单ID
-	Items         []*OrderItem `protobuf:"bytes,4,rep,name=items" json:"items,omitempty"`                             // 订单商品（用于校验适用性）
+	UserCouponIds []int64      `protobuf:"varint,2,rep,packed,name=user_coupon_ids" json:"user_coupon_ids,omitempty"` // 鐢ㄦ埛鍒窱D鍒楄〃锛堟壒閲忥級
+	OrderId       int64        `protobuf:"varint,3,opt,name=order_id" json:"order_id,omitempty"`                      // 璁㈠崟ID
+	Items         []*OrderItem `protobuf:"bytes,4,rep,name=items" json:"items,omitempty"`                             // 璁㈠崟鍟嗗搧锛堢敤浜庢牎楠岄€傜敤鎬э級
 }
 
 func (x *ReserveCouponReq) Reset() { *x = ReserveCouponReq{} }
@@ -522,10 +498,9 @@ func (x *ReserveCouponReq) GetItems() []*OrderItem {
 }
 
 type ReserveCouponResp struct {
-	Success  bool             `protobuf:"varint,1,opt,name=success" json:"success,omitempty"`  // 全部成功为 true
-	Message  string           `protobuf:"bytes,2,opt,name=message" json:"message,omitempty"`   // 概要信息
-	Failures []*CouponFailure `protobuf:"bytes,3,rep,name=failures" json:"failures,omitempty"` // 失败明细（全部成功时为空）
-}
+	Success  bool             `protobuf:"varint,1,opt,name=success" json:"success,omitempty"`  // 鍏ㄩ儴鎴愬姛涓?true
+	Message  string           `protobuf:"bytes,2,opt,name=message" json:"message,omitempty"`   // 姒傝淇℃伅
+	Failures []*CouponFailure `protobuf:"bytes,3,rep,name=failures" json:"failures,omitempty"` // 澶辫触鏄庣粏锛堝叏閮ㄦ垚鍔熸椂涓虹┖锛?}
 
 func (x *ReserveCouponResp) Reset() { *x = ReserveCouponResp{} }
 
@@ -554,10 +529,10 @@ func (x *ReserveCouponResp) GetFailures() []*CouponFailure {
 	return nil
 }
 
-// 单张券预扣失败的原因
+// 鍗曞紶鍒搁鎵ｅけ璐ョ殑鍘熷洜
 type CouponFailure struct {
 	UserCouponId int64  `protobuf:"varint,1,opt,name=user_coupon_id" json:"user_coupon_id,omitempty"`
-	Reason       string `protobuf:"bytes,2,opt,name=reason" json:"reason,omitempty"` // 如 "优惠券已过期"、"不满足使用条件"
+	Reason       string `protobuf:"bytes,2,opt,name=reason" json:"reason,omitempty"` // 濡?"浼樻儬鍒稿凡杩囨湡"銆?涓嶆弧瓒充娇鐢ㄦ潯浠?
 }
 
 func (x *CouponFailure) Reset() { *x = CouponFailure{} }
@@ -580,8 +555,7 @@ func (x *CouponFailure) GetReason() string {
 	return ""
 }
 
-// 确认核销（状态机保证幂等：Locked->Used）
-type CommitCouponReq struct {
+// 纭鏍搁攢锛堢姸鎬佹満淇濊瘉骞傜瓑锛歀ocked->Used锛?type CommitCouponReq struct {
 	OrderId int64 `protobuf:"varint,1,opt,name=order_id" json:"order_id,omitempty"`
 }
 
@@ -615,8 +589,7 @@ func (x *CommitCouponResp) GetSuccess() bool {
 	return false
 }
 
-// 释放预扣（状态机保证幂等：Locked->Unused）
-type ReleaseCouponReq struct {
+// 閲婃斁棰勬墸锛堢姸鎬佹満淇濊瘉骞傜瓑锛歀ocked->Unused锛?type ReleaseCouponReq struct {
 	OrderId int64 `protobuf:"varint,1,opt,name=order_id" json:"order_id,omitempty"`
 }
 
@@ -650,8 +623,7 @@ func (x *ReleaseCouponResp) GetSuccess() bool {
 	return false
 }
 
-// 退还优惠券（状态机保证幂等：Used->Unused）
-type RefundCouponReq struct {
+// 閫€杩樹紭鎯犲埜锛堢姸鎬佹満淇濊瘉骞傜瓑锛歎sed->Unused锛?type RefundCouponReq struct {
 	OrderId int64 `protobuf:"varint,1,opt,name=order_id" json:"order_id,omitempty"`
 }
 
@@ -685,8 +657,7 @@ func (x *RefundCouponResp) GetSuccess() bool {
 	return false
 }
 
-// 创建优惠券模板
-type CreateCouponTemplateReq struct {
+// 鍒涘缓浼樻儬鍒告ā鏉?type CreateCouponTemplateReq struct {
 	Name           string     `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
 	Type           CouponType `protobuf:"varint,2,opt,name=type" json:"type,omitempty"`
 	Threshold      int64      `protobuf:"varint,3,opt,name=threshold" json:"threshold,omitempty"`
@@ -812,14 +783,12 @@ func (x *CreateCouponTemplateResp) GetTemplateId() int64 {
 	return 0
 }
 
-// 发放优惠券，这里不搞数量，实现会简单很多，那边才能用状态机，搞数量就和库存一样了
-// 发放优惠券仍然需要operation_id，避免重试导致错误发多张
+// 鍙戞斁浼樻儬鍒革紝杩欓噷涓嶆悶鏁伴噺锛屽疄鐜颁細绠€鍗曞緢澶氾紝閭ｈ竟鎵嶈兘鐢ㄧ姸鎬佹満锛屾悶鏁伴噺灏卞拰搴撳瓨涓€鏍蜂簡
+// 鍙戞斁浼樻儬鍒镐粛鐒堕渶瑕乷peration_id锛岄伩鍏嶉噸璇曞鑷撮敊璇彂澶氬紶
 type IssueCouponReq struct {
-	OperationId string `protobuf:"bytes,1,opt,name=operation_id" json:"operation_id,omitempty"` // 幂等ID（如：coupon:issue:user_123_template_456_20260204）
-	UserId      int64  `protobuf:"varint,2,opt,name=user_id" json:"user_id,omitempty"`
+	OperationId string `protobuf:"bytes,1,opt,name=operation_id" json:"operation_id,omitempty"` // 骞傜瓑ID锛堝锛歝oupon:issue:user_123_template_456_20260204锛?	UserId      int64  `protobuf:"varint,2,opt,name=user_id" json:"user_id,omitempty"`
 	TemplateId  int64  `protobuf:"varint,3,opt,name=template_id" json:"template_id,omitempty"`
-	Source      string `protobuf:"bytes,4,opt,name=source" json:"source,omitempty"` // 发放来源（如：new_user, activity_123）
-}
+	Source      string `protobuf:"bytes,4,opt,name=source" json:"source,omitempty"` // 鍙戞斁鏉ユ簮锛堝锛歯ew_user, activity_123锛?}
 
 func (x *IssueCouponReq) Reset() { *x = IssueCouponReq{} }
 
@@ -856,9 +825,9 @@ func (x *IssueCouponReq) GetSource() string {
 }
 
 type IssueCouponResp struct {
-	Success      bool   `protobuf:"varint,1,opt,name=success" json:"success,omitempty"`               // 是否成功
-	UserCouponId int64  `protobuf:"varint,2,opt,name=user_coupon_id" json:"user_coupon_id,omitempty"` // 发放的用户券ID
-	Message      string `protobuf:"bytes,3,opt,name=message" json:"message,omitempty"`                // 失败原因（如：已领取过、库存不足）
+	Success      bool   `protobuf:"varint,1,opt,name=success" json:"success,omitempty"`               // 鏄惁鎴愬姛
+	UserCouponId int64  `protobuf:"varint,2,opt,name=user_coupon_id" json:"user_coupon_id,omitempty"` // 鍙戞斁鐨勭敤鎴峰埜ID
+	Message      string `protobuf:"bytes,3,opt,name=message" json:"message,omitempty"`                // 澶辫触鍘熷洜锛堝锛氬凡棰嗗彇杩囥€佸簱瀛樹笉瓒筹級
 }
 
 func (x *IssueCouponResp) Reset() { *x = IssueCouponResp{} }
@@ -898,3 +867,5 @@ type CouponService interface {
 	CreateCouponTemplate(ctx context.Context, req *CreateCouponTemplateReq) (res *CreateCouponTemplateResp, err error)
 	IssueCoupon(ctx context.Context, req *IssueCouponReq) (res *IssueCouponResp, err error)
 }
+
+

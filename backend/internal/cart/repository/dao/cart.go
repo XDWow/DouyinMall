@@ -12,10 +12,10 @@ type CartDAO interface {
 	FindCartByUserID(ctx context.Context, userID int64) ([]CartItem, error)
 	FindCartItemByUserIDAndProductID(ctx context.Context, userID, productID int64) (CartItem, error)
 	UpsertIncrement(ctx context.Context, userID, productID int64) error
-	UpsertIncrementBatch(ctx context.Context, userID int64, productIDs []int64) error // 批量 INSERT ON CONFLICT +1
+	UpsertIncrementBatch(ctx context.Context, userID int64, productIDs []int64) error // 鎵归噺 INSERT ON CONFLICT +1
 	Upsert(ctx context.Context, item CartItem) error
 	Delete(ctx context.Context, userID, productID int64) error
-	DeleteByProductIDs(ctx context.Context, userID int64, productIDs []int64) error // 批量 DELETE WHERE product_id IN
+	DeleteByProductIDs(ctx context.Context, userID int64, productIDs []int64) error // 鎵归噺 DELETE WHERE product_id IN
 	DeleteByUserID(ctx context.Context, userID int64) error
 	IncrementQuantity(ctx context.Context, userID, productID int64) error
 	DecrementQuantity(ctx context.Context, userID, productID int64) error
@@ -58,12 +58,12 @@ func (d *GORMCartDAO) FindCartItemByUserIDAndProductID(ctx context.Context, user
 	return item, err
 }
 
-// 插入一项，如果存在，数量+1
+// 鎻掑叆涓€椤癸紝濡傛灉瀛樺湪锛屾暟閲?1
 func (d *GORMCartDAO) UpsertIncrement(ctx context.Context, userID, productID int64) error {
 	return d.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "product_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"quantity":   gorm.Expr("quantity + ?", 1), // 用gorm表达式原子性+1
+			"quantity":   gorm.Expr("quantity + ?", 1), // 鐢╣orm琛ㄨ揪寮忓師瀛愭€?1
 			"updated_at": time.Now(),
 		}),
 	}).Create(&CartItem{
@@ -73,7 +73,7 @@ func (d *GORMCartDAO) UpsertIncrement(ctx context.Context, userID, productID int
 	}).Error
 }
 
-// UpsertIncrementBatch 批量插入，已存在则数量+1，一条 SQL 完成
+// UpsertIncrementBatch 鎵归噺鎻掑叆锛屽凡瀛樺湪鍒欐暟閲?1锛屼竴鏉?SQL 瀹屾垚
 func (d *GORMCartDAO) UpsertIncrementBatch(ctx context.Context, userID int64, productIDs []int64) error {
 	if len(productIDs) == 0 {
 		return nil
@@ -107,7 +107,7 @@ func (d *GORMCartDAO) Delete(ctx context.Context, userID, productID int64) error
 		Delete(&CartItem{}).Error
 }
 
-// DeleteByProductIDs 批量删除，用 IN 子句一条 SQL 搞定
+// DeleteByProductIDs 鎵归噺鍒犻櫎锛岀敤 IN 瀛愬彞涓€鏉?SQL 鎼炲畾
 func (d *GORMCartDAO) DeleteByProductIDs(ctx context.Context, userID int64, productIDs []int64) error {
 	if len(productIDs) == 0 {
 		return nil
@@ -145,3 +145,5 @@ func (d *GORMCartDAO) DecrementQuantity(ctx context.Context, userID, productID i
 	}
 	return nil
 }
+
+

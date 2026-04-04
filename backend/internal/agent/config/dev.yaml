@@ -75,14 +75,13 @@ embedding:
 
 workflow:
   rate_limit_per_minute: 30
-  conversation_window: 8
+  conversation_window: 5
   l0_cache_ttl_seconds: 600
   retrieve_top_k: 8
   retrieve_min_score: 0.35
   rerank_top_k: 4
   tool_parallelism: 4
   confidence_threshold: 0.62
-  summary_trigger_turns: 12
   max_answer_tokens: 512
   stream_buffer: 16
   checkpoint_ttl_seconds: 604800

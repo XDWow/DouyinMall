@@ -23,3 +23,5 @@ func InitLogger() logger.LoggerV1 {
 	)
 	return logger.NewZapLogger(zap.New(core, zap.AddCaller()))
 }
+
+

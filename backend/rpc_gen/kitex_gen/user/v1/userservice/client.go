@@ -90,3 +90,5 @@ func (p *kUserServiceClient) Query(ctx context.Context, Req *v1.QueryUserReq, ca
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.Query(ctx, Req)
 }
+
+

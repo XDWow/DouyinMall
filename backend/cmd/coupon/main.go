@@ -14,31 +14,30 @@ func main() {
 
 	app := InitApp()
 
-	// 启动Kafka消费者（订单状态变更）
+	// 鍚姩Kafka娑堣垂鑰咃紙璁㈠崟鐘舵€佸彉鏇达級
 	if err := app.OrderConsumer.Start(); err != nil {
-		fmt.Printf("警告: Kafka消费者启动失败: %v，继续运行\n", err)
+		fmt.Printf("璀﹀憡: Kafka娑堣垂鑰呭惎鍔ㄥけ璐? %v锛岀户缁繍琛孿n", err)
 	} else {
-		fmt.Println("Kafka消费者已启动")
+		fmt.Println("Kafka娑堣垂鑰呭凡鍚姩")
 	}
 
-	// 启动gRPC服务
+	// 鍚姩gRPC鏈嶅姟
 	go func() {
-		fmt.Printf("Coupon gRPC服务启动在: %d\n", viper.GetInt("grpc.server.port"))
+		fmt.Printf("Coupon gRPC鏈嶅姟鍚姩鍦? %d\n", viper.GetInt("grpc.server.port"))
 		if err := app.GRPCServer.Run(); err != nil {
-			panic(fmt.Errorf("gRPC服务启动失败: %w", err))
+			panic(fmt.Errorf("gRPC鏈嶅姟鍚姩澶辫触: %w", err))
 		}
 	}()
 
-	// 优雅退出
-	quit := make(chan os.Signal, 1)
+	// 浼橀泤閫€鍑?	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	fmt.Println("正在关闭Coupon服务...")
+	fmt.Println("姝ｅ湪鍏抽棴Coupon鏈嶅姟...")
 	if err := app.GRPCServer.Stop(); err != nil {
-		fmt.Printf("gRPC服务关闭失败: %v\n", err)
+		fmt.Printf("gRPC鏈嶅姟鍏抽棴澶辫触: %v\n", err)
 	}
-	fmt.Println("Coupon服务已关闭")
+	fmt.Println("Coupon鏈嶅姟宸插叧闂?)
 }
 
 func initViper() {
@@ -50,6 +49,8 @@ func initViper() {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Printf("警告: 读取配置文件失败: %v，使用默认配置\n", err)
+		fmt.Printf("璀﹀憡: 璇诲彇閰嶇疆鏂囦欢澶辫触: %v锛屼娇鐢ㄩ粯璁ら厤缃甛n", err)
 	}
 }
+
+

@@ -158,3 +158,5 @@ type SeckillService interface {
 	SubmitSeckill(ctx context.Context, req *SubmitSeckillReq) (res *SubmitSeckillResp, err error)
 	GetSeckillResult(ctx context.Context, req *GetSeckillResultReq) (res *GetSeckillResultResp, err error)
 }
+
+

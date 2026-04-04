@@ -271,3 +271,5 @@ func (s *stubSyncProducer) AddOffsetsToTxn(map[string][]*sarama.PartitionOffsetM
 func (s *stubSyncProducer) AddMessageToTxn(*sarama.ConsumerMessage, string, *string) error {
 	return nil
 }
+
+

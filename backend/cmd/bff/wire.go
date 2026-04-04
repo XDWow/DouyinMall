@@ -34,3 +34,5 @@ func InitApp() *App {
 func newApp(svr *ginx.Server) *App {
 	return &App{Server: svr}
 }
+
+

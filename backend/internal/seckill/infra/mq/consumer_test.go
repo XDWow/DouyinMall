@@ -80,3 +80,5 @@ func (s *recordingSession) Context() context.Context {
 }
 
 var _ sarama.ConsumerGroupSession = (*recordingSession)(nil)
+
+

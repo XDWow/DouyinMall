@@ -9,7 +9,7 @@ import (
 
 type txKey struct{}
 
-// 依赖 *gorm.DB 实现事务
+// 渚濊禆 *gorm.DB 瀹炵幇浜嬪姟
 type GormTxManager struct {
 	db *gorm.DB
 }
@@ -43,3 +43,5 @@ func DBFromContext(ctx context.Context, fallback *gorm.DB) *gorm.DB {
 	}
 	return fallback.WithContext(ctx)
 }
+
+

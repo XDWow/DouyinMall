@@ -1,8 +1,8 @@
 package domain
 
-// ==================== 商品搜索 ====================
+// ==================== 鍟嗗搧鎼滅储 ====================
 
-// ProductSearchResult 商品搜索结果
+// ProductSearchResult 鍟嗗搧鎼滅储缁撴灉
 type ProductSearchResult struct {
 	ID           int64
 	Name         string
@@ -21,7 +21,7 @@ type ProductSearchResult struct {
 	DescriptionHighlight string
 }
 
-// MerchantSearchResult 商家搜索结果
+// MerchantSearchResult 鍟嗗鎼滅储缁撴灉
 type MerchantSearchResult struct {
 	ID           int64
 	Name         string
@@ -37,16 +37,16 @@ type MerchantSearchResult struct {
 	NameHighlight string
 }
 
-// SearchSuggestion 搜索建议
+// SearchSuggestion 鎼滅储寤鸿
 type SearchSuggestion struct {
 	Keyword string
 	Source  string // NAME_MATCH / HISTORY / HOT
 	Count   int64
 }
 
-// ==================== ES 文档 ====================
+// ==================== ES 鏂囨。 ====================
 
-// ProductDocument ES 商品文档
+// ProductDocument ES 鍟嗗搧鏂囨。
 type ProductDocument struct {
 	ID           int64     `json:"id"`
 	Name         string    `json:"name"`
@@ -64,7 +64,7 @@ type ProductDocument struct {
 	UpdatedTime  int64     `json:"updated_at,omitempty"`
 }
 
-// MerchantDocument ES 商家文档
+// MerchantDocument ES 鍟嗗鏂囨。
 type MerchantDocument struct {
 	ID           int64   `json:"id"`
 	Name         string  `json:"name"`
@@ -79,7 +79,7 @@ type MerchantDocument struct {
 	UpdatedTime  int64   `json:"updated_at,omitempty"`
 }
 
-// ==================== 聚合 ====================
+// ==================== 鑱氬悎 ====================
 
 type CategoryAggregation struct {
 	Category string
@@ -93,7 +93,7 @@ type PriceRangeAggregation struct {
 	Count    int64
 }
 
-// ==================== 同步事件 ====================
+// ==================== 鍚屾浜嬩欢 ====================
 
 type EventType string
 
@@ -118,7 +118,7 @@ type SyncEvent struct {
 	Merchant *MerchantDocument `json:"merchant,omitempty"`
 }
 
-// ==================== 搜索请求/响应 ====================
+// ==================== 鎼滅储璇锋眰/鍝嶅簲 ====================
 
 type SearchProductsReq struct {
 	Keyword         string
@@ -161,3 +161,5 @@ type SearchAggregationsResp struct {
 	Categories  []CategoryAggregation
 	PriceRanges []PriceRangeAggregation
 }
+
+

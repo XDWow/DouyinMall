@@ -291,3 +291,5 @@ func (p *kClient) callInventoryOp(ctx context.Context, method string, args inter
 	}
 	return result.GetSuccess(), nil
 }
+
+

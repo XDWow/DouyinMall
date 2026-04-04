@@ -46,8 +46,8 @@ func (d *DoubleWritePoolTx) Commit() error {
 		if d.dst != nil {
 			err = d.dst.Commit()
 			if err != nil {
-				// 依旧算你成功，打个日志即可
-				d.l.Error("dst 事务提交失败")
+				// 渚濇棫绠椾綘鎴愬姛锛屾墦涓棩蹇楀嵆鍙?
+				d.l.Error("dst 浜嬪姟鎻愪氦澶辫触")
 			}
 		}
 		return nil
@@ -59,13 +59,13 @@ func (d *DoubleWritePoolTx) Commit() error {
 		if d.src != nil {
 			err = d.src.Commit()
 			if err != nil {
-				// 依旧算你成功，打个日志即可
-				d.l.Error("src 事务提交失败")
+				// 渚濇棫绠椾綘鎴愬姛锛屾墦涓棩蹇楀嵆鍙?
+				d.l.Error("src 浜嬪姟鎻愪氦澶辫触")
 			}
 		}
 		return nil
 	default:
-		return errors.New("未知模式")
+		return errors.New("鏈煡妯″紡")
 	}
 }
 
@@ -83,8 +83,8 @@ func (d *DoubleWritePoolTx) Rollback() error {
 		if d.dst != nil {
 			err = d.dst.Rollback()
 			if err != nil {
-				// 依旧算你成功，打个日志即可
-				d.l.Error("dst 事务回滚失败")
+				// 渚濇棫绠椾綘鎴愬姛锛屾墦涓棩蹇楀嵆鍙?
+				d.l.Error("dst 浜嬪姟鍥炴粴澶辫触")
 			}
 		}
 		return nil
@@ -96,13 +96,13 @@ func (d *DoubleWritePoolTx) Rollback() error {
 		if d.src != nil {
 			err = d.src.Commit()
 			if err != nil {
-				// 依旧算你成功，打个日志即可
-				d.l.Error("src 事务回滚失败")
+				// 渚濇棫绠椾綘鎴愬姛锛屾墦涓棩蹇楀嵆鍙?
+				d.l.Error("src 浜嬪姟鍥炴粴澶辫触")
 			}
 		}
 		return nil
 	default:
-		return errors.New("未知模式")
+		return errors.New("鏈煡妯″紡")
 	}
 }
 
@@ -124,8 +124,8 @@ func (d *DoubleWritePoolTx) ExecContext(ctx context.Context, query string, args 
 		}
 		_, err = d.dst.ExecContext(ctx, query, args...)
 		if err != nil {
-			// 记日志
-			// dst 写失败，不被认为是失败
+			// 璁版棩蹇?
+			// dst 鍐欏け璐ワ紝涓嶈璁や负鏄け璐?
 		}
 		return res, err
 	case PatternDstOnly:
@@ -140,13 +140,13 @@ func (d *DoubleWritePoolTx) ExecContext(ctx context.Context, query string, args 
 		}
 		_, err = d.src.ExecContext(ctx, query, args...)
 		if err != nil {
-			// 记日志
-			// dst 写失败，不被认为是失败
+			// 璁版棩蹇?
+			// dst 鍐欏け璐ワ紝涓嶈璁や负鏄け璐?
 		}
 		return res, err
 	default:
-		panic("未知的双写模式")
-		//return nil, errors.New("未知的双写模式")
+		panic("鏈煡鐨勫弻鍐欐ā寮?)
+		//return nil, errors.New("鏈煡鐨勫弻鍐欐ā寮?)
 	}
 }
 
@@ -157,8 +157,8 @@ func (d *DoubleWritePoolTx) QueryContext(ctx context.Context, query string, args
 	case PatternDstOnly, PatternDstFirst:
 		return d.dst.QueryContext(ctx, query, args...)
 	default:
-		panic("未知的双写模式")
-		//return nil, errors.New("未知的双写模式")
+		panic("鏈煡鐨勫弻鍐欐ā寮?)
+		//return nil, errors.New("鏈煡鐨勫弻鍐欐ā寮?)
 	}
 }
 
@@ -169,8 +169,8 @@ func (d *DoubleWritePoolTx) QueryRowContext(ctx context.Context, query string, a
 	case PatternDstOnly, PatternDstFirst:
 		return d.dst.QueryRowContext(ctx, query, args...)
 	default:
-		panic("未知的双写模式")
-		//return nil, errors.New("未知的双写模式")
+		panic("鏈煡鐨勫弻鍐欐ā寮?)
+		//return nil, errors.New("鏈煡鐨勫弻鍐欐ā寮?)
 	}
 }
 
@@ -190,13 +190,13 @@ func (d *DoubleWritePool) BeginTx(ctx context.Context, opts *sql.TxOptions) (gor
 		}
 		dstTx, err := d.dst.(gorm.TxBeginner).BeginTx(ctx, opts)
 		if err != nil {
-			d.l.Error("dstTx 开启失败")
+			d.l.Error("dstTx 寮€鍚け璐?)
 		}
 		return &DoubleWritePoolTx{
 			src:     srcTx,
 			dst:     dstTx,
 			pattern: pattern,
-		}, nil //这里不能传err，不要让从库的失败影响主库
+		}, nil //杩欓噷涓嶈兘浼爀rr锛屼笉瑕佽浠庡簱鐨勫け璐ュ奖鍝嶄富搴?
 	case PatternDstOnly:
 		tx, err := d.dst.(gorm.TxBeginner).BeginTx(ctx, opts)
 		return &DoubleWritePoolTx{
@@ -210,25 +210,25 @@ func (d *DoubleWritePool) BeginTx(ctx context.Context, opts *sql.TxOptions) (gor
 		}
 		dstTx, err := d.src.(gorm.TxBeginner).BeginTx(ctx, opts)
 		if err != nil {
-			d.l.Error("srcTx 开启失败")
+			d.l.Error("srcTx 寮€鍚け璐?)
 		}
 		return &DoubleWritePoolTx{
 			src:     srcTx,
 			dst:     dstTx,
 			pattern: pattern,
-		}, nil //这里不能传err，不要让从库的失败影响主库
+		}, nil //杩欓噷涓嶈兘浼爀rr锛屼笉瑕佽浠庡簱鐨勫け璐ュ奖鍝嶄富搴?
 	default:
-		return nil, errors.New("未知的双写模式")
+		return nil, errors.New("鏈煡鐨勫弻鍐欐ā寮?)
 	}
 }
 
-// PrepareContext Prepare(预编译) 的语句会进来这里
+// PrepareContext Prepare(棰勭紪璇? 鐨勮鍙ヤ細杩涙潵杩欓噷
 func (d *DoubleWritePool) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-// 增删改（写）语句进来这里
+// 澧炲垹鏀癸紙鍐欙級璇彞杩涙潵杩欓噷
 func (d *DoubleWritePool) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	switch d.pattern.Load() {
 	case PatternSrcOnly:
@@ -248,7 +248,7 @@ func (d *DoubleWritePool) ExecContext(ctx context.Context, query string, args ..
 		}
 		return d.src.ExecContext(ctx, query, args...)
 	default:
-		panic("无效模式")
+		panic("鏃犳晥妯″紡")
 	}
 }
 
@@ -259,8 +259,8 @@ func (d *DoubleWritePool) QueryContext(ctx context.Context, query string, args .
 	case PatternDstOnly, PatternDstFirst:
 		return d.dst.QueryContext(ctx, query, args...)
 	default:
-		panic("无效模式")
-		//return nil, errors.New("无效模式")
+		panic("鏃犳晥妯″紡")
+		//return nil, errors.New("鏃犳晥妯″紡")
 	}
 }
 
@@ -271,22 +271,22 @@ func (d *DoubleWritePool) QueryRowContext(ctx context.Context, query string, arg
 	case PatternDstOnly, PatternDstFirst:
 		return d.dst.QueryRowContext(ctx, query, args...)
 	default:
-		// 定义在外部的结构体，不能直接构造，只能通过它给你提供初始化方法
+		// 瀹氫箟鍦ㄥ閮ㄧ殑缁撴瀯浣擄紝涓嶈兘鐩存帴鏋勯€狅紝鍙兘閫氳繃瀹冪粰浣犳彁渚涘垵濮嬪寲鏂规硶
 		//return &sql.Row{
-		//	err:  errors.New("无效模式"),
+		//	err:  errors.New("鏃犳晥妯″紡"),
 		//	rows: nil,
 		//}
 
-		// 那怎么办？走到这里肯定是代码错误，直接通过 panic 告知错误信息
-		// 同理为了一致性，并且上面的也不用返回错误，因为没意义，后续没法处理
-		panic("无效模式")
+		// 閭ｆ€庝箞鍔烇紵璧板埌杩欓噷鑲畾鏄唬鐮侀敊璇紝鐩存帴閫氳繃 panic 鍛婄煡閿欒淇℃伅
+		// 鍚岀悊涓轰簡涓€鑷存€э紝骞朵笖涓婇潰鐨勪篃涓嶇敤杩斿洖閿欒锛屽洜涓烘病鎰忎箟锛屽悗缁病娉曞鐞?
+		panic("鏃犳晥妯″紡")
 	}
 }
 
 func (d *DoubleWritePool) UpdatePattern(pattern string) {
 	d.pattern.Store(pattern)
-	// 我能不能，有事务未提交的情况下，我禁止修改
-	// 能，但是性能问题比较严重，你需要维持住一个已开事务的计数，并在这里检查做某事，要用锁了
+	// 鎴戣兘涓嶈兘锛屾湁浜嬪姟鏈彁浜ょ殑鎯呭喌涓嬶紝鎴戠姝慨鏀?
+	// 鑳斤紝浣嗘槸鎬ц兘闂姣旇緝涓ラ噸锛屼綘闇€瑕佺淮鎸佷綇涓€涓凡寮€浜嬪姟鐨勮鏁帮紝骞跺湪杩欓噷妫€鏌ュ仛鏌愪簨锛岃鐢ㄩ攣浜?
 }
 
 const (
@@ -295,3 +295,5 @@ const (
 	PatternDstFirst = "DST_FIRST"
 	PatternSrcFirst = "SRC_FIRST"
 )
+
+

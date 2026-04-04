@@ -8,3 +8,5 @@ type User struct {
 	Phone    string `json:"phone"`
 	Avatar   string `json:"avatar"`
 }
+
+

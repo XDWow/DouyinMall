@@ -10,11 +10,10 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agentlegacy/domain"
 )
 
-// TopicAgentMessages Kafka topic锛氬璇濇秷鎭紓姝ユ寔涔呭寲
-const TopicAgentMessages = "agent_chat_messages"
+// TopicAgentMessages Kafka topic閿涙艾顕拠婵囩Х閹垰绱撳銉﹀瘮娑斿懎瀵?const TopicAgentMessages = "agent_chat_messages"
 
-// MessageProducer 灏嗘瘡杞璇濇秷鎭姇閫掑埌 Kafka锛屾浛浠ｅ師鏉ョ殑 goroutine 鐩村啓 MySQL
-// 浣跨敤 SyncProducer锛堝唴缃?3 娆￠噸璇曪級锛屾寜 session_id 鍒嗗尯淇濊瘉鍚屼細璇濇秷鎭湁搴?
+// MessageProducer 鐏忓棙鐦℃潪顔碱嚠鐠囨繃绉烽幁顖涘闁帒鍩?Kafka閿涘本娴涙禒锝呭斧閺夈儳娈?goroutine 閻╂潙鍟?MySQL
+// 娴ｈ法鏁?SyncProducer閿涘牆鍞寸純?3 濞嗭繝鍣哥拠鏇礆閿涘本瀵?session_id 閸掑棗灏穱婵婄槈閸氬奔绱扮拠婵囩Х閹垱婀佹惔?
 type MessageProducer struct {
 	producer sarama.SyncProducer
 }
@@ -23,18 +22,18 @@ func NewMessageProducer(producer sarama.SyncProducer) *MessageProducer {
 	return &MessageProducer{producer: producer}
 }
 
-// ProduceMessages 鎶曢€掓湰杞柊娑堟伅鍒?Kafka
-// Key = nil 鈫?杞鍒嗗尯锛屾彁楂樺苟琛屽害锛岄伩鍏嶇儹鐐逛細璇濆鑷村垎鍖哄€炬枩
-// 娑堟伅鏈韩甯?CreatedAt 鏃堕棿鎴筹紝鏌ヨ鏃舵寜鏃堕棿鎺掑簭鍗冲彲淇濊瘉鏈夊簭
-func (p *MessageProducer) ProduceMessages(ctx context.Context, event domain.ChatMessageEvent) error {
+// ProduceMessages 閹舵洟鈧帗婀版潪顔芥煀濞戝牊浼呴崚?Kafka
+// Key = nil 閳?鏉烆喛顕楅崚鍡楀隘閿涘本褰佹妯鸿嫙鐞涘苯瀹抽敍宀勪缉閸忓秶鍎归悙閫涚窗鐠囨繂顕遍懛鏉戝瀻閸栧搫鈧偓鏋?// 濞戝牊浼呴張顒冮煩鐢?CreatedAt 閺冨爼妫块幋绛圭礉閺屻儴顕楅弮鑸靛瘻閺冨爼妫块幒鎺戠碍閸楀啿褰叉穱婵婄槈閺堝绨?func (p *MessageProducer) ProduceMessages(ctx context.Context, event domain.ChatMessageEvent) error {
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
 	_, _, err = p.producer.SendMessage(&sarama.ProducerMessage{
 		Topic: TopicAgentMessages,
-		Key:   nil, // 杞鍒嗗尯锛屾彁楂樺悶鍚?
+		Key:   nil, // 鏉烆喛顕楅崚鍡楀隘閿涘本褰佹妯烘偠閸?
 		Value: sarama.ByteEncoder(data),
 	})
 	return err
 }
+
+

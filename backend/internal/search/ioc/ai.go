@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitLLMClient 初始化 LLM 对话客户端（Query 理解、RAG 摘要）
+// InitLLMClient 鍒濆鍖?LLM 瀵硅瘽瀹㈡埛绔紙Query 鐞嗚В銆丷AG 鎽樿锛?
 func InitLLMClient() ai.LLMClient {
 	return ai.NewOpenAIClient(ai.ChatConfig{
 		BaseURL: viper.GetString("llm.base_url"),
@@ -16,7 +16,7 @@ func InitLLMClient() ai.LLMClient {
 	})
 }
 
-// InitEmbedder 初始化 Embedding 客户端（文本→向量，独立于 LLM）
+// InitEmbedder 鍒濆鍖?Embedding 瀹㈡埛绔紙鏂囨湰鈫掑悜閲忥紝鐙珛浜?LLM锛?
 func InitEmbedder() ai.Embedder {
 	return ai.NewEmbeddingClient(ai.EmbeddingConfig{
 		BaseURL: viper.GetString("embedding.base_url"),
@@ -25,3 +25,5 @@ func InitEmbedder() ai.Embedder {
 		Timeout: time.Duration(viper.GetInt("embedding.timeout_seconds")) * time.Second,
 	})
 }
+
+

@@ -15,3 +15,5 @@ func (g *SnowflakeIDGenerator) GenerateID() string {
 	seq := g.seq.Add(1) % 1000
 	return strconv.FormatInt(now*1000+seq, 10)
 }
+
+

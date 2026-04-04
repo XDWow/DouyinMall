@@ -16,7 +16,7 @@ type App struct {
 
 func InitApp() *App {
 	wire.Build(
-		// 基础设施
+		// 鍩虹璁炬柦
 		ioc.InitLogger,
 		ioc.InitIDGenerator,
 
@@ -47,3 +47,5 @@ func InitApp() *App {
 func newApp(grpcServer server.Server) *App {
 	return &App{GRPCServer: grpcServer}
 }
+
+

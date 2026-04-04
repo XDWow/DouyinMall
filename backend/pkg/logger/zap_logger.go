@@ -2,7 +2,7 @@ package logger
 
 import "go.uber.org/zap"
 
-// 用 zap 实现 Loggerv1 接口，也可以用其他实现
+// 鐢?zap 瀹炵幇 Loggerv1 鎺ュ彛锛屼篃鍙互鐢ㄥ叾浠栧疄鐜?
 type ZapLogger struct {
 	l *zap.Logger
 }
@@ -36,3 +36,5 @@ func (z *ZapLogger) toZapFields(args []Field) []zap.Field {
 	}
 	return res
 }
+
+

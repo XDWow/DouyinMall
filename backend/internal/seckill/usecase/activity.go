@@ -99,3 +99,5 @@ func (uc *GetActivityUseCase) Execute(ctx context.Context, activityID int64) (*d
 	_ = uc.cache.SetActivity(ctx, activity)
 	return activity, nil
 }
+
+

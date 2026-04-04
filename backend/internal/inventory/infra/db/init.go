@@ -8,3 +8,5 @@ func InitTables(db *gorm.DB) error {
 		&InventoryOperation{},
 	)
 }
+
+

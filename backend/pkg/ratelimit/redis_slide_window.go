@@ -10,16 +10,16 @@ import (
 //go:embed slide_window.lua
 var luaSlideWindow string
 
-// RedisSlidingWindowLimiter Redis 上的滑动窗口算法限流器实现
+// RedisSlidingWindowLimiter Redis 涓婄殑婊戝姩绐楀彛绠楁硶闄愭祦鍣ㄥ疄鐜?
 type RedisSlidingWindowLimiter struct {
 	cmd redis.Cmdable
 
-	// 窗口大小
+	// 绐楀彛澶у皬
 	interval time.Duration
-	// 阈值
+	// 闃堝€?
 	rate int
-	// interval 内允许 rate 个请求
-	// 1s 内允许 3000 个请求
+	// interval 鍐呭厑璁?rate 涓姹?
+	// 1s 鍐呭厑璁?3000 涓姹?
 }
 
 func NewRedisSlidingWindowLimiter(cmd redis.Cmdable,
@@ -35,3 +35,5 @@ func (r *RedisSlidingWindowLimiter) Limit(ctx context.Context, key string) (bool
 	return r.cmd.Eval(ctx, luaSlideWindow, []string{key},
 		r.interval.Milliseconds(), r.rate, time.Now().UnixMilli()).Bool()
 }
+
+

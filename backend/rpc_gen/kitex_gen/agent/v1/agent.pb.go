@@ -13,9 +13,9 @@ import (
 type ChunkType int32
 
 const (
-	ChunkType_STAGE_UPDATE ChunkType = 0 // Pipeline 阶段状态推送
-	ChunkType_TEXT_DELTA   ChunkType = 1 // 回复文本增量（逐字/逐句）
-	ChunkType_DONE         ChunkType = 2 // 结束标记
+	ChunkType_STAGE_UPDATE ChunkType = 0 // Pipeline 闃舵鐘舵€佹帹閫?
+	ChunkType_TEXT_DELTA   ChunkType = 1 // 鍥炲鏂囨湰澧為噺锛堥€愬瓧/閫愬彞锛?
+	ChunkType_DONE         ChunkType = 2 // 缁撴潫鏍囪
 )
 
 // Enum value maps for ChunkType.
@@ -45,8 +45,8 @@ const (
 	MessageRole_ROLE_UNKNOWN   MessageRole = 0
 	MessageRole_ROLE_USER      MessageRole = 1
 	MessageRole_ROLE_ASSISTANT MessageRole = 2
-	MessageRole_ROLE_SYSTEM    MessageRole = 3 // 系统提示（不对用户展示）
-	MessageRole_ROLE_TOOL      MessageRole = 4 // 工具调用结果（Phase 2）
+	MessageRole_ROLE_SYSTEM    MessageRole = 3 // 绯荤粺鎻愮ず锛堜笉瀵圭敤鎴峰睍绀猴級
+	MessageRole_ROLE_TOOL      MessageRole = 4 // 宸ュ叿璋冪敤缁撴灉锛圥hase 2锛?
 )
 
 // Enum value maps for MessageRole.
@@ -78,16 +78,16 @@ type IntentType int32
 
 const (
 	IntentType_INTENT_UNKNOWN           IntentType = 0
-	IntentType_INTENT_FAQ               IntentType = 1  // 常见问题
-	IntentType_INTENT_PRODUCT_INQUIRY   IntentType = 2  // 商品咨询
-	IntentType_INTENT_ORDER_INQUIRY     IntentType = 3  // 订单查询
-	IntentType_INTENT_LOGISTICS         IntentType = 4  // 物流查询
-	IntentType_INTENT_PAYMENT           IntentType = 5  // 支付问题
-	IntentType_INTENT_RETURN            IntentType = 6  // 退货退款
-	IntentType_INTENT_COMPLAINT         IntentType = 7  // 投诉建议
-	IntentType_INTENT_PROMOTION         IntentType = 8  // 营销活动
-	IntentType_INTENT_CHITCHAT          IntentType = 9  // 闲聊
-	IntentType_INTENT_TRANSFER_TO_HUMAN IntentType = 10 // 转人工
+	IntentType_INTENT_FAQ               IntentType = 1  // 甯歌闂
+	IntentType_INTENT_PRODUCT_INQUIRY   IntentType = 2  // 鍟嗗搧鍜ㄨ
+	IntentType_INTENT_ORDER_INQUIRY     IntentType = 3  // 璁㈠崟鏌ヨ
+	IntentType_INTENT_LOGISTICS         IntentType = 4  // 鐗╂祦鏌ヨ
+	IntentType_INTENT_PAYMENT           IntentType = 5  // 鏀粯闂
+	IntentType_INTENT_RETURN            IntentType = 6  // 閫€璐ч€€娆?
+	IntentType_INTENT_COMPLAINT         IntentType = 7  // 鎶曡瘔寤鸿
+	IntentType_INTENT_PROMOTION         IntentType = 8  // 钀ラ攢娲诲姩
+	IntentType_INTENT_CHITCHAT          IntentType = 9  // 闂茶亰
+	IntentType_INTENT_TRANSFER_TO_HUMAN IntentType = 10 // 杞汉宸?
 )
 
 // Enum value maps for IntentType.
@@ -130,9 +130,9 @@ func (x IntentType) String() string {
 type SessionStatus int32
 
 const (
-	SessionStatus_SESSION_ACTIVE SessionStatus = 0 // 活跃
-	SessionStatus_SESSION_CLOSED SessionStatus = 1 // 已结束
-	SessionStatus_SESSION_HUMAN  SessionStatus = 2 // 已转人工
+	SessionStatus_SESSION_ACTIVE SessionStatus = 0 // 娲昏穬
+	SessionStatus_SESSION_CLOSED SessionStatus = 1 // 宸茬粨鏉?
+	SessionStatus_SESSION_HUMAN  SessionStatus = 2 // 宸茶浆浜哄伐
 )
 
 // Enum value maps for SessionStatus.
@@ -190,12 +190,12 @@ func (x *ChatRequest) GetMessage() string {
 }
 
 type ChatResponse struct {
-	Reply              string          `protobuf:"bytes,1,opt,name=reply" json:"reply,omitempty"`                             // AI 回复内容
-	Intent             IntentType      `protobuf:"varint,2,opt,name=intent" json:"intent,omitempty"`                          // 识别出的意图
-	Knowledge          []*KnowledgeRef `protobuf:"bytes,4,rep,name=knowledge" json:"knowledge,omitempty"`                     // 命中的知识条目（透明可解释）
-	ToolExecs          []*ToolExec     `protobuf:"bytes,5,rep,name=tool_execs" json:"tool_execs,omitempty"`                   // 本次触发的工具调用链（Phase 2）
-	SuggestedQuestions []string        `protobuf:"bytes,6,rep,name=suggested_questions" json:"suggested_questions,omitempty"` // 主动推荐的关联问题（2~3 个）
-	Handoff            *HandoffSummary `protobuf:"bytes,7,opt,name=handoff" json:"handoff,omitempty"`                         // 转人工交接摘要（仅转人工时附带）
+	Reply              string          `protobuf:"bytes,1,opt,name=reply" json:"reply,omitempty"`                             // AI 鍥炲鍐呭
+	Intent             IntentType      `protobuf:"varint,2,opt,name=intent" json:"intent,omitempty"`                          // 璇嗗埆鍑虹殑鎰忓浘
+	Knowledge          []*KnowledgeRef `protobuf:"bytes,4,rep,name=knowledge" json:"knowledge,omitempty"`                     // 鍛戒腑鐨勭煡璇嗘潯鐩紙閫忔槑鍙В閲婏級
+	ToolExecs          []*ToolExec     `protobuf:"bytes,5,rep,name=tool_execs" json:"tool_execs,omitempty"`                   // 鏈瑙﹀彂鐨勫伐鍏疯皟鐢ㄩ摼锛圥hase 2锛?
+	SuggestedQuestions []string        `protobuf:"bytes,6,rep,name=suggested_questions" json:"suggested_questions,omitempty"` // 涓诲姩鎺ㄨ崘鐨勫叧鑱旈棶棰橈紙2~3 涓級
+	Handoff            *HandoffSummary `protobuf:"bytes,7,opt,name=handoff" json:"handoff,omitempty"`                         // 杞汉宸ヤ氦鎺ユ憳瑕侊紙浠呰浆浜哄伐鏃堕檮甯︼級
 }
 
 func (x *ChatResponse) Reset() { *x = ChatResponse{} }
@@ -246,13 +246,13 @@ func (x *ChatResponse) GetHandoff() *HandoffSummary {
 	return nil
 }
 
-// 流式回复单个分片
-// STAGE_UPDATE: Pipeline 阶段状态推送
+// 娴佸紡鍥炲鍗曚釜鍒嗙墖
+// STAGE_UPDATE: Pipeline 闃舵鐘舵€佹帹閫?
 type ChatStreamChunk struct {
 	Type  ChunkType     `protobuf:"varint,1,opt,name=type" json:"type,omitempty"`
-	Text  string        `protobuf:"bytes,2,opt,name=text" json:"text,omitempty"`   // TEXT_DELTA 时为文本增量
-	Stage string        `protobuf:"bytes,3,opt,name=stage" json:"stage,omitempty"` // STAGE_UPDATE 时标识当前阶段
-	Final *ChatResponse `protobuf:"bytes,4,opt,name=final" json:"final,omitempty"` // DONE 时携带完整响应（含 debug/handoff/suggested_questions）
+	Text  string        `protobuf:"bytes,2,opt,name=text" json:"text,omitempty"`   // TEXT_DELTA 鏃朵负鏂囨湰澧為噺
+	Stage string        `protobuf:"bytes,3,opt,name=stage" json:"stage,omitempty"` // STAGE_UPDATE 鏃舵爣璇嗗綋鍓嶉樁娈?
+	Final *ChatResponse `protobuf:"bytes,4,opt,name=final" json:"final,omitempty"` // DONE 鏃舵惡甯﹀畬鏁村搷搴旓紙鍚?debug/handoff/suggested_questions锛?
 }
 
 func (x *ChatStreamChunk) Reset() { *x = ChatStreamChunk{} }
@@ -335,7 +335,7 @@ func (x *CreateSessionResponse) GetSessionId() string {
 
 type ListSessionsRequest struct {
 	UserId int64 `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	Limit  int32 `protobuf:"varint,2,opt,name=limit" json:"limit,omitempty"` // 默认 10
+	Limit  int32 `protobuf:"varint,2,opt,name=limit" json:"limit,omitempty"` // 榛樿 10
 	Offset int32 `protobuf:"varint,3,opt,name=offset" json:"offset,omitempty"`
 }
 
@@ -391,10 +391,10 @@ func (x *ListSessionsResponse) GetTotal() int32 {
 	return 0
 }
 
-// SessionBrief 会话摘要（列表展示用）
+// SessionBrief 浼氳瘽鎽樿锛堝垪琛ㄥ睍绀虹敤锛?
 type SessionBrief struct {
 	SessionId   string        `protobuf:"bytes,1,opt,name=session_id" json:"session_id,omitempty"`
-	LastMessage string        `protobuf:"bytes,2,opt,name=last_message" json:"last_message,omitempty"` // 最后一条消息预览
+	LastMessage string        `protobuf:"bytes,2,opt,name=last_message" json:"last_message,omitempty"` // 鏈€鍚庝竴鏉℃秷鎭瑙?
 	Status      SessionStatus `protobuf:"varint,3,opt,name=status" json:"status,omitempty"`
 	CreatedAt   string        `protobuf:"bytes,4,opt,name=created_at" json:"created_at,omitempty"`
 	UpdatedAt   string        `protobuf:"bytes,5,opt,name=updated_at" json:"updated_at,omitempty"`
@@ -451,7 +451,7 @@ func (x *SessionBrief) GetTotalTurns() int32 {
 
 type GetChatHistoryRequest struct {
 	SessionId string `protobuf:"bytes,1,opt,name=session_id" json:"session_id,omitempty"`
-	Limit     int32  `protobuf:"varint,2,opt,name=limit" json:"limit,omitempty"` // 默认 20
+	Limit     int32  `protobuf:"varint,2,opt,name=limit" json:"limit,omitempty"` // 榛樿 20
 	Offset    int32  `protobuf:"varint,3,opt,name=offset" json:"offset,omitempty"`
 }
 
@@ -550,8 +550,8 @@ type Message struct {
 	SessionId  string      `protobuf:"bytes,2,opt,name=session_id" json:"session_id,omitempty"`
 	Role       MessageRole `protobuf:"varint,3,opt,name=role" json:"role,omitempty"`
 	Content    string      `protobuf:"bytes,4,opt,name=content" json:"content,omitempty"`
-	Intent     IntentType  `protobuf:"varint,5,opt,name=intent" json:"intent,omitempty"`          // assistant 消息的识别意图
-	Confidence float32     `protobuf:"fixed32,6,opt,name=confidence" json:"confidence,omitempty"` // assistant 消息的置信度
+	Intent     IntentType  `protobuf:"varint,5,opt,name=intent" json:"intent,omitempty"`          // assistant 娑堟伅鐨勮瘑鍒剰鍥?
+	Confidence float32     `protobuf:"fixed32,6,opt,name=confidence" json:"confidence,omitempty"` // assistant 娑堟伅鐨勭疆淇″害
 	CreatedAt  string      `protobuf:"bytes,7,opt,name=created_at" json:"created_at,omitempty"`
 }
 
@@ -610,14 +610,14 @@ func (x *Message) GetCreatedAt() string {
 	return ""
 }
 
-// HandoffSummary AI → 人工客服的结构化交接摘要
-// 让人工客服一眼看清 AI 已做的事和用户诉求项
+// HandoffSummary AI 鈫?浜哄伐瀹㈡湇鐨勭粨鏋勫寲浜ゆ帴鎽樿
+// 璁╀汉宸ュ鏈嶄竴鐪肩湅娓?AI 宸插仛鐨勪簨鍜岀敤鎴疯瘔姹傞」
 type HandoffSummary struct {
-	CoreIssue        string            `protobuf:"bytes,1,opt,name=core_issue" json:"core_issue,omitempty"`                                                                       // 一句话概括用户核心诉求
-	AiActions        []string          `protobuf:"bytes,2,rep,name=ai_actions" json:"ai_actions,omitempty"`                                                                       // AI 已经做了什么
-	EscalationReason string            `protobuf:"bytes,3,opt,name=escalation_reason" json:"escalation_reason,omitempty"`                                                         // 为什么需要转人工
+	CoreIssue        string            `protobuf:"bytes,1,opt,name=core_issue" json:"core_issue,omitempty"`                                                                       // 涓€鍙ヨ瘽姒傛嫭鐢ㄦ埛鏍稿績璇夋眰
+	AiActions        []string          `protobuf:"bytes,2,rep,name=ai_actions" json:"ai_actions,omitempty"`                                                                       // AI 宸茬粡鍋氫簡浠€涔?
+	EscalationReason string            `protobuf:"bytes,3,opt,name=escalation_reason" json:"escalation_reason,omitempty"`                                                         // 涓轰粈涔堥渶瑕佽浆浜哄伐
 	UserEmotion      string            `protobuf:"bytes,4,opt,name=user_emotion" json:"user_emotion,omitempty"`                                                                   // neutral/mild_frustration/angry/urgent
-	Entities         map[string]string `protobuf:"bytes,5,rep,name=entities" json:"entities,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // 关键实体（订单号、商品名等）
+	Entities         map[string]string `protobuf:"bytes,5,rep,name=entities" json:"entities,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // 鍏抽敭瀹炰綋锛堣鍗曞彿銆佸晢鍝佸悕绛夛級
 }
 
 func (x *HandoffSummary) Reset() { *x = HandoffSummary{} }
@@ -661,13 +661,13 @@ func (x *HandoffSummary) GetEntities() map[string]string {
 	return nil
 }
 
-// KnowledgeRef RAG 命中的知识条目引用
+// KnowledgeRef RAG 鍛戒腑鐨勭煡璇嗘潯鐩紩鐢?
 type KnowledgeRef struct {
 	Id        string  `protobuf:"bytes,1,opt,name=id" json:"id,omitempty"`
 	Title     string  `protobuf:"bytes,2,opt,name=title" json:"title,omitempty"`
-	Content   string  `protobuf:"bytes,3,opt,name=content" json:"content,omitempty"`       // chunk 完整内容
+	Content   string  `protobuf:"bytes,3,opt,name=content" json:"content,omitempty"`       // chunk 瀹屾暣鍐呭
 	Category  string  `protobuf:"bytes,4,opt,name=category" json:"category,omitempty"`     // faq / product / policy / promotion
-	Relevance float32 `protobuf:"fixed32,5,opt,name=relevance" json:"relevance,omitempty"` // 相关性得分
+	Relevance float32 `protobuf:"fixed32,5,opt,name=relevance" json:"relevance,omitempty"` // 鐩稿叧鎬у緱鍒?
 }
 
 func (x *KnowledgeRef) Reset() { *x = KnowledgeRef{} }
@@ -711,14 +711,14 @@ func (x *KnowledgeRef) GetRelevance() float32 {
 	return 0
 }
 
-// ToolExec 工具调用执行记录（Phase 2）
+// ToolExec 宸ュ叿璋冪敤鎵ц璁板綍锛圥hase 2锛?
 type ToolExec struct {
 	ToolName  string            `protobuf:"bytes,1,opt,name=tool_name" json:"tool_name,omitempty"`                                                                     // get_order / search_product / get_logistics
-	Params    map[string]string `protobuf:"bytes,2,rep,name=params" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // 调用参数
-	Reasoning string            `protobuf:"bytes,3,opt,name=reasoning" json:"reasoning,omitempty"`                                                                     // LLM 给出的调用理由
+	Params    map[string]string `protobuf:"bytes,2,rep,name=params" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // 璋冪敤鍙傛暟
+	Reasoning string            `protobuf:"bytes,3,opt,name=reasoning" json:"reasoning,omitempty"`                                                                     // LLM 缁欏嚭鐨勮皟鐢ㄧ悊鐢?
 	Success   bool              `protobuf:"varint,4,opt,name=success" json:"success,omitempty"`
-	Result    string            `protobuf:"bytes,5,opt,name=result" json:"result,omitempty"` // 执行结果（JSON）
-	Error     string            `protobuf:"bytes,6,opt,name=error" json:"error,omitempty"`   // 失败原因
+	Result    string            `protobuf:"bytes,5,opt,name=result" json:"result,omitempty"` // 鎵ц缁撴灉锛圝SON锛?
+	Error     string            `protobuf:"bytes,6,opt,name=error" json:"error,omitempty"`   // 澶辫触鍘熷洜
 	LatencyMs int64             `protobuf:"varint,7,opt,name=latency_ms" json:"latency_ms,omitempty"`
 }
 
@@ -790,3 +790,5 @@ type AgentService_SendMessageStreamServer interface {
 	streaming.Stream
 	Send(*ChatStreamChunk) error
 }
+
+

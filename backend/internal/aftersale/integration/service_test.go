@@ -151,3 +151,5 @@ func requireDockerDaemon(t *testing.T) {
 		t.Skipf("skip integration test: docker daemon unavailable: %v (%s)", err, string(output))
 	}
 }
+
+

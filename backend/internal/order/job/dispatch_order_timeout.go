@@ -54,17 +54,17 @@ func (j *DispatchOrderTimeoutJob) Name() string {
 	return "DispatchOrderTimeoutJob"
 }
 
-// 本地不是 CREATED，直接跳过。
-// 本地是 CREATED，再去支付确认。
-// 已支付就直接条件更新成 PAID，并写 outbox / 发状态事件。
-// 未支付才进入批量取消。
+// 鏈湴涓嶆槸 CREATED锛岀洿鎺ヨ烦杩囥€?
+// 鏈湴鏄?CREATED锛屽啀鍘绘敮浠樼‘璁ゃ€?
+// 宸叉敮浠樺氨鐩存帴鏉′欢鏇存柊鎴?PAID锛屽苟鍐?outbox / 鍙戠姸鎬佷簨浠躲€?
+// 鏈敮浠樻墠杩涘叆鎵归噺鍙栨秷銆?
 func (j *DispatchOrderTimeoutJob) Run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	orderIDs, err := j.delayQueue.DrainDue(ctx, time.Now())
 	if err != nil {
-		j.l.Error("拉取到期超时订单失败", logger.Error(err))
+		j.l.Error("鎷夊彇鍒版湡瓒呮椂璁㈠崟澶辫触", logger.Error(err))
 		return err
 	}
 	if len(orderIDs) == 0 {
@@ -75,7 +75,7 @@ func (j *DispatchOrderTimeoutJob) Run() error {
 	for i, orderID := range orderIDs {
 		shouldCancel, evalErr := j.shouldCancelDueOrder(ctx, orderID)
 		if evalErr != nil {
-			j.l.Warn("判断超时订单是否可取消失败",
+			j.l.Warn("鍒ゆ柇瓒呮椂璁㈠崟鏄惁鍙彇娑堝け璐?,
 				logger.Int64("orderID", orderID),
 				logger.Error(evalErr))
 			j.requeue(ctx, append(append([]int64(nil), toCancelIDs...), orderIDs[i:]...))
@@ -93,7 +93,7 @@ func (j *DispatchOrderTimeoutJob) Run() error {
 	}
 
 	if err := j.batchCancelUC.Execute(ctx, toCancelIDs); err != nil {
-		j.l.Error("取消超时订单失败",
+		j.l.Error("鍙栨秷瓒呮椂璁㈠崟澶辫触",
 			logger.Error(err),
 			logger.Int("count", len(toCancelIDs)))
 		j.requeue(ctx, toCancelIDs)
@@ -102,7 +102,7 @@ func (j *DispatchOrderTimeoutJob) Run() error {
 	return nil
 }
 
-// 判断订单是否应该走超时取消：只有本地状态仍为 CREATED 才继续确认支付。
+// 鍒ゆ柇璁㈠崟鏄惁搴旇璧拌秴鏃跺彇娑堬細鍙湁鏈湴鐘舵€佷粛涓?CREATED 鎵嶇户缁‘璁ゆ敮浠樸€?
 func (j *DispatchOrderTimeoutJob) shouldCancelDueOrder(ctx context.Context, orderID int64) (bool, error) {
 	order, err := j.orderRepo.FindByID(ctx, orderID)
 	if err != nil {
@@ -129,7 +129,7 @@ func (j *DispatchOrderTimeoutJob) shouldCancelDueOrder(ctx context.Context, orde
 	return true, nil
 }
 
-// 这里表示订单已支付，需要把本地订单状态同步成 PAID 并发送状态变更事件。
+// 杩欓噷琛ㄧず璁㈠崟宸叉敮浠橈紝闇€瑕佹妸鏈湴璁㈠崟鐘舵€佸悓姝ユ垚 PAID 骞跺彂閫佺姸鎬佸彉鏇翠簨浠躲€?
 func (j *DispatchOrderTimeoutJob) syncPaidOrder(ctx context.Context, order *domain.Order) error {
 	paidOrder := *order
 	paidOrder.Status = domain.OrderStatusPaid
@@ -163,7 +163,7 @@ func (j *DispatchOrderTimeoutJob) sendStatusEvent(outboxID int64, event domain.O
 	defer cancel()
 
 	if err := j.producer.SendMessage(ctx, event); err != nil {
-		j.l.Error("发送订单状态变更事件失败",
+		j.l.Error("鍙戦€佽鍗曠姸鎬佸彉鏇翠簨浠跺け璐?,
 			logger.Error(err),
 			logger.Int64("orderID", event.OrderID),
 			logger.Int64("outboxID", outboxID))
@@ -171,7 +171,7 @@ func (j *DispatchOrderTimeoutJob) sendStatusEvent(outboxID int64, event domain.O
 	}
 
 	if err := j.outboxRepo.MarkSent(ctx, outboxID); err != nil {
-		j.l.Error("标记 outbox 已发送失败",
+		j.l.Error("鏍囪 outbox 宸插彂閫佸け璐?,
 			logger.Error(err),
 			logger.Int64("orderID", event.OrderID),
 			logger.Int64("outboxID", outboxID))
@@ -195,9 +195,11 @@ func (j *DispatchOrderTimeoutJob) requeue(ctx context.Context, orderIDs []int64)
 	retryAt := time.Now()
 	for _, orderID := range orderIDs {
 		if err := j.delayQueue.Enqueue(ctx, orderID, retryAt); err != nil {
-			j.l.Error("超时订单重新入队失败",
+			j.l.Error("瓒呮椂璁㈠崟閲嶆柊鍏ラ槦澶辫触",
 				logger.Int64("orderID", orderID),
 				logger.Error(err))
 		}
 	}
 }
+
+

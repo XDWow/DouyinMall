@@ -12,7 +12,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1/paymentservice"
 )
 
-// 选择一个订单支付，是当时创建了订单，但没支付的情况
+// 閫夋嫨涓€涓鍗曟敮浠橈紝鏄綋鏃跺垱寤轰簡璁㈠崟锛屼絾娌℃敮浠樼殑鎯呭喌
 type PayOrderUseCase struct {
 	orderClient   orderservice.Client
 	paymentClient paymentservice.Client
@@ -37,7 +37,7 @@ type PayOrderOutput struct {
 	OrderID     int64
 	PaymentURL  string
 	TotalAmount int64
-	ExpireAt    int64 // 订单取消还剩多少时间
+	ExpireAt    int64 // 璁㈠崟鍙栨秷杩樺墿澶氬皯鏃堕棿
 }
 
 func (uc *PayOrderUseCase) Execute(ctx context.Context, input PayOrderInput) (*PayOrderOutput, error) {
@@ -86,3 +86,5 @@ func (uc *PayOrderUseCase) Execute(ctx context.Context, input PayOrderInput) (*P
 		ExpireAt:    order.GetExpireAt(),
 	}, nil
 }
+
+

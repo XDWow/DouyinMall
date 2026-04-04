@@ -134,3 +134,5 @@ func loadWechatPrivateKey(path string) *rsa.PrivateKey {
 	}
 	return rsaKey
 }
+
+

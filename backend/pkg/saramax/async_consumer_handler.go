@@ -17,23 +17,23 @@ type AsyncHandler[T any] struct {
 }
 
 func (h AsyncHandler[T]) Setup(session sarama.ConsumerGroupSession) error {
-	// 啥也不干
+	// 鍟ヤ篃涓嶅共
 	return nil
 }
 
 func (h AsyncHandler[T]) Cleanup(session sarama.ConsumerGroupSession) error {
-	/// 啥也不干
+	/// 鍟ヤ篃涓嶅共
 	return nil
 }
 
-// 异步消费，批量提交
+// 寮傛娑堣垂锛屾壒閲忔彁浜?
 func (h AsyncHandler[T]) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	ch := claim.Messages()
 	batchsize := h.batchsize
 	for {
 		var eg errgroup.Group
 		msgs := make([]*sarama.ConsumerMessage, 0, batchsize)
-		// 防止一直凑不够一批,无法提交
+		// 闃叉涓€鐩村噾涓嶅涓€鎵?鏃犳硶鎻愪氦
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		done := false
 		for i := 0; i < batchsize && !done; i++ {
@@ -41,41 +41,41 @@ func (h AsyncHandler[T]) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 			case <-ctx.Done():
 				done = true
 			case msg, ok := <-ch:
-				if !ok { // channel 被关闭了
+				if !ok { // channel 琚叧闂簡
 					cancel()
 					return nil
 				}
 				msgs = append(msgs, msg)
-				// 异步处理消息
+				// 寮傛澶勭悊娑堟伅
 				eg.Go(func() error {
 					var err error
 					var t T
 					if err = json.Unmarshal(msg.Value, &t); err != nil {
-						// 消息格式都不对，没啥好处理的
-						// 但是也不能直接返回，在线上的时候要继续处理下去
-						h.l.Error("反序列化消息体失败",
+						// 娑堟伅鏍煎紡閮戒笉瀵癸紝娌″暐濂藉鐞嗙殑
+						// 浣嗘槸涔熶笉鑳界洿鎺ヨ繑鍥烇紝鍦ㄧ嚎涓婄殑鏃跺€欒缁х画澶勭悊涓嬪幓
+						h.l.Error("鍙嶅簭鍒楀寲娑堟伅浣撳け璐?,
 							logger.String("topic", msg.Topic),
 							logger.Int32("partition", msg.Partition),
 							logger.Int64("offset", msg.Offset),
-							// 这里也可以考虑打印 msg.Value，但是有些时候 msg 本身也包含敏感数据
+							// 杩欓噷涔熷彲浠ヨ€冭檻鎵撳嵃 msg.Value锛屼絾鏄湁浜涙椂鍊?msg 鏈韩涔熷寘鍚晱鎰熸暟鎹?
 							logger.Error(err))
-						// 不中断，继续下一个
+						// 涓嶄腑鏂紝缁х画涓嬩竴涓?
 						return nil
 					}
 
-					for i := 0; i < 3; i++ { // 重试机制
+					for i := 0; i < 3; i++ { // 閲嶈瘯鏈哄埗
 						err = h.fn(msg, t)
 						if err == nil {
 							break
 						}
 					}
 					if err != nil {
-						h.l.Error("消息消费失败",
+						h.l.Error("娑堟伅娑堣垂澶辫触",
 							logger.String("topic", msg.Topic),
 							logger.Int32("partition", msg.Partition),
 							logger.Int64("offset", msg.Offset))
 					}
-					return nil // 忽略错误，少一个计数没关系
+					return nil // 蹇界暐閿欒锛屽皯涓€涓鏁版病鍏崇郴
 				})
 			}
 		}
@@ -87,7 +87,7 @@ func (h AsyncHandler[T]) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 	}
 }
 
-// 传入实现好的自定义 consume
+// 浼犲叆瀹炵幇濂界殑鑷畾涔?consume
 func NewAsyncHandler[T any](l logger.LoggerV1, consume func(msg *sarama.ConsumerMessage, t T) error, batchsize int) *AsyncHandler[T] {
 	return &AsyncHandler[T]{
 		l:         l,
@@ -95,3 +95,5 @@ func NewAsyncHandler[T any](l logger.LoggerV1, consume func(msg *sarama.Consumer
 		batchsize: batchsize,
 	}
 }
+
+

@@ -11,11 +11,11 @@ import (
 	"time"
 
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
-	customergraph "github.com/XDWow/DouyinMall/backend/internal/agent/graph"
-	grpcHandler "github.com/XDWow/DouyinMall/backend/internal/agent/handler/grpc"
-	httpHandler "github.com/XDWow/DouyinMall/backend/internal/agent/handler/http"
 	agentrepository "github.com/XDWow/DouyinMall/backend/internal/agent/infra/repository"
 	agentioc "github.com/XDWow/DouyinMall/backend/internal/agent/ioc"
+	customergraph "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator"
+	grpcHandler "github.com/XDWow/DouyinMall/backend/internal/agent/transport/grpc"
+	httpHandler "github.com/XDWow/DouyinMall/backend/internal/agent/transport/http"
 	agentusecase "github.com/XDWow/DouyinMall/backend/internal/agent/usecase"
 	pkglogger "github.com/XDWow/DouyinMall/backend/pkg/logger"
 	agentservice "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/agent/v1/agentservice"
@@ -90,7 +90,7 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 		Embedder:        components.Embedder,
 		Retriever:       components.Retriever,
 		Registry:        components.Registry,
-		SessionStore:    components.SessionStore,
+		Memory:          components.Memory,
 		ExactCache:      components.ExactCache,
 		RateLimiter:     components.RateLimiter,
 		CheckpointStore: components.CheckpointStore,
@@ -401,9 +401,6 @@ func overrideWorkflowConfig(dst *customergraph.Config, src agentconfig.WorkflowC
 	}
 	if src.ConfidenceThreshold > 0 {
 		dst.ConfidenceThreshold = src.ConfidenceThreshold
-	}
-	if src.SummaryTriggerTurns > 0 {
-		dst.SummaryTriggerTurns = src.SummaryTriggerTurns
 	}
 	if src.MaxAnswerTokens > 0 {
 		dst.MaxAnswerTokens = src.MaxAnswerTokens

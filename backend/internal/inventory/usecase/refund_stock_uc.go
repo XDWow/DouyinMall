@@ -8,7 +8,7 @@ import (
 )
 
 type RefundStockCommand struct {
-	OperationID string // 本次refund操作的ID（如order_123_refund），用于幂等检查和插入记录
+	OperationID string // 鏈refund鎿嶄綔鐨処D锛堝order_123_refund锛夛紝鐢ㄤ簬骞傜瓑妫€鏌ュ拰鎻掑叆璁板綍
 }
 
 type RefundStockUseCase struct {
@@ -22,7 +22,8 @@ func NewRefundStockUseCase(repo domain.InventoryRepository, l logger.LoggerV1) *
 
 func (uc *RefundStockUseCase) Execute(ctx context.Context, cmd RefundStockCommand) error {
 	if cmd.OperationID == "" {
-		return errors.New("OperationID为空")
+		return errors.New("OperationID涓虹┖")
 	}
 	return uc.repo.RefundStock(ctx, cmd.OperationID)
 }
+

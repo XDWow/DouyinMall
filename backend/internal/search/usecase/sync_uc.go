@@ -9,7 +9,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// SyncUseCase 数据同步（Kafka 事件 → ES）
+// SyncUseCase 鏁版嵁鍚屾锛圞afka 浜嬩欢 鈫?ES锛?
 type SyncUseCase struct {
 	productRepo  domain.ProductRepo
 	merchantRepo domain.MerchantRepo
@@ -21,11 +21,11 @@ func NewSyncUseCase(productRepo domain.ProductRepo, merchantRepo domain.Merchant
 	return &SyncUseCase{productRepo: productRepo, merchantRepo: merchantRepo, embedder: embedder, l: l}
 }
 
-// Sync 处理单个同步事件
+// Sync 澶勭悊鍗曚釜鍚屾浜嬩欢
 func (uc *SyncUseCase) Sync(ctx context.Context, event domain.SyncEvent) error {
 	switch event.Type {
 	case domain.EventTypeProduct:
-		// 写入前生成向量
+		// 鍐欏叆鍓嶇敓鎴愬悜閲?
 		if event.Action != domain.EventActionDelete && event.Product != nil {
 			uc.enrichWithVector(ctx, event.Product)
 		}
@@ -33,11 +33,11 @@ func (uc *SyncUseCase) Sync(ctx context.Context, event domain.SyncEvent) error {
 	case domain.EventTypeMerchant:
 		return uc.merchantRepo.SyncMerchant(ctx, string(event.Action), event.Merchant)
 	default:
-		return fmt.Errorf("未知事件类型: %s", event.Type)
+		return fmt.Errorf("鏈煡浜嬩欢绫诲瀷: %s", event.Type)
 	}
 }
 
-// BatchSync 批量同步
+// BatchSync 鎵归噺鍚屾
 func (uc *SyncUseCase) BatchSync(ctx context.Context, events []domain.SyncEvent) (success, failed int64, errors []string) {
 	var productDocs []domain.ProductDocument
 	var merchantDocs []domain.MerchantDocument
@@ -88,17 +88,19 @@ func (uc *SyncUseCase) BatchSync(ctx context.Context, events []domain.SyncEvent)
 	return
 }
 
-// enrichWithVector 为商品文档生成名称向量
+// enrichWithVector 涓哄晢鍝佹枃妗ｇ敓鎴愬悕绉板悜閲?
 func (uc *SyncUseCase) enrichWithVector(ctx context.Context, doc *domain.ProductDocument) {
 	if doc.Name == "" {
 		return
 	}
 	vectors, err := uc.embedder.Embed(ctx, []string{doc.Name})
 	if err != nil {
-		uc.l.Warn("生成商品向量失败", logger.Error(err), logger.Int64("product_id", doc.ID))
+		uc.l.Warn("鐢熸垚鍟嗗搧鍚戦噺澶辫触", logger.Error(err), logger.Int64("product_id", doc.ID))
 		return
 	}
 	if len(vectors) > 0 {
 		doc.NameVector = vectors[0]
 	}
 }
+
+

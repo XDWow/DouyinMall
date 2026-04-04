@@ -9,7 +9,7 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/native"
 )
 
-// WechatNativeAdapter 微信Native支付服务的真实实现
+// WechatNativeAdapter 寰俊Native鏀粯鏈嶅姟鐨勭湡瀹炲疄鐜?
 type WechatNativeAdapter struct {
 	svc *native.NativeApiService
 }
@@ -55,3 +55,5 @@ func (w *WechatNativeAdapter) QueryOrderByOutTradeNo(ctx context.Context, outTra
 		},
 	}, nil
 }
+
+

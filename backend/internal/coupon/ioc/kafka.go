@@ -8,36 +8,38 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitKafkaClient 初始化 Kafka Client（消费者需要）
+// InitKafkaClient 鍒濆鍖?Kafka Client锛堟秷璐硅€呴渶瑕侊級
 func InitKafkaClient() sarama.Client {
-	// 默认配置
+	// 榛樿閰嶇疆
 	c := config.KafkaConfig{
 		Brokers: []string{"localhost:19092"},
 	}
 	err := viper.UnmarshalKey("kafka", &c)
 	if err != nil {
-		panic(fmt.Errorf("Kafka配置读取失败: %w", err))
+		panic(fmt.Errorf("Kafka閰嶇疆璇诲彇澶辫触: %w", err))
 	}
 
-	// Kafka 配置
+	// Kafka 閰嶇疆
 	cfg := sarama.NewConfig()
 	cfg.Producer.Return.Successes = true
 	cfg.Producer.Return.Errors = true
 
-	// 创建 Kafka Client
+	// 鍒涘缓 Kafka Client
 	client, err := sarama.NewClient(c.Brokers, cfg)
 	if err != nil {
-		panic(fmt.Errorf("Kafka Client创建失败: %w", err))
+		panic(fmt.Errorf("Kafka Client鍒涘缓澶辫触: %w", err))
 	}
 
 	return client
 }
 
-// InitKafkaSyncProducer 初始化 Kafka SyncProducer（如果将来需要发送死信队列时使用）
+// InitKafkaSyncProducer 鍒濆鍖?Kafka SyncProducer锛堝鏋滃皢鏉ラ渶瑕佸彂閫佹淇￠槦鍒楁椂浣跨敤锛?
 func InitKafkaSyncProducer(client sarama.Client) sarama.SyncProducer {
 	producer, err := sarama.NewSyncProducerFromClient(client)
 	if err != nil {
-		panic(fmt.Errorf("Kafka SyncProducer创建失败: %w", err))
+		panic(fmt.Errorf("Kafka SyncProducer鍒涘缓澶辫触: %w", err))
 	}
 	return producer
 }
+
+

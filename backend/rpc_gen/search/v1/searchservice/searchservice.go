@@ -859,3 +859,5 @@ func (p *kClient) AISearchProducts(ctx context.Context, Req *v1.AISearchProducts
 	}
 	return _result.GetSuccess(), nil
 }
+
+

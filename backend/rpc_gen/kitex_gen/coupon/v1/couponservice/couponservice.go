@@ -1114,3 +1114,5 @@ func (p *kClient) IssueCoupon(ctx context.Context, Req *v1.IssueCouponReq) (r *v
 	}
 	return _result.GetSuccess(), nil
 }
+
+

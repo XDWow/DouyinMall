@@ -27,8 +27,8 @@ func NewBuilder(Namespace string, Subsystem string,
 }
 
 func (m *MiddlewareBuilder) Build() gin.HandlerFunc {
-	// pattern 是指你命中的路由
-	// 是指你的 HTTP 的 status
+	// pattern 鏄寚浣犲懡涓殑璺敱
+	// 鏄寚浣犵殑 HTTP 鐨?status
 	// path /detail/1
 	labels := []string{"method", "pattern", "status"}
 	summary := prometheus.NewSummaryVec(prometheus.SummaryOpts{
@@ -65,7 +65,7 @@ func (m *MiddlewareBuilder) Build() gin.HandlerFunc {
 		defer func() {
 			duration := time.Since(startTime)
 			gauge.Dec()
-			// 告诉大家，也许404???? 而不是我系统错误
+			// 鍛婅瘔澶у锛屼篃璁?04???? 鑰屼笉鏄垜绯荤粺閿欒
 			pattern := ctx.FullPath()
 			if pattern == "" {
 				pattern = "unknown"
@@ -76,3 +76,5 @@ func (m *MiddlewareBuilder) Build() gin.HandlerFunc {
 		ctx.Next()
 	}
 }
+
+

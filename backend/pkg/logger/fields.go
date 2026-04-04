@@ -47,3 +47,5 @@ func Float64(key string, val float64) Field {
 		Value: val,
 	}
 }
+
+

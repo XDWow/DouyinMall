@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitRedis 初始化 Redis 客户端（用于限流等功能）
+// InitRedis 鍒濆鍖?Redis 瀹㈡埛绔紙鐢ㄤ簬闄愭祦绛夊姛鑳斤級
 func InitRedis() redis.Cmdable {
 	addr := viper.GetString("redis.addr")
 	if addr == "" {
@@ -15,3 +15,5 @@ func InitRedis() redis.Cmdable {
 		Addr: addr,
 	})
 }
+
+

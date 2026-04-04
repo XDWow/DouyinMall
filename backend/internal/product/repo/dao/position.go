@@ -7,13 +7,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// key 用来区分不同实体表（product/merchant)
+// key 鐢ㄦ潵鍖哄垎涓嶅悓瀹炰綋琛紙product/merchant)
 type CanalPosition struct {
 	ID         int64  `gorm:"primaryKey;autoIncrement"`
-	Key        string `gorm:"type:varchar(255);not null;uniqueIndex;comment:位置标识"`
-	BinlogFile string `gorm:"type:varchar(255);not null;comment:binlog文件名"`
-	BinlogPos  uint32 `gorm:"type:int unsigned;not null;comment:binlog位置"`
-	UpdatedAt  int64  `gorm:"type:bigint;not null;comment:更新时间"`
+	Key        string `gorm:"type:varchar(255);not null;uniqueIndex;comment:浣嶇疆鏍囪瘑"`
+	BinlogFile string `gorm:"type:varchar(255);not null;comment:binlog鏂囦欢鍚?`
+	BinlogPos  uint32 `gorm:"type:int unsigned;not null;comment:binlog浣嶇疆"`
+	UpdatedAt  int64  `gorm:"type:bigint;not null;comment:鏇存柊鏃堕棿"`
 }
 
 func (CanalPosition) TableName() string {
@@ -57,7 +57,7 @@ func (d *gormPositionDao) LoadPosition(ctx context.Context, key string) (mysql.P
 
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			// 没有保存的 position，返回空 position（从最新位置开始）
+			// 娌℃湁淇濆瓨鐨?position锛岃繑鍥炵┖ position锛堜粠鏈€鏂颁綅缃紑濮嬶級
 			return mysql.Position{}, nil
 		}
 		return mysql.Position{}, err
@@ -68,3 +68,5 @@ func (d *gormPositionDao) LoadPosition(ctx context.Context, key string) (mysql.P
 		Pos:  position.BinlogPos,
 	}, nil
 }
+
+

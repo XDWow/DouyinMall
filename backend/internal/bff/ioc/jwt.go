@@ -22,3 +22,5 @@ func InitJWTManager() *jwtx.JWTManager {
 
 	return jwtx.NewJWTManager(accessSecret, refreshSecret, accessExpiry, refreshExpiry)
 }
+
+

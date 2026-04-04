@@ -14,7 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// SessionRepoImpl 缁勫悎 Redis 鐑眰 + MySQL 鍐峰眰锛屽疄鐜?domain.SessionRepo
+// SessionRepoImpl 缂佸嫬鎮?Redis 閻戭厼鐪?+ MySQL 閸愬嘲鐪伴敍灞界杽閻?domain.SessionRepo
 type SessionRepoImpl struct {
 	cache  *cache.RedisSessionCache
 	dao    *persistence.AgentDAO
@@ -29,34 +29,33 @@ func NewSessionRepo(
 	return &SessionRepoImpl{cache: cache, dao: dao, logger: logger}
 }
 
-// Load 浼樺厛 Redis锛宮iss 鍥炴簮 MySQL
+// Load 娴兼ê鍘?Redis閿涘iss 閸ョ偞绨?MySQL
 func (r *SessionRepoImpl) Load(ctx context.Context, sessionID string) (*domain.Session, error) {
-	// 1. 灏濊瘯 Redis
+	// 1. 鐏忔繆鐦?Redis
 	session, err := r.cache.LoadSession(ctx, sessionID)
 	if err == nil && session != nil {
-		// 鍔犺浇娑堟伅绐楀彛
-		msgs, _ := r.cache.LoadMessages(ctx, sessionID)
+		// 閸旂姾娴囧☉鍫熶紖缁愭褰?		msgs, _ := r.cache.LoadMessages(ctx, sessionID)
 		session.Messages = msgs
 		return session, nil
 	}
 	if err != nil && !errors.Is(err, redis.Nil) {
-		r.logger.Warn("Redis load session 寮傚父锛屽洖婧?MySQL", logger.Error(err))
+		r.logger.Warn("Redis load session 瀵倸鐖堕敍灞芥礀濠?MySQL", logger.Error(err))
 	}
 
-	// 2. 鍥炴簮 MySQL
+	// 2. 閸ョ偞绨?MySQL
 	sessionDO, dbErr := r.dao.GetSession(ctx, sessionID)
 	if dbErr != nil {
 		return nil, fmt.Errorf("session not found: %w", dbErr)
 	}
 	session = persistence.ToDomainSession(sessionDO)
 
-	// 鍔犺浇娑堟伅
+	// 閸旂姾娴囧☉鍫熶紖
 	msgDOs, _, _ := r.dao.GetMessages(ctx, sessionID, 20, 0)
 	for _, m := range msgDOs {
 		session.Messages = append(session.Messages, persistence.ToDomainMessage(&m))
 	}
 
-	// 3. 鍥炲～ Redis
+	// 3. 閸ョ偛锝?Redis
 	go func() {
 		_ = r.cache.SaveSession(context.Background(), session)
 		for _, msg := range session.Messages {
@@ -67,34 +66,34 @@ func (r *SessionRepoImpl) Load(ctx context.Context, sessionID string) (*domain.S
 	return session, nil
 }
 
-// Save 鍏堝啓 Redis锛屽紓姝ヨ惤 MySQL
+// Save 閸忓牆鍟?Redis閿涘苯绱撳銉ㄦ儰 MySQL
 func (r *SessionRepoImpl) Save(ctx context.Context, session *domain.Session) error {
-	// 鍐?Redis
+	// 閸?Redis
 	if err := r.cache.SaveSession(ctx, session); err != nil {
-		r.logger.Error("Redis save session 澶辫触", logger.Error(err))
+		r.logger.Error("Redis save session 婢惰精瑙?, logger.Error(err))
 	}
 
-	// 杩藉姞鏈€鏂扮殑娑堟伅鍒?Redis
+	// 鏉╄棄濮為張鈧弬鎵畱濞戝牊浼呴崚?Redis
 	if len(session.Messages) > 0 {
-		for _, msg := range session.Messages[len(session.Messages)-2:] { // 鏈€鍚庝袱鏉★細user + assistant
+		for _, msg := range session.Messages[len(session.Messages)-2:] { // 閺堚偓閸氬簼琚遍弶鈽呯窗user + assistant
 			_ = r.cache.AppendMessage(ctx, session.ID, msg)
 		}
 	}
 
-	// 寮傛钀?MySQL
+	// 瀵倹顒為拃?MySQL
 	go func() {
 		sessionDO := persistence.ToSessionDO(session)
 		if err := r.dao.UpdateSession(context.Background(), sessionDO); err != nil {
-			r.logger.Error("MySQL update session 澶辫触", logger.Error(err))
+			r.logger.Error("MySQL update session 婢惰精瑙?, logger.Error(err))
 		}
-		// 钀芥秷鎭?		if len(session.Messages) >= 2 {
+		// 閽€鑺ョХ閹?		if len(session.Messages) >= 2 {
 			msgs := session.Messages[len(session.Messages)-2:]
 			dos := make([]persistence.MessageDO, len(msgs))
 			for i, m := range msgs {
 				dos[i] = *persistence.ToMessageDO(m)
 			}
 			if err := r.dao.BatchCreateMessages(context.Background(), dos); err != nil {
-				r.logger.Error("MySQL batch create messages 澶辫触", logger.Error(err))
+				r.logger.Error("MySQL batch create messages 婢惰精瑙?, logger.Error(err))
 			}
 		}
 	}()
@@ -102,7 +101,7 @@ func (r *SessionRepoImpl) Save(ctx context.Context, session *domain.Session) err
 	return nil
 }
 
-// Create 鍒涘缓鏂颁細璇?func (r *SessionRepoImpl) Create(ctx context.Context, session *domain.Session) error {
+// Create 閸掓稑缂撻弬棰佺窗鐠?func (r *SessionRepoImpl) Create(ctx context.Context, session *domain.Session) error {
 	sessionDO := persistence.ToSessionDO(session)
 	if err := r.dao.CreateSession(ctx, sessionDO); err != nil {
 		return fmt.Errorf("mysql create session: %w", err)
@@ -110,14 +109,14 @@ func (r *SessionRepoImpl) Save(ctx context.Context, session *domain.Session) err
 	return r.cache.SaveSession(ctx, session)
 }
 
-// Clear 娓呯┖浼氳瘽
+// Clear 濞撳懐鈹栨导姘崇樈
 func (r *SessionRepoImpl) Clear(ctx context.Context, sessionID string) error {
 	_ = r.cache.DeleteSession(ctx, sessionID)
 	_ = r.dao.DeleteMessages(ctx, sessionID)
 	return nil
 }
 
-// ListByUser 鍒嗛〉鏌ヨ锛堣蛋 MySQL锛?func (r *SessionRepoImpl) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
+// ListByUser 閸掑棝銆夐弻銉嚄閿涘牐铔?MySQL閿?func (r *SessionRepoImpl) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
 	dos, total, err := r.dao.ListSessionsByUser(ctx, uint64(userID), limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -129,9 +128,9 @@ func (r *SessionRepoImpl) Clear(ctx context.Context, sessionID string) error {
 	return sessions, int(total), nil
 }
 
-// FindActiveByUser 鏌ユ壘鐢ㄦ埛娲昏穬浼氳瘽
+// FindActiveByUser 閺屻儲澹橀悽銊﹀煕濞叉槒绌导姘崇樈
 func (r *SessionRepoImpl) FindActiveByUser(ctx context.Context, userID int64) (*domain.Session, error) {
-	// TODO: 鍙粠 Redis agent:user:{uid}:active 蹇€熸煡鎵?	sessions, _, err := r.ListByUser(ctx, userID, 1, 0)
+	// TODO: 閸欘垯绮?Redis agent:user:{uid}:active 韫囶偊鈧喐鐓￠幍?	sessions, _, err := r.ListByUser(ctx, userID, 1, 0)
 	if err != nil || len(sessions) == 0 {
 		return nil, err
 	}
@@ -140,3 +139,5 @@ func (r *SessionRepoImpl) FindActiveByUser(ctx context.Context, userID int64) (*
 	}
 	return nil, nil
 }
+
+

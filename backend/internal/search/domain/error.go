@@ -8,3 +8,5 @@ var (
 	ErrLLMFailed     = errors.New("llm call failed")
 	ErrEmbeddingFail = errors.New("embedding failed")
 )
+
+

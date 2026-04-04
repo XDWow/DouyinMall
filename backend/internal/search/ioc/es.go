@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitES 初始化 ES8 客户端并创建索引
+// InitES 鍒濆鍖?ES8 瀹㈡埛绔苟鍒涘缓绱㈠紩
 func InitES() *es.ESClient {
 	addresses := viper.GetStringSlice("elasticsearch.addresses")
 	if len(addresses) == 0 {
@@ -20,14 +20,16 @@ func InitES() *es.ESClient {
 
 	client, err := es.NewESClient(addresses)
 	if err != nil {
-		panic("初始化 ES 客户端失败: " + err.Error())
+		panic("鍒濆鍖?ES 瀹㈡埛绔け璐? " + err.Error())
 	}
 
-	log.Println("正在初始化 ES 索引...")
+	log.Println("姝ｅ湪鍒濆鍖?ES 绱㈠紩...")
 	if err := es.InitIndices(client); err != nil {
-		panic("初始化 ES 索引失败: " + err.Error())
+		panic("鍒濆鍖?ES 绱㈠紩澶辫触: " + err.Error())
 	}
-	log.Println("ES 索引初始化成功")
+	log.Println("ES 绱㈠紩鍒濆鍖栨垚鍔?)
 
 	return client
 }
+
+

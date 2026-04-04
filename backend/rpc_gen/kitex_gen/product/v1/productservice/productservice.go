@@ -731,3 +731,5 @@ func (p *kClient) DeleteProduct(ctx context.Context, Req *v1.DeleteProductReq) (
 	}
 	return _result.GetSuccess(), nil
 }
+
+

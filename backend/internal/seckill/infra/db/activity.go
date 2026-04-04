@@ -48,3 +48,5 @@ type SeckillOperation struct {
 }
 
 func (SeckillOperation) TableName() string { return "seckill_operation" }
+
+

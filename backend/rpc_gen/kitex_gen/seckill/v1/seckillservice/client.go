@@ -49,3 +49,5 @@ func (p *kSeckillServiceClient) GetSeckillResult(ctx context.Context, req *v1.Ge
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetSeckillResult(ctx, req)
 }
+
+

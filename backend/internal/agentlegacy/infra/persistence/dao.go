@@ -64,8 +64,7 @@ func NewAgentDAO(db *gorm.DB) *AgentDAO {
 	return &AgentDAO{db: db}
 }
 
-// InitTables 鑷姩寤鸿〃
-func (d *AgentDAO) InitTables() error {
+// InitTables 閼奉亜濮╁楦裤€?func (d *AgentDAO) InitTables() error {
 	return d.db.AutoMigrate(&SessionDO{}, &MessageDO{}, &KnowledgeItemDO{})
 }
 
@@ -136,7 +135,7 @@ func (d *AgentDAO) DeleteMessages(ctx context.Context, sessionID string) error {
 	return d.db.WithContext(ctx).Where("session_id = ?", sessionID).Delete(&MessageDO{}).Error
 }
 
-// ==================== Domain 杞崲 ====================
+// ==================== Domain 鏉烆剚宕?====================
 
 func ToDomainSession(do *SessionDO) *domain.Session {
 	return &domain.Session{
@@ -187,3 +186,5 @@ func ToMessageDO(m domain.Message) *MessageDO {
 		LatencyMs:  int(m.LatencyMs),
 	}
 }
+
+

@@ -10,11 +10,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrDataNotFound 通用的数据没找到
+// ErrDataNotFound 閫氱敤鐨勬暟鎹病鎵惧埌
 var ErrDataNotFound = gorm.ErrRecordNotFound
 
-// 数据库错误：唯一索引冲突 转化为 业务错误
-var ErrUserDuplicate = errors.New("用户邮箱或者手机号冲突")
+// 鏁版嵁搴撻敊璇細鍞竴绱㈠紩鍐茬獊 杞寲涓?涓氬姟閿欒
+var ErrUserDuplicate = errors.New("鐢ㄦ埛閭鎴栬€呮墜鏈哄彿鍐茬獊")
 
 type UserDAO interface {
 	Insert(ctx context.Context, u User) (int64, error)
@@ -50,7 +50,7 @@ func (d *GORMUserDAO) Insert(ctx context.Context, u User) (int64, error) {
 }
 
 func (d *GORMUserDAO) Update(ctx context.Context, u User) error {
-	// 使用 Updates 方法，只更新非零值字段
+	// 浣跨敤 Updates 鏂规硶锛屽彧鏇存柊闈為浂鍊煎瓧娈?
 	return d.db.WithContext(ctx).Model(&User{}).
 		Where("id = ?", u.ID).
 		Updates(map[string]interface{}{
@@ -80,21 +80,21 @@ func (d *GORMUserDAO) FindByPhone(ctx context.Context, phone string) (User, erro
 	return user, err
 }
 
-// 软删除
+// 杞垹闄?
 func (d *GORMUserDAO) Delete(ctx context.Context, id int64) error {
 	return d.db.WithContext(ctx).Model(&User{}).
 		Where("id = ?", id).
 		Update("deleted_at", time.Now()).Error
 }
 
-// 持久化模型
+// 鎸佷箙鍖栨ā鍨?
 type User struct {
 	ID int64 `gorm:"primaryKey;autoIncrement"`
-	// 这两个时间字段，gorm 能识别的，更新插入操作会自动更新这两字段
+	// 杩欎袱涓椂闂村瓧娈碉紝gorm 鑳借瘑鍒殑锛屾洿鏂版彃鍏ユ搷浣滀細鑷姩鏇存柊杩欎袱瀛楁
 	CreatedAt time.Time
 	UpdatedAt time.Time
-	// 软删除字段，GORM 会自动处理 gorm.DeletedAt 类型
-	// 即查询自动加上 WHERE deleted_at IS NULL
+	// 杞垹闄ゅ瓧娈碉紝GORM 浼氳嚜鍔ㄥ鐞?gorm.DeletedAt 绫诲瀷
+	// 鍗虫煡璇㈣嚜鍔ㄥ姞涓?WHERE deleted_at IS NULL
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 
 	UserName string
@@ -103,3 +103,5 @@ type User struct {
 	Phone    sql.NullString `gorm:"type:varchar(20);uniqueIndex"`
 	Avatar   string
 }
+
+

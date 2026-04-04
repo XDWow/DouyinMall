@@ -9,3 +9,5 @@ import (
 func InitDB(cfg aftersaleconfig.Config) (*gorm.DB, error) {
 	return gorm.Open(mysql.Open(cfg.DB.DSN), &gorm.Config{})
 }
+
+

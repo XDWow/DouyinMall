@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitInventoryClient 初始化库存服务RPC客户端
+// InitInventoryClient 鍒濆鍖栧簱瀛樻湇鍔PC瀹㈡埛绔?
 func InitInventoryClient() inventoryv1.Client {
-	// 从配置读取 etcd 地址
+	// 浠庨厤缃鍙?etcd 鍦板潃
 	endpoints := viper.GetStringSlice("etcd.endpoints")
 	if len(endpoints) == 0 {
 		if ep := viper.GetString("etcd.endpoints"); ep != "" {
@@ -19,23 +19,25 @@ func InitInventoryClient() inventoryv1.Client {
 		}
 	}
 
-	// 创建 etcd resolver
+	// 鍒涘缓 etcd resolver
 	r, err := etcd.NewEtcdResolver(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("创建 etcd resolver 失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓 etcd resolver 澶辫触: %w", err))
 	}
 
-	// 服务发现名称（需要和库存服务注册时的名称一致）
+	// 鏈嶅姟鍙戠幇鍚嶇О锛堥渶瑕佸拰搴撳瓨鏈嶅姟娉ㄥ唽鏃剁殑鍚嶇О涓€鑷达級
 	serviceName := "inventory-service"
 
-	// 创建 Kitex 客户端
+	// 鍒涘缓 Kitex 瀹㈡埛绔?
 	c, err := inventoryv1.NewClient(
 		serviceName,
 		client.WithResolver(r),
 	)
 	if err != nil {
-		panic(fmt.Errorf("创建库存服务客户端失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓搴撳瓨鏈嶅姟瀹㈡埛绔け璐? %w", err))
 	}
 
 	return c
 }
+
+

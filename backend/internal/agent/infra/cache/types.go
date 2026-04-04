@@ -6,14 +6,14 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 
-	"github.com/XDWow/DouyinMall/backend/internal/agent/dto"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
 
 type SemanticCacheItem struct {
 	ID        string
 	Query     string
 	Reply     string
-	Intent    dto.Intent
+	Intent    domain.Intent
 	Vector    []float64
 	CreatedAt time.Time
 }
@@ -22,7 +22,7 @@ type ExactCacheItem struct {
 	TenantID  string
 	UserID    int64
 	Query     string
-	Response  dto.ChatResponse
+	Response  domain.ChatResult
 	CreatedAt time.Time
 }
 

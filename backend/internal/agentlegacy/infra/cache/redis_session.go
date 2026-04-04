@@ -23,8 +23,8 @@ const (
 	maxWindowMsgs    = 20
 )
 
-// RedisSessionCache Redis 浼氳瘽鐑眰
-// 瀹炵幇 domain.SessionRepo 鐨?Redis 閮ㄥ垎锛圠oad/Save/Create/Clear锛?// MySQL 鍐峰眰鐢?persistence 鍖呰礋璐ｏ紝閫氳繃缁勫悎瀹炵幇瀹屾暣鐨?SessionRepo
+// RedisSessionCache Redis 娴兼俺鐦介悜顓炵湴
+// 鐎圭偟骞?domain.SessionRepo 閻?Redis 闁劌鍨庨敍鍦爋ad/Save/Create/Clear閿?// MySQL 閸愬嘲鐪伴悽?persistence 閸栧懓绀嬬拹锝忕礉闁俺绻冪紒鍕値鐎圭偟骞囩€瑰本鏆ｉ惃?SessionRepo
 type RedisSessionCache struct {
 	client redis.Cmdable
 }
@@ -33,7 +33,7 @@ func NewRedisSessionCache(client redis.Cmdable) *RedisSessionCache {
 	return &RedisSessionCache{client: client}
 }
 
-// SaveSession 淇濆瓨浼氳瘽鍏冧俊鎭埌 Redis Hash
+// SaveSession 娣囨繂鐡ㄦ导姘崇樈閸忓啩淇婇幁顖氬煂 Redis Hash
 func (c *RedisSessionCache) SaveSession(ctx context.Context, session *domain.Session) error {
 	key := sessionKeyPrefix + session.ID
 	data, err := json.Marshal(session)
@@ -42,19 +42,18 @@ func (c *RedisSessionCache) SaveSession(ctx context.Context, session *domain.Ses
 	}
 	pipe := c.client.Pipeline()
 	pipe.Set(ctx, key, data, sessionTTL)
-	// 鏇存柊鐢ㄦ埛娲昏穬浼氳瘽绱㈠紩
-	activeKey := fmt.Sprintf("%s%d%s", activeKeyPrefix, session.UserID, activeKeySuffix)
+	// 閺囧瓨鏌婇悽銊﹀煕濞叉槒绌导姘崇樈缁便垹绱?	activeKey := fmt.Sprintf("%s%d%s", activeKeyPrefix, session.UserID, activeKeySuffix)
 	pipe.Set(ctx, activeKey, session.ID, sessionTTL)
 	_, err = pipe.Exec(ctx)
 	return err
 }
 
-// LoadSession 浠?Redis 鍔犺浇浼氳瘽
+// LoadSession 娴?Redis 閸旂姾娴囨导姘崇樈
 func (c *RedisSessionCache) LoadSession(ctx context.Context, sessionID string) (*domain.Session, error) {
 	key := sessionKeyPrefix + sessionID
 	data, err := c.client.Get(ctx, key).Result()
 	if err != nil {
-		return nil, err // redis.Nil 琛ㄧず miss
+		return nil, err // redis.Nil 鐞涖劎銇?miss
 	}
 	var session domain.Session
 	if err := json.Unmarshal([]byte(data), &session); err != nil {
@@ -63,8 +62,7 @@ func (c *RedisSessionCache) LoadSession(ctx context.Context, sessionID string) (
 	return &session, nil
 }
 
-// AppendMessage 杩藉姞娑堟伅鍒?Redis List锛堟粦鍔ㄧ獥鍙ｏ紝淇濈暀鏈€杩?N 鏉★級
-func (c *RedisSessionCache) AppendMessage(ctx context.Context, sessionID string, msg domain.Message) error {
+// AppendMessage 鏉╄棄濮炲☉鍫熶紖閸?Redis List閿涘牊绮﹂崝銊х崶閸欙綇绱濇穱婵堟殌閺堚偓鏉?N 閺夆槄绱?func (c *RedisSessionCache) AppendMessage(ctx context.Context, sessionID string, msg domain.Message) error {
 	key := sessionKeyPrefix + sessionID + msgsKeySuffix
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -72,13 +70,12 @@ func (c *RedisSessionCache) AppendMessage(ctx context.Context, sessionID string,
 	}
 	pipe := c.client.Pipeline()
 	pipe.RPush(ctx, key, data)
-	pipe.LTrim(ctx, key, -maxWindowMsgs, -1) // 鍙繚鐣欐渶杩?N 鏉?	pipe.Expire(ctx, key, sessionTTL)
+	pipe.LTrim(ctx, key, -maxWindowMsgs, -1) // 閸欘亙绻氶悾娆愭付鏉?N 閺?	pipe.Expire(ctx, key, sessionTTL)
 	_, err = pipe.Exec(ctx)
 	return err
 }
 
-// LoadMessages 浠?Redis 鍔犺浇婊戝姩绐楀彛鍐呯殑娑堟伅
-func (c *RedisSessionCache) LoadMessages(ctx context.Context, sessionID string) ([]domain.Message, error) {
+// LoadMessages 娴?Redis 閸旂姾娴囧鎴濆З缁愭褰涢崘鍛畱濞戝牊浼?func (c *RedisSessionCache) LoadMessages(ctx context.Context, sessionID string) ([]domain.Message, error) {
 	key := sessionKeyPrefix + sessionID + msgsKeySuffix
 	results, err := c.client.LRange(ctx, key, 0, -1).Result()
 	if err != nil {
@@ -95,8 +92,7 @@ func (c *RedisSessionCache) LoadMessages(ctx context.Context, sessionID string) 
 	return msgs, nil
 }
 
-// DeleteSession 鍒犻櫎浼氳瘽缂撳瓨
-func (c *RedisSessionCache) DeleteSession(ctx context.Context, sessionID string) error {
+// DeleteSession 閸掔娀娅庢导姘崇樈缂傛挸鐡?func (c *RedisSessionCache) DeleteSession(ctx context.Context, sessionID string) error {
 	keys := []string{
 		sessionKeyPrefix + sessionID,
 		sessionKeyPrefix + sessionID + msgsKeySuffix,
@@ -104,7 +100,7 @@ func (c *RedisSessionCache) DeleteSession(ctx context.Context, sessionID string)
 	return c.client.Del(ctx, keys...).Err()
 }
 
-// CheckRateLimit 娑堟伅闄愰锛? 鍒嗛挓鍐呮槸鍚﹁秴杩?limit 鏉?func (c *RedisSessionCache) CheckRateLimit(ctx context.Context, userID int64, limit int64) (bool, error) {
+// CheckRateLimit 濞戝牊浼呴梽鎰邦暥閿? 閸掑棝鎸撻崘鍛Ц閸氾箒绉存潻?limit 閺?func (c *RedisSessionCache) CheckRateLimit(ctx context.Context, userID int64, limit int64) (bool, error) {
 	key := fmt.Sprintf("%s%d", rateKeyPrefix, userID)
 	count, err := c.client.Incr(ctx, key).Result()
 	if err != nil {
@@ -115,3 +111,5 @@ func (c *RedisSessionCache) DeleteSession(ctx context.Context, sessionID string)
 	}
 	return count > limit, nil
 }
+
+

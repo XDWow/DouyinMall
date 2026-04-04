@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// snowflakeGenerator 简单雪花ID生成器（41位毫秒时间戳 | 10位节点 | 12位序列号）
+// snowflakeGenerator 绠€鍗曢洩鑺盜D鐢熸垚鍣紙41浣嶆绉掓椂闂存埑 | 10浣嶈妭鐐?| 12浣嶅簭鍒楀彿锛?
 type snowflakeGenerator struct {
 	mu     sync.Mutex
 	nodeID int64
@@ -23,7 +23,7 @@ func (g *snowflakeGenerator) GenerateOrderID() int64 {
 	if now == g.lastMS {
 		g.seq = (g.seq + 1) & 0xFFF
 		if g.seq == 0 {
-			// 等待下一毫秒
+			// 绛夊緟涓嬩竴姣
 			for now <= g.lastMS {
 				now = time.Now().UnixMilli()
 			}
@@ -35,7 +35,7 @@ func (g *snowflakeGenerator) GenerateOrderID() int64 {
 	return (now&0x1FFFFFFFFFF)<<22 | (g.nodeID&0x3FF)<<12 | g.seq
 }
 
-// InitIDGenerator 创建雪花ID生成器，节点ID从配置读取（默认1）
+// InitIDGenerator 鍒涘缓闆姳ID鐢熸垚鍣紝鑺傜偣ID浠庨厤缃鍙栵紙榛樿1锛?
 func InitIDGenerator() usecase.IDGenerator {
 	nodeID := viper.GetInt64("snowflake.node_id")
 	if nodeID <= 0 {
@@ -43,3 +43,5 @@ func InitIDGenerator() usecase.IDGenerator {
 	}
 	return &snowflakeGenerator{nodeID: nodeID}
 }
+
+

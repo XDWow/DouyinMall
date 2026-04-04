@@ -18,3 +18,5 @@ func NewServer(handler seckillv1.SeckillService, opts ...server.Option) server.S
 func RegisterService(svr server.Server, handler seckillv1.SeckillService, opts ...server.RegisterOption) error {
 	return svr.RegisterService(serviceInfo(), handler, opts...)
 }
+
+

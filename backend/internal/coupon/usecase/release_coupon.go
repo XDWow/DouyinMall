@@ -20,10 +20,12 @@ type ReleaseCouponInput struct {
 }
 
 func (uc *ReleaseCouponUseCase) Execute(ctx context.Context, input ReleaseCouponInput) error {
-	// 校验参数
+	// 鏍￠獙鍙傛暟
 	if input.OrderID <= 0 {
 		return errors.New("invalid order_id")
 	}
 
 	return uc.couponRepo.UpdateStatusByOrderID(ctx, input.OrderID, domain.UserCouponStatusLocked, domain.UserCouponStatusUnused)
 }
+
+

@@ -16,7 +16,7 @@ type productRepo struct {
 	l  logger.LoggerV1
 }
 
-// NewProductRepo 创建商品仓储（实现 domain.ProductRepo 端口）
+// NewProductRepo 鍒涘缓鍟嗗搧浠撳偍锛堝疄鐜?domain.ProductRepo 绔彛锛?
 func NewProductRepo(esClient *ESClient, l logger.LoggerV1) domain.ProductRepo {
 	return &productRepo{es: esClient, l: l}
 }
@@ -32,7 +32,7 @@ func (r *productRepo) SearchProducts(ctx context.Context, req *domain.SearchProd
 
 	var result esSearchResult
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析搜索结果失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽鎼滅储缁撴灉澶辫触: %w", err)
 	}
 
 	products := make([]domain.ProductSearchResult, 0, len(result.Hits.Hits))
@@ -40,7 +40,7 @@ func (r *productRepo) SearchProducts(ctx context.Context, req *domain.SearchProd
 		products = append(products, hitToProduct(hit, req.EnableHighlight))
 	}
 
-	r.l.Info("商品搜索完成",
+	r.l.Info("鍟嗗搧鎼滅储瀹屾垚",
 		logger.Int64("took_ms", time.Since(start).Milliseconds()),
 		logger.Int64("total", result.Hits.Total.Value))
 
@@ -50,7 +50,7 @@ func (r *productRepo) SearchProducts(ctx context.Context, req *domain.SearchProd
 	}, nil
 }
 
-// VectorSearch ES8 kNN 向量搜索
+// VectorSearch ES8 kNN 鍚戦噺鎼滅储
 func (r *productRepo) VectorSearch(ctx context.Context, vector []float32, topK int64, filters map[string]interface{}) ([]domain.RecallResult, error) {
 	knnQuery := map[string]interface{}{
 		"knn": map[string]interface{}{
@@ -75,7 +75,7 @@ func (r *productRepo) VectorSearch(ctx context.Context, vector []float32, topK i
 
 	var result esSearchResult
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析 kNN 结果失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽 kNN 缁撴灉澶辫触: %w", err)
 	}
 
 	recalls := make([]domain.RecallResult, 0, len(result.Hits.Hits))
@@ -118,7 +118,7 @@ func (r *productRepo) GetAggregations(ctx context.Context, req *domain.SearchPro
 
 	var result esAggResult
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析聚合结果失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽鑱氬悎缁撴灉澶辫触: %w", err)
 	}
 
 	categories := make([]domain.CategoryAggregation, 0, len(result.Aggs.CategoryAgg.Buckets))
@@ -139,7 +139,7 @@ func (r *productRepo) GetAggregations(ctx context.Context, req *domain.SearchPro
 	return &domain.SearchAggregationsResp{Categories: categories, PriceRanges: priceRanges}, nil
 }
 
-// GetProductsByIDs 通过 ES ids 查询精确获取指定商品（用于 AI 搜索第四阶段）
+// GetProductsByIDs 閫氳繃 ES ids 鏌ヨ绮剧‘鑾峰彇鎸囧畾鍟嗗搧锛堢敤浜?AI 鎼滅储绗洓闃舵锛?
 func (r *productRepo) GetProductsByIDs(ctx context.Context, ids []int64, enableHighlight bool, keyword string) ([]domain.ProductSearchResult, error) {
 	strIDs := make([]interface{}, len(ids))
 	for i, id := range ids {
@@ -155,7 +155,7 @@ func (r *productRepo) GetProductsByIDs(ctx context.Context, ids []int64, enableH
 			},
 		},
 	}
-	// 如果提供了关键词且开启高亮，将 keyword 作为 should 子句（不影响过滤，只用于高亮）
+	// 濡傛灉鎻愪緵浜嗗叧閿瘝涓斿紑鍚珮浜紝灏?keyword 浣滀负 should 瀛愬彞锛堜笉褰卞搷杩囨护锛屽彧鐢ㄤ簬楂樹寒锛?
 	if enableHighlight && keyword != "" {
 		queryObj["query"].(map[string]interface{})["bool"].(map[string]interface{})["should"] = []interface{}{
 			map[string]interface{}{
@@ -180,7 +180,7 @@ func (r *productRepo) GetProductsByIDs(ctx context.Context, ids []int64, enableH
 
 	var result esSearchResult
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析 IDs 查询结果失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽 IDs 鏌ヨ缁撴灉澶辫触: %w", err)
 	}
 	products := make([]domain.ProductSearchResult, 0, len(result.Hits.Hits))
 	for _, hit := range result.Hits.Hits {
@@ -189,7 +189,7 @@ func (r *productRepo) GetProductsByIDs(ctx context.Context, ids []int64, enableH
 	return products, nil
 }
 
-// ==================== 索引管理 ====================
+// ==================== 绱㈠紩绠＄悊 ====================
 
 func (r *productRepo) SyncProduct(ctx context.Context, action string, doc *domain.ProductDocument) error {
 	docID := strconv.FormatInt(doc.ID, 10)
@@ -201,7 +201,7 @@ func (r *productRepo) SyncProduct(ctx context.Context, action string, doc *domai
 	case "DELETE":
 		return r.es.DeleteDocument(ctx, ProductIndex, docID)
 	default:
-		return fmt.Errorf("不支持的操作: %s", action)
+		return fmt.Errorf("涓嶆敮鎸佺殑鎿嶄綔: %s", action)
 	}
 }
 
@@ -242,7 +242,7 @@ func (r *productRepo) BatchDeleteProducts(ctx context.Context, ids []int64) (int
 	return int64(len(ids)), 0, nil
 }
 
-// ==================== 查询构建 ====================
+// ==================== 鏌ヨ鏋勫缓 ====================
 
 func (r *productRepo) buildProductQuery(req *domain.SearchProductsReq) string {
 	queryObj := map[string]interface{}{
@@ -347,9 +347,9 @@ func (r *productRepo) buildAggregationQuery(req *domain.SearchProductsReq) strin
 	return string(queryJSON)
 }
 
-// ==================== AI 搜索辅助函数 ====================
+// ==================== AI 鎼滅储杈呭姪鍑芥暟 ====================
 
-// BuildFiltersFromIntent 根据 QueryIntent 构建 ES 过滤条件
+// BuildFiltersFromIntent 鏍规嵁 QueryIntent 鏋勫缓 ES 杩囨护鏉′欢
 func BuildFiltersFromIntent(intent *domain.QueryIntent) map[string]interface{} {
 	var filterList []interface{}
 	if len(intent.Categories) > 0 {
@@ -377,7 +377,7 @@ func BuildFiltersFromIntent(intent *domain.QueryIntent) map[string]interface{} {
 	}
 }
 
-// BuildKeywordQuery 构建关键词召回 query（仅返回 id + sales_count，供融合排序使用）
+// BuildKeywordQuery 鏋勫缓鍏抽敭璇嶅彫鍥?query锛堜粎杩斿洖 id + sales_count锛屼緵铻嶅悎鎺掑簭浣跨敤锛?
 func BuildKeywordQuery(keyword string, topK int64, filters map[string]interface{}) string {
 	must := []interface{}{
 		map[string]interface{}{
@@ -400,7 +400,7 @@ func BuildKeywordQuery(keyword string, topK int64, filters map[string]interface{
 	return string(body)
 }
 
-// KeywordRecallSearch 执行关键词召回搜索
+// KeywordRecallSearch 鎵ц鍏抽敭璇嶅彫鍥炴悳绱?
 func (r *productRepo) KeywordRecallSearch(ctx context.Context, query string) ([]domain.RecallResult, error) {
 	res, err := r.es.Search(ctx, ProductIndex, query)
 	if err != nil {
@@ -410,7 +410,7 @@ func (r *productRepo) KeywordRecallSearch(ctx context.Context, query string) ([]
 
 	var result esSearchResult
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析关键词召回结果失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽鍏抽敭璇嶅彫鍥炵粨鏋滃け璐? %w", err)
 	}
 
 	recalls := make([]domain.RecallResult, 0, len(result.Hits.Hits))
@@ -425,7 +425,7 @@ func (r *productRepo) KeywordRecallSearch(ctx context.Context, query string) ([]
 	return recalls, nil
 }
 
-// ==================== 辅助类型与函数 ====================
+// ==================== 杈呭姪绫诲瀷涓庡嚱鏁?====================
 
 type esSearchResult struct {
 	Hits struct {
@@ -494,10 +494,12 @@ func formatPriceLabel(min, max int64) string {
 	minY, maxY := float64(min)/100, float64(max)/100
 	switch {
 	case max == 0:
-		return fmt.Sprintf("%.0f元以上", minY)
+		return fmt.Sprintf("%.0f鍏冧互涓?, minY)
 	case min == 0:
-		return fmt.Sprintf("%.0f元以下", maxY)
+		return fmt.Sprintf("%.0f鍏冧互涓?, maxY)
 	default:
-		return fmt.Sprintf("%.0f-%.0f元", minY, maxY)
+		return fmt.Sprintf("%.0f-%.0f鍏?, minY, maxY)
 	}
 }
+
+

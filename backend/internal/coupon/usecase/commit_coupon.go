@@ -25,3 +25,5 @@ func (uc *CommitCouponUseCase) Execute(ctx context.Context, input CommitCouponIn
 	}
 	return uc.couponRepo.UpdateStatusByOrderID(ctx, input.OrderID, domain.UserCouponStatusLocked, domain.UserCouponStatusUsed)
 }
+
+

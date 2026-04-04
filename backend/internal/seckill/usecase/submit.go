@@ -70,12 +70,12 @@ func (uc *SubmitUseCase) Execute(ctx context.Context, cmd SubmitCmd) (*domain.Re
 		return nil, err
 	}
 	switch code {
-	case 1: // 预扣库存是否成功？
+	case 1: // 棰勬墸搴撳瓨鏄惁鎴愬姛锛?
 		return &domain.Result{Status: domain.RequestStatusFail, FailReason: domain.FailReasonOutOfStock}, domain.ErrOutOfStock
-	case 2: // 一人一单
+	case 2: // 涓€浜轰竴鍗?
 		return &domain.Result{Status: domain.RequestStatusFail, FailReason: domain.FailReasonDuplicate}, domain.ErrDuplicateSeckill
 	}
-	// 通过 redis 拦截校验，大部分流量会拦在这
+	// 閫氳繃 redis 鎷︽埅鏍￠獙锛屽ぇ閮ㄥ垎娴侀噺浼氭嫤鍦ㄨ繖
 	result := domain.Result{RequestNo: requestNo, Status: domain.RequestStatusProcessing}
 
 	evt := domain.Event{
@@ -95,3 +95,5 @@ func (uc *SubmitUseCase) Execute(ctx context.Context, cmd SubmitCmd) (*domain.Re
 
 	return &result, nil
 }
+
+

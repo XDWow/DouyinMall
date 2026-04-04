@@ -53,3 +53,5 @@ func (p *kPaymentServiceClient) ConfirmPayment(ctx context.Context, req *v1.Conf
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ConfirmPayment(ctx, req)
 }
+
+

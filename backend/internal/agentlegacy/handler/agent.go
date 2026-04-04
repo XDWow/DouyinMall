@@ -19,8 +19,7 @@ func NewAgentHandler(chatUC *usecase.ChatUseCase, sessionUC *usecase.SessionUseC
 	return &AgentHandler{chatUC: chatUC, sessionUC: sessionUC}
 }
 
-// 鍥涢樁娈?Pipeline 鍏ュ彛
-func (h *AgentHandler) SendMessage(ctx context.Context, req *agentv1.ChatRequest) (*agentv1.ChatResponse, error) {
+// 閸ユ盯妯佸▓?Pipeline 閸忋儱褰?func (h *AgentHandler) SendMessage(ctx context.Context, req *agentv1.ChatRequest) (*agentv1.ChatResponse, error) {
 	resp, err := h.chatUC.Execute(ctx, usecase.ChatInput{
 		SessionID: req.GetSessionId(),
 		UserID:    req.GetUserId(),
@@ -32,10 +31,10 @@ func (h *AgentHandler) SendMessage(ctx context.Context, req *agentv1.ChatRequest
 	return h.toChatResponse(resp), nil
 }
 
-// 娴佸紡瀵硅瘽 RPC锛坓RPC Server-Side Streaming锛?
-// 鎺ㄩ€佹椂搴忥細STAGE_UPDATE("cache") 鈫?STAGE_UPDATE("intent") 鈫?STAGE_UPDATE("retrieval")
+// 濞翠礁绱＄€电鐦?RPC閿涘潛RPC Server-Side Streaming閿?
+// 閹恒劑鈧焦妞傛惔蹇ョ窗STAGE_UPDATE("cache") 閳?STAGE_UPDATE("intent") 閳?STAGE_UPDATE("retrieval")
 //
-//	鈫?STAGE_UPDATE("generating") 鈫?TEXT_DELTA 脳 N 鈫?DONE
+//	閳?STAGE_UPDATE("generating") 閳?TEXT_DELTA 鑴?N 閳?DONE
 func (h *AgentHandler) SendMessageStream(req *agentv1.ChatRequest, stream agentv1.AgentService_SendMessageStreamServer) error {
 	ctx := stream.Context()
 	chunkCh := h.chatUC.ExecuteStream(ctx, usecase.ChatInput{
@@ -51,7 +50,7 @@ func (h *AgentHandler) SendMessageStream(req *agentv1.ChatRequest, stream agentv
 	return nil
 }
 
-// 鑾峰彇瀵硅瘽鍘嗗彶
+// 閼惧嘲褰囩€电鐦介崢鍡楀蕉
 func (h *AgentHandler) GetChatHistory(ctx context.Context, req *agentv1.GetChatHistoryRequest) (*agentv1.GetChatHistoryResponse, error) {
 	limit := int(req.GetLimit())
 	if limit <= 0 {
@@ -72,7 +71,7 @@ func (h *AgentHandler) GetChatHistory(ctx context.Context, req *agentv1.GetChatH
 	}, nil
 }
 
-// 鍒涘缓鏂颁細璇?
+// 閸掓稑缂撻弬棰佺窗鐠?
 func (h *AgentHandler) CreateSession(ctx context.Context, req *agentv1.CreateSessionRequest) (*agentv1.CreateSessionResponse, error) {
 	session, err := h.sessionUC.Create(ctx, req.GetUserId(), req.GetChannel())
 	if err != nil {
@@ -83,8 +82,7 @@ func (h *AgentHandler) CreateSession(ctx context.Context, req *agentv1.CreateSes
 	}, nil
 }
 
-// 鑾峰彇鐢ㄦ埛浼氳瘽鍒楄〃
-func (h *AgentHandler) ListSessions(ctx context.Context, req *agentv1.ListSessionsRequest) (*agentv1.ListSessionsResponse, error) {
+// 閼惧嘲褰囬悽銊﹀煕娴兼俺鐦介崚妤勩€?func (h *AgentHandler) ListSessions(ctx context.Context, req *agentv1.ListSessionsRequest) (*agentv1.ListSessionsResponse, error) {
 	limit := int(req.GetLimit())
 	if limit <= 0 {
 		limit = 10
@@ -110,7 +108,7 @@ func (h *AgentHandler) ListSessions(ctx context.Context, req *agentv1.ListSessio
 	}, nil
 }
 
-// 娓呯┖浼氳瘽
+// 濞撳懐鈹栨导姘崇樈
 func (h *AgentHandler) ClearSession(ctx context.Context, req *agentv1.ClearSessionRequest) (*agentv1.ClearSessionResponse, error) {
 	err := h.sessionUC.Clear(ctx, req.GetSessionId())
 	if err != nil {
@@ -126,7 +124,7 @@ func (h *AgentHandler) toChatResponse(resp *domain.ChatResp) *agentv1.ChatRespon
 		SuggestedQuestions: resp.SuggestedQuestions,
 	}
 
-	// 鐭ヨ瘑寮曠敤
+	// 閻儴鐦戝鏇犳暏
 	for _, ref := range resp.Knowledge {
 		pbResp.Knowledge = append(pbResp.Knowledge, &agentv1.KnowledgeRef{
 			Id:        ref.ID,
@@ -218,7 +216,7 @@ func toProtoSessionStatus(status domain.SessionStatus) agentv1.SessionStatus {
 	}
 }
 
-// 灏?domain.StreamChunk 杞负 proto ChatStreamChunk
+// 鐏?domain.StreamChunk 鏉烆兛璐?proto ChatStreamChunk
 func (h *AgentHandler) toStreamChunk(chunk domain.StreamChunk) *agentv1.ChatStreamChunk {
 	pb := &agentv1.ChatStreamChunk{
 		Stage: chunk.Stage,
@@ -237,3 +235,5 @@ func (h *AgentHandler) toStreamChunk(chunk domain.StreamChunk) *agentv1.ChatStre
 	}
 	return pb
 }
+
+

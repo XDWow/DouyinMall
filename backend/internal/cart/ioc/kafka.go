@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitKafkaClient 初始化 Kafka Client（用于消费者）
+// InitKafkaClient 鍒濆鍖?Kafka Client锛堢敤浜庢秷璐硅€咃級
 func InitKafkaClient() sarama.Client {
 	brokers := viper.GetStringSlice("kafka.brokers")
 	if len(brokers) == 0 {
@@ -23,8 +23,10 @@ func InitKafkaClient() sarama.Client {
 
 	client, err := sarama.NewClient(brokers, config)
 	if err != nil {
-		panic("初始化 Kafka Client 失败: " + err.Error())
+		panic("鍒濆鍖?Kafka Client 澶辫触: " + err.Error())
 	}
 
 	return client
 }
+
+

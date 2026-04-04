@@ -19,3 +19,5 @@ type AfterSaleRequest struct {
 }
 
 func (AfterSaleRequest) TableName() string { return "after_sale_requests" }
+
+

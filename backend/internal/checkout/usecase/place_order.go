@@ -19,7 +19,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1/productservice"
 )
 
-// 普通下单
+// 鏅€氫笅鍗?
 type PlaceOrderUseCase struct {
 	productClient   productservice.Client
 	inventoryClient inventoryservice.Client
@@ -59,8 +59,8 @@ type PlaceOrderInput struct {
 	PaymentMethod  string
 	Currency       string
 	OrderKind      string
-	Remark         string // 订单备注
-	ExpectedAmount int64  // preview 中看到的金额，真正支付的时候会兜底再算一次，如果跟之前用户看到的不一样，就返回
+	Remark         string // 璁㈠崟澶囨敞
+	ExpectedAmount int64  // preview 涓湅鍒扮殑閲戦锛岀湡姝ｆ敮浠樼殑鏃跺€欎細鍏滃簳鍐嶇畻涓€娆★紝濡傛灉璺熶箣鍓嶇敤鎴风湅鍒扮殑涓嶄竴鏍凤紝灏辫繑鍥?
 }
 
 type PlaceOrderOutput struct {
@@ -80,7 +80,7 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 	}
 
 	lines, unavailable := buildOrderLines(input.Items, productResp.Product)
-	// 有的订单项失效了，必须返回，用户可以选择重新下单
+	// 鏈夌殑璁㈠崟椤瑰け鏁堜簡锛屽繀椤昏繑鍥烇紝鐢ㄦ埛鍙互閫夋嫨閲嶆柊涓嬪崟
 	if len(unavailable) > 0 {
 		items := make([]domain.UnavailableItem, len(unavailable))
 		for i, l := range unavailable {
@@ -89,7 +89,7 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 		return nil, &domain.UnavailableItemsError{Items: items}
 	}
 
-	// 查一下选择的优惠券是否还在可使用列表中
+	// 鏌ヤ竴涓嬮€夋嫨鐨勪紭鎯犲埜鏄惁杩樺湪鍙娇鐢ㄥ垪琛ㄤ腑
 	var couponDiscount int64
 	if len(input.CouponIDs) > 0 {
 		couponResp, couponErr := uc.couponClient.ListAvailableCoupons(ctx, &couponv1.ListAvailableCouponsReq{
@@ -97,7 +97,7 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 			Items:  toCouponOrderItems(lines),
 		})
 		if couponErr != nil {
-			return nil, fmt.Errorf("查询优惠券出错: %w", couponErr)
+			return nil, fmt.Errorf("鏌ヨ浼樻儬鍒稿嚭閿? %w", couponErr)
 		}
 		coupons := toCouponOptions(couponResp.Coupons, lines)
 		couponDiscount = sumSelectedCouponDiscount(coupons, input.CouponIDs)
@@ -107,7 +107,7 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 	if priceErr := domain.ValidatePriceChange(input.ExpectedAmount, price.TotalAmount); priceErr != nil {
 		return nil, priceErr
 	}
-	// --- 商品、优惠券校验完成 ---
+	// --- 鍟嗗搧銆佷紭鎯犲埜鏍￠獙瀹屾垚 ---
 
 	orderID := uc.idGen.GenerateOrderID()
 	commitResp, commitErr := uc.inventoryClient.CommitStock(ctx, &inventoryv1.CommitStockReq{
@@ -128,12 +128,12 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 			OrderId:       orderID,
 			Items:         toCouponOrderItems(lines),
 		})
-		if couponErr != nil { // 调用出错，不知道优惠券扣了还是没扣，也是失败，回退优惠券，避免锁住优惠券
+		if couponErr != nil { // 璋冪敤鍑洪敊锛屼笉鐭ラ亾浼樻儬鍒告墸浜嗚繕鏄病鎵ｏ紝涔熸槸澶辫触锛屽洖閫€浼樻儬鍒革紝閬垮厤閿佷綇浼樻儬鍒?
 			uc.restoreCommittedStock(ctx, orderID)
 			uc.releaseReservedCoupons(ctx, orderID)
 			return nil, fmt.Errorf("reserve coupons: %w", couponErr)
 		}
-		if !couponReserveResp.Success { // 明确是扣失败了
+		if !couponReserveResp.Success { // 鏄庣‘鏄墸澶辫触浜?
 			uc.restoreCommittedStock(ctx, orderID)
 			return nil, toCouponUnavailableError(couponReserveResp.Failures)
 		}
@@ -160,9 +160,9 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 			Currency: input.Currency,
 		},
 		BizTradeNo:  fmt.Sprintf("%d", orderID),
-		Description: fmt.Sprintf("订单 %d 支付", orderID),
+		Description: fmt.Sprintf("璁㈠崟 %d 鏀粯", orderID),
 	})
-	if payErr != nil { // 调用支付失败，不影响订单创建，打个日志
+	if payErr != nil { // 璋冪敤鏀粯澶辫触锛屼笉褰卞搷璁㈠崟鍒涘缓锛屾墦涓棩蹇?
 		uc.logger.Warn("create initial payment session failed",
 			logger.Int64("orderID", orderID),
 			logger.Error(payErr),
@@ -182,16 +182,16 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 
 func (uc *PlaceOrderUseCase) validate(input PlaceOrderInput) error {
 	if input.UserID <= 0 {
-		return errors.New("无效的用户id")
+		return errors.New("鏃犳晥鐨勭敤鎴穒d")
 	}
 	if len(input.Items) == 0 {
 		return domain.ErrInvalidInput
 	}
 	if input.Address.ReceiverName == "" || input.Address.Phone == "" {
-		return errors.New("地址补完整")
+		return errors.New("鍦板潃琛ュ畬鏁?)
 	}
 	if input.PaymentMethod == "" {
-		return errors.New("未选择支付方式")
+		return errors.New("鏈€夋嫨鏀粯鏂瑰紡")
 	}
 	if input.ExpectedAmount <= 0 {
 		return errors.New("expected amount must be positive")
@@ -227,3 +227,5 @@ func normalizeOrderKind(orderKind string) string {
 	}
 	return orderKind
 }
+
+

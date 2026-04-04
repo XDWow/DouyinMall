@@ -1,26 +1,28 @@
 package events
 
-// ID定位数据，Direction 说明谁为基准，type 确定操作类型，
-// 1.传入需要更新的内容，消费者拿着内容直接更新target，问题是这个内容已经旧了
-// 2.传入id,消费者再去base中查数据，查到的数据更新target,这样更能保证一致性
+// ID瀹氫綅鏁版嵁锛孌irection 璇存槑璋佷负鍩哄噯锛宼ype 纭畾鎿嶄綔绫诲瀷锛?
+// 1.浼犲叆闇€瑕佹洿鏂扮殑鍐呭锛屾秷璐硅€呮嬁鐫€鍐呭鐩存帴鏇存柊target锛岄棶棰樻槸杩欎釜鍐呭宸茬粡鏃т簡
+// 2.浼犲叆id,娑堣垂鑰呭啀鍘籦ase涓煡鏁版嵁锛屾煡鍒扮殑鏁版嵁鏇存柊target,杩欐牱鏇磋兘淇濊瘉涓€鑷存€?
 type InconsistentEvent struct {
 	ID int64
-	// 以谁为基准
+	// 浠ヨ皝涓哄熀鍑?
 	Direction string
 
-	// 有些时候，一些观测，或者一些第三方，需要知道，是什么引起的不一致
-	// 因为他要去 DEBUG
-	// 这个是可选的
+	// 鏈変簺鏃跺€欙紝涓€浜涜娴嬶紝鎴栬€呬竴浜涚涓夋柟锛岄渶瑕佺煡閬擄紝鏄粈涔堝紩璧风殑涓嶄竴鑷?
+	// 鍥犱负浠栬鍘?DEBUG
+	// 杩欎釜鏄彲閫夌殑
 	Type string
-	// 事件里面带 base 的数据
-	// 修复数据用这里的去修，这种做法是不行的，因为有严重的并发问题
+	// 浜嬩欢閲岄潰甯?base 鐨勬暟鎹?
+	// 淇鏁版嵁鐢ㄨ繖閲岀殑鍘讳慨锛岃繖绉嶅仛娉曟槸涓嶈鐨勶紝鍥犱负鏈変弗閲嶇殑骞跺彂闂
 	Columns map[string]any
 }
 
 const (
-	// InconsistentEventTypeTargetMissing 校验的目标数据，缺了这一条
+	// InconsistentEventTypeTargetMissing 鏍￠獙鐨勭洰鏍囨暟鎹紝缂轰簡杩欎竴鏉?
 	InconsistentEventTypeTargetMissing = "target_missing"
-	// InconsistentEventTypeNEQ 不相等
+	// InconsistentEventTypeNEQ 涓嶇浉绛?
 	InconsistentEventTypeNEQ         = "neq"
 	InconsistentEventTypeBaseMissing = "base_missing"
 )
+
+

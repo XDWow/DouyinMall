@@ -71,3 +71,5 @@ func (p *kProductServiceClient) DeleteProduct(ctx context.Context, Req *v1.Delet
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.DeleteProduct(ctx, Req)
 }
+
+

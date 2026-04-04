@@ -102,3 +102,5 @@ func applyDomainModel(item *aftersaledb.AfterSaleRequest, request *domain.Reques
 	request.CreatedAt = item.CreatedAt
 	request.UpdatedAt = item.UpdatedAt
 }
+
+

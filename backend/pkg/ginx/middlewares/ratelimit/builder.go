@@ -31,8 +31,8 @@ func (b *Builder) Build() gin.HandlerFunc {
 		limited, err := b.limit(ctx)
 		if err != nil {
 			log.Println(err)
-			// 这一步很有意思，就是如果这边出错了
-			// 要怎么办？
+			// 杩欎竴姝ュ緢鏈夋剰鎬濓紝灏辨槸濡傛灉杩欒竟鍑洪敊浜?
+			// 瑕佹€庝箞鍔烇紵
 			ctx.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
@@ -49,3 +49,5 @@ func (b *Builder) limit(ctx *gin.Context) (bool, error) {
 	key := fmt.Sprintf("%s:%s", b.prefix, ctx.ClientIP())
 	return b.limiter.Limit(ctx, key)
 }
+
+

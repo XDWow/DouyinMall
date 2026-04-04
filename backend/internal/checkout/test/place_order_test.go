@@ -337,3 +337,5 @@ func refundOperationOrderID(req *inventoryv1.RefundStockReq) int64 {
 	_, _ = fmt.Sscanf(req.GetOperationId(), "order_%d_refund", &orderID)
 	return orderID
 }
+
+

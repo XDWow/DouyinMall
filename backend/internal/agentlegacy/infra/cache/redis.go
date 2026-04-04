@@ -11,8 +11,7 @@ import (
 
 type AgentCache interface {
 	Get(ctx context.Context, key string) (string, error)
-	MGet(ctx context.Context, keys ...string) ([]string, error) // 鎵归噺鏌ヨ锛岀己澶辩殑 key 杩斿洖绌哄瓧绗︿覆
-	Set(ctx context.Context, key string, val string, ttl time.Duration) error
+	MGet(ctx context.Context, keys ...string) ([]string, error) // 閹靛綊鍣洪弻銉嚄閿涘瞼宸辨径杈╂畱 key 鏉╂柨娲栫粚鍝勭摟缁楋缚瑕?	Set(ctx context.Context, key string, val string, ttl time.Duration) error
 	Del(ctx context.Context, keys ...string) error
 	Eval(ctx context.Context, script string, keys []string, args ...any) (any, error)
 	RPush(ctx context.Context, key string, vals ...string) error
@@ -25,7 +24,7 @@ type agentRedisCache struct {
 	client redis.Cmdable
 }
 
-// NewAgentRedis 鍒涘缓閫氱敤 Redis 璁块棶灞?
+// NewAgentRedis 閸掓稑缂撻柅姘辨暏 Redis 鐠佸潡妫剁仦?
 func NewAgentRedis(client redis.Cmdable) AgentCache {
 	return &agentRedisCache{client: client}
 }
@@ -43,8 +42,7 @@ func (a *agentRedisCache) MGet(ctx context.Context, keys ...string) ([]string, e
 	for i, v := range vals {
 		if s, ok := v.(string); ok {
 			res[i] = s
-		} // nil锛坘ey 涓嶅瓨鍦級淇濇寔绌哄瓧绗︿覆
-	}
+		} // nil閿涘潣ey 娑撳秴鐡ㄩ崷顭掔礆娣囨繃瀵旂粚鍝勭摟缁楋缚瑕?	}
 	return res, nil
 }
 
@@ -79,3 +77,5 @@ func (a *agentRedisCache) LTrim(ctx context.Context, key string, start, stop int
 func (a *agentRedisCache) Expire(ctx context.Context, key string, ttl time.Duration) error {
 	return a.client.Expire(ctx, key, ttl).Err()
 }
+
+

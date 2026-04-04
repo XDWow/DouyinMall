@@ -6,10 +6,12 @@ type Product struct {
 	Description string   `json:"description"`
 	Picture     string   `json:"picture"`
 	SlideImgs   []string `json:"slide_image"`
-	Price       int64    `json:"price"` // 单位：分（避免浮点数精度问题）
+	Price       int64    `json:"price"` // 鍗曚綅锛氬垎锛堥伩鍏嶆诞鐐规暟绮惧害闂锛?
 	Categories  []string `json:"category_id"`
-	InStock     bool     `json:"in_stock"` // 是否有货（来自库存服务，不存储具体数量）
+	InStock     bool     `json:"in_stock"` // 鏄惁鏈夎揣锛堟潵鑷簱瀛樻湇鍔★紝涓嶅瓨鍌ㄥ叿浣撴暟閲忥級
 
 	MerchantID   int64  `json:"merchant_id"`
 	MerchantName string `json:"merchant_name"`
 }
+
+

@@ -17,3 +17,5 @@ func TestToDBPaymentIncludesTxnID(t *testing.T) {
 	require.True(t, dbPayment.TxnID.Valid)
 	require.Equal(t, "wx_txn_1", dbPayment.TxnID.String)
 }
+
+

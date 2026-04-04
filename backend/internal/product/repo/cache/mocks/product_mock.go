@@ -127,3 +127,5 @@ func (mr *MockProductCacheMockRecorder) SetWithTTL(ctx, key, value, ttl any) *go
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWithTTL", reflect.TypeOf((*MockProductCache)(nil).SetWithTTL), ctx, key, value, ttl)
 }
+
+

@@ -22,14 +22,14 @@ const (
 	confidenceLow         = 0.5
 	maxMessageLen         = 2000
 
-	transferReply  = "姝ｅ湪涓烘偍杞帴浜哄伐瀹㈡湇锛岃绋嶅€?.."
-	humanWaitReply = "鎮ㄥ凡杩炴帴浜哄伐瀹㈡湇锛屾秷鎭凡閫佽揪锛岃绋嶅€欏洖澶嶃€?
+	transferReply  = "濮濓絽婀稉鐑樺亶鏉烆剚甯存禍鍝勪紣鐎广垺婀囬敍宀冾嚞缁嬪秴鈧?.."
+	humanWaitReply = "閹劌鍑℃潻鐐村复娴滃搫浼愮€广垺婀囬敍灞剧Х閹垰鍑￠柅浣芥彧閿涘矁顕粙宥呪偓娆忔礀婢跺秲鈧?
 
 	systemLimitKey  = "agent:system:limit"
-	userLimitKeyFmt = "agent:rate:%d" // 鐢ㄦ埛缁村害闄愭祦 key锛?d 涓?userID
+	userLimitKeyFmt = "agent:rate:%d" // 閻劍鍩涚紒鏉戝闂勬劖绁?key閿?d 娑?userID
 )
 
-// ChatInput Handler 灞備紶鍏ョ殑鍘熷璇锋眰鍙傛暟锛岀敱 ChatUseCase 璐熻矗鏍￠獙鍚庤浆涓?domain.ChatReq銆?
+// ChatInput Handler 鐏炲倷绱堕崗銉ф畱閸樼喎顫愮拠閿嬬湴閸欏倹鏆熼敍宀€鏁?ChatUseCase 鐠愮喕鐭楅弽锟犵崣閸氬氦娴嗘稉?domain.ChatReq閵?
 type ChatInput struct {
 	SessionID string
 	UserID    int64
@@ -38,16 +38,16 @@ type ChatInput struct {
 
 func (in ChatInput) validate() error {
 	if in.SessionID == "" {
-		return errors.New("session_id 涓嶈兘涓虹┖")
+		return errors.New("session_id 娑撳秷鍏樻稉铏光敄")
 	}
 	if in.UserID <= 0 {
-		return errors.New("user_id 蹇呴』澶т簬 0")
+		return errors.New("user_id 韫囧懘銆忔径褌绨?0")
 	}
 	if in.Message == "" {
-		return errors.New("娑堟伅鍐呭涓嶈兘涓虹┖")
+		return errors.New("濞戝牊浼呴崘鍛啇娑撳秷鍏樻稉铏光敄")
 	}
 	if len([]rune(in.Message)) > maxMessageLen {
-		return errors.New("娑堟伅鍐呭瓒呭嚭闀垮害闄愬埗")
+		return errors.New("濞戝牊浼呴崘鍛啇鐡掑懎鍤梹鍨闂勬劕鍩?)
 	}
 	return nil
 }
@@ -60,16 +60,16 @@ func (in ChatInput) toDomain() *domain.ChatReq {
 	}
 }
 
-// 涓夊眰鑱岃矗
+// 娑撳鐪伴懕宀冪煑
 //
-//	session锛圫essionRepo + domain锛夛細浼氳瘽鐢熷懡鍛ㄦ湡銆佹秷鎭寔涔呭寲銆佸疄浣撹蹇嗗瓨鍌紝涓嶇煡閬?LLM 瀛樺湪
-//	AIService锛氫笌 LLM/Embedding/MCP 浜や簰锛屽伐鍏疯皟鐢ㄥ惊鐜紝娴佸紡鎺ㄩ€侊紝涓嶇煡閬撴湁 HTTP 璇锋眰鍜屼細璇?
-//	ChatUseCase锛氱紪鎺掑眰锛岃皟 session 鍔犺浇浼氳瘽 鈫?璋?AIService 鐢熸垚鍥炲 鈫?璋?session 鎸佷箙鍖栵紝鎶婁袱杈圭矘鍚堣捣鏉ワ紝澶勭悊闄愰/杞汉宸?缂撳瓨绛変笟鍔¤鍒?
+//	session閿涘湯essionRepo + domain閿涘绱版导姘崇樈閻㈢喎鎳￠崨銊︽埂閵嗕焦绉烽幁顖涘瘮娑斿懎瀵查妴浣哥杽娴ｆ捁顔囪箛鍡楃摠閸岊煉绱濇稉宥囩叀闁?LLM 鐎涙ê婀?
+//	AIService閿涙矮绗?LLM/Embedding/MCP 娴溿倓绨伴敍灞戒紣閸忕柉鐨熼悽銊ユ儕閻滎垽绱濆ù浣哥础閹恒劑鈧緤绱濇稉宥囩叀闁挻婀?HTTP 鐠囬攱鐪伴崪灞肩窗鐠?
+//	ChatUseCase閿涙氨绱幒鎺戠湴閿涘矁鐨?session 閸旂姾娴囨导姘崇樈 閳?鐠?AIService 閻㈢喐鍨氶崶鐐差槻 閳?鐠?session 閹镐椒绠欓崠鏍电礉閹跺﹣琚辨潏鍦煒閸氬牐鎹ｉ弶銉礉婢跺嫮鎮婇梽鎰邦暥/鏉烆兛姹夊?缂傛挸鐡ㄧ粵澶夌瑹閸斅ゎ潐閸?
 type ChatUseCase struct {
 	ai            *AIService
 	sessionRepo   domain.SessionRepo
-	systemLimiter ratelimit.Limiter // 绯荤粺鎬婚檺娴侊紙Redis 婊戝姩绐楀彛锛屽瀹炰緥鍏变韩锛?
-	userLimiter   ratelimit.Limiter // 鐢ㄦ埛缁村害闄愭祦锛圧edis 婊戝姩绐楀彛锛宬ey = agent:rate:<userID>锛?
+	systemLimiter ratelimit.Limiter // 缁崵绮洪幀濠氭濞翠緤绱橰edis 濠婃垵濮╃粣妤€褰涢敍灞筋樋鐎圭偘绶ラ崗鍙橀煩閿?
+	userLimiter   ratelimit.Limiter // 閻劍鍩涚紒鏉戝闂勬劖绁﹂敍鍦dis 濠婃垵濮╃粣妤€褰涢敍瀹琫y = agent:rate:<userID>閿?
 	metrics       *PipelineMetrics
 	logger        logger.LoggerV1
 }
@@ -77,8 +77,8 @@ type ChatUseCase struct {
 func NewChatUseCase(
 	ai *AIService,
 	sessionRepo domain.SessionRepo,
-	systemLimiter ratelimit.Limiter, // 绯荤粺鎬婚檺娴侊紝浼樺厛浜庣敤鎴烽檺娴?
-	userLimiter ratelimit.Limiter, // 鐢ㄦ埛缁村害闄愭祦锛宬ey 鍦ㄨ皟鐢ㄦ椂娉ㄥ叆
+	systemLimiter ratelimit.Limiter, // 缁崵绮洪幀濠氭濞翠緤绱濇导妯哄帥娴滃海鏁ら幋鐑芥濞?
+	userLimiter ratelimit.Limiter, // 閻劍鍩涚紒鏉戝闂勬劖绁﹂敍瀹琫y 閸︺劏鐨熼悽銊︽濞夈劌鍙?
 	metrics *PipelineMetrics,
 	logger logger.LoggerV1,
 ) *ChatUseCase {
@@ -165,40 +165,40 @@ type pipelineData struct {
 	cacheHit  bool
 }
 
-// 闄愰 鈫?浼氳瘽鍔犺浇 鈫?宸茶浆浜哄伐瀹堝崼 鈫?鍏抽敭璇嶈浆浜哄伐 鈫?璇箟缂撳瓨 鈫?鎰忓浘璇嗗埆 鈫?鎰忓浘杞汉宸?鈫?RAG
+// 闂勬劙顣?閳?娴兼俺鐦介崝鐘烘祰 閳?瀹歌尪娴嗘禍鍝勪紣鐎瑰牆宕?閳?閸忔娊鏁拠宥堟祮娴滃搫浼?閳?鐠囶厺绠熺紓鎾崇摠 閳?閹板繐娴樼拠鍡楀焼 閳?閹板繐娴樻潪顑挎眽瀹?閳?RAG
 func (uc *ChatUseCase) runPipeline(ctx context.Context, req *domain.ChatReq, start time.Time, emitStage func(string)) (*pipelineData, *domain.ChatResp) {
 	pipe := &pipelineData{}
 
-	// 绯荤粺鎬婚檺娴侊紙淇濇姢鏁翠釜鏈嶅姟锛孯edis 鏁呴殰鏃堕檷绾ф斁琛岋級
+	// 缁崵绮洪幀濠氭濞翠緤绱欐穱婵囧Б閺佺繝閲滈張宥呭閿涘edis 閺佸懘娈伴弮鍫曟缁狙勬杹鐞涘矉绱?
 	if limited, err := uc.systemLimiter.Limit(ctx, systemLimitKey); err != nil {
-		uc.logger.Warn("绯荤粺闄愭祦妫€鏌ュけ璐ワ紝闄嶇骇鏀捐", logger.Error(err))
+		uc.logger.Warn("缁崵绮洪梽鎰ウ濡偓閺屻儱銇戠拹銉礉闂勫秶楠囬弨鎹愵攽", logger.Error(err))
 	} else if limited {
 		uc.metrics.IncRateLimited()
 		return pipe, &domain.ChatResp{
-			Reply:  "绯荤粺绻佸繖锛岃绋嶅悗鍐嶈瘯銆?,
+			Reply:  "缁崵绮虹换浣哥箹閿涘矁顕粙宥呮倵閸愬秷鐦妴?,
 			Intent: domain.IntentUnknown,
 		}
 	}
 
-	// 鐢ㄦ埛闄愰锛圧edis 婊戝姩绐楀彛锛宬ey 鎸?userID 闅旂锛?
+	// 閻劍鍩涢梽鎰邦暥閿涘湩edis 濠婃垵濮╃粣妤€褰涢敍瀹琫y 閹?userID 闂呮梻顬囬敍?
 	if limited, err := uc.userLimiter.Limit(ctx, fmt.Sprintf(userLimitKeyFmt, req.UserID)); err != nil {
-		uc.logger.Warn("鐢ㄦ埛闄愰妫€鏌ュけ璐ワ紝闄嶇骇鏀捐", logger.Error(err))
+		uc.logger.Warn("閻劍鍩涢梽鎰邦暥濡偓閺屻儱銇戠拹銉礉闂勫秶楠囬弨鎹愵攽", logger.Error(err))
 	} else if limited {
 		uc.metrics.IncRateLimited()
 		return pipe, &domain.ChatResp{
-			Reply:  "鎮ㄧ殑娑堟伅鍙戦€佽繃浜庨绻侊紝璇风◢鍚庡啀璇曘€?,
+			Reply:  "閹劎娈戝☉鍫熶紖閸欐垿鈧浇绻冩禍搴暥缁讳緤绱濈拠椋庘棦閸氬骸鍟€鐠囨洏鈧?,
 			Intent: domain.IntentUnknown,
 		}
 	}
 
-	// 浼氳瘽鐘舵€佸揩閫熸鏌ワ紙鍙煡鍏冧俊鎭紝涓嶅姞杞芥秷鎭級
+	// 娴兼俺鐦介悩鑸碘偓浣告彥闁喐顥呴弻銉礄閸欘亝鐓￠崗鍐т繆閹垽绱濇稉宥呭鏉炶姤绉烽幁顖ょ礆
 	emitStage("session_check")
 	session, err := uc.sessionRepo.LoadSession(ctx, req.SessionID)
 	if err != nil {
-		return pipe, &domain.ChatResp{Reply: "浼氳瘽鍔犺浇澶辫触锛岃閲嶈瘯銆?, Intent: domain.IntentUnknown}
+		return pipe, &domain.ChatResp{Reply: "娴兼俺鐦介崝鐘烘祰婢惰精瑙﹂敍宀冾嚞闁插秷鐦妴?, Intent: domain.IntentUnknown}
 	}
 
-	// 宸茶浆浜哄伐瀹堝崼锛氫笉璧颁换浣?AI 閫昏緫锛岀洿鎺ヨ褰曟秷鎭悗杩斿洖
+	// 瀹歌尪娴嗘禍鍝勪紣鐎瑰牆宕奸敍姘瑝鐠ч鎹㈡担?AI 闁槒绶敍宀€娲块幒銉唶瑜版洘绉烽幁顖氭倵鏉╂柨娲?
 	if session.Status == domain.SessionHuman {
 		now := time.Now()
 		msgs := []domain.Message{
@@ -207,13 +207,13 @@ func (uc *ChatUseCase) runPipeline(ctx context.Context, req *domain.ChatReq, sta
 		}
 		go func() {
 			if err := uc.sessionRepo.AppendMessages(context.Background(), session, msgs); err != nil {
-				uc.logger.Error("鎸佷箙鍖栦汉宸ュ鏈嶉樁娈垫秷鎭け璐?, logger.Error(err))
+				uc.logger.Error("閹镐椒绠欓崠鏍︽眽瀹搞儱顓归張宥夋▉濞堝灚绉烽幁顖氥亼鐠?, logger.Error(err))
 			}
 		}()
 		return pipe, &domain.ChatResp{Reply: humanWaitReply, Intent: domain.IntentTransferToHuman}
 	}
 
-	// 鍏抽敭璇嶈浆浜哄伐锛堥渶瑕佸姞杞藉畬鏁翠細璇濈敤浜庣敓鎴愪氦鎺ユ憳瑕侊級
+	// 閸忔娊鏁拠宥堟祮娴滃搫浼愰敍鍫ユ付鐟曚礁濮炴潪钘夌暚閺佺繝绱扮拠婵堟暏娴滃海鏁撻幋鎰唉閹恒儲鎲崇憰渚婄礆
 	if isTransferKeyword(req.Message) {
 		uc.metrics.IncIntent(domain.IntentTransferToHuman.String())
 		msgs, _ := uc.sessionRepo.LoadMessages(ctx, req.SessionID)
@@ -222,7 +222,7 @@ func (uc *ChatUseCase) runPipeline(ctx context.Context, req *domain.ChatReq, sta
 		return pipe, uc.handleTransfer(ctx, pipe, req)
 	}
 
-	// L1: Exact Cache锛堢簿纭尮閰嶏紝Redis String锛屾渶蹇紝鏃犻渶鍔犺浇浼氳瘽锛?
+	// L1: Exact Cache閿涘牏绨跨涵顔煎爱闁板稄绱漅edis String閿涘本娓惰箛顐礉閺冪娀娓堕崝鐘烘祰娴兼俺鐦介敍?
 	emitStage("l1_cache")
 	if reply, hit := uc.ai.ExactCacheLookup(ctx, req.Message); hit {
 		uc.metrics.IncCacheHit()
@@ -231,14 +231,14 @@ func (uc *ChatUseCase) runPipeline(ctx context.Context, req *domain.ChatReq, sta
 		return pipe, &domain.ChatResp{Reply: reply, Intent: domain.IntentFAQ}
 	}
 
-	// Embedding锛堝師濮嬮棶棰樺悜閲忓寲锛孡2 缂撳瓨鍜?RAG 鍏辩敤锛?
+	// Embedding閿涘牆甯慨瀣６妫版ê鎮滈柌蹇撳閿涘2 缂傛挸鐡ㄩ崪?RAG 閸忚京鏁ら敍?
 	emitStage("embedding")
 	pipe.embed = uc.ai.Embed(ctx, req.Message)
 	if pipe.embed.Err != nil {
-		uc.logger.Warn("鍚戦噺鍖栧け璐?, logger.Error(pipe.embed.Err))
+		uc.logger.Warn("閸氭垿鍣洪崠鏍с亼鐠?, logger.Error(pipe.embed.Err))
 	}
 
-	// L2: Semantic Cache锛堣涔夌浉浼煎害鍖归厤锛孧ilvus + Redis锛屾棤闇€鍔犺浇浼氳瘽锛?
+	// L2: Semantic Cache閿涘牐顕㈡稊澶屾祲娴肩厧瀹抽崠褰掑帳閿涘ilvus + Redis閿涘本妫ら棁鈧崝鐘烘祰娴兼俺鐦介敍?
 	emitStage("l2_cache")
 	if pipe.embed.Err == nil && len(pipe.embed.Vectors) > 0 {
 		if reply, hit := uc.ai.SemanticCacheLookup(ctx, pipe.embed.Vectors[0]); hit {
@@ -250,54 +250,54 @@ func (uc *ChatUseCase) runPipeline(ctx context.Context, req *domain.ChatReq, sta
 	}
 	uc.metrics.IncCacheMiss()
 
-	// L3: RAG Retrieval锛堢煡璇嗗簱妫€绱紝甯︾紦瀛橈級
+	// L3: RAG Retrieval閿涘牏鐓＄拠鍡楃氨濡偓缁鳖澁绱濈敮锔剧处鐎涙﹫绱?
 	emitStage("retrieval")
 	if len(pipe.embed.Vectors) > 0 {
-		// 鍏堟煡 RAG 缂撳瓨
+		// 閸忓牊鐓?RAG 缂傛挸鐡?
 		if cachedKnowledge, hit := uc.ai.RAGCacheLookup(ctx, pipe.embed.Vectors[0]); hit {
 			pipe.knowledge = cachedKnowledge
 		} else {
-			// 缂撳瓨鏈懡涓紝鎵ц妫€绱?
+			// 缂傛挸鐡ㄩ張顏勬嚒娑擃叏绱濋幍褑顢戝Λ鈧槐?
 			t := time.Now()
 			pipe.knowledge = uc.ai.Retrieve(ctx, req.Message, pipe.embed.Vectors[0], 3)
 			uc.metrics.ObserveStage("retrieval", time.Since(t))
-			// 寮傛鍐欏叆 RAG 缂撳瓨
+			// 瀵倹顒為崘娆忓弳 RAG 缂傛挸鐡?
 			if len(pipe.knowledge) > 0 {
 				go uc.ai.RAGCacheStore(context.Background(), pipe.embed.Vectors[0], pipe.knowledge)
 			}
 		}
 	}
 
-	// 寤惰繜鍔犺浇浼氳瘽娑堟伅锛堝彧鍦ㄩ渶瑕?LLM 鐢熸垚鏃跺姞杞斤紝鐢ㄤ簬涓婁笅鏂囷級
+	// 瀵ゆ儼绻滈崝鐘烘祰娴兼俺鐦藉☉鍫熶紖閿涘牆褰ч崷銊╂付鐟?LLM 閻㈢喐鍨氶弮璺哄鏉炴枻绱濋悽銊ょ艾娑撳﹣绗呴弬鍥风礆
 	emitStage("session_load")
 	msgs, _ := uc.sessionRepo.LoadMessages(ctx, req.SessionID)
 	session.Messages = msgs
 	pipe.session = session
 
-	// 鎰忓浘鐢?LLM 鐢熸垚鏃舵帹鏂紝涓嶅啀鎻愬墠璇嗗埆
+	// 閹板繐娴橀悽?LLM 閻㈢喐鍨氶弮鑸靛腹閺傤叏绱濇稉宥呭晙閹绘劕澧犵拠鍡楀焼
 	pipe.intent = &domain.IntentResult{Type: domain.IntentUnknown}
 
 	return pipe, nil
 }
 
-// 鍚庡鐞?
+// 閸氬骸顦╅悶?
 func (uc *ChatUseCase) finalize(
 	ctx context.Context, pipe *pipelineData, req *domain.ChatReq,
 	gen *domain.GenerationResult, start time.Time,
 ) *domain.ChatResp {
-	// 鍔犲厤璐ｅ０鏄?
+	// 閸旂姴鍘ょ拹锝咃紣閺?
 	gen.Reply = addDisclaimer(gen.Reply, gen.Confidence)
 
-	// 宸ュ叿璋冪敤浜х敓鐨勫洖澶嶅寘鍚疄鏃朵笟鍔℃暟鎹紝缁濅笉搴旇缂撳瓨
-	// gen.Reply 涓虹┖锛堟ā鍨嬫湭鎸夋牸寮忚緭鍑猴級鏃朵篃涓嶅啓缂撳瓨锛岄伩鍏嶇紦瀛樺潖鏁版嵁
+	// 瀹搞儱鍙跨拫鍐暏娴溠呮晸閻ㄥ嫬娲栨径宥呭瘶閸氼偄鐤勯弮鏈电瑹閸斺剝鏆熼幑顕嗙礉缂佹繀绗夋惔鏃囶潶缂傛挸鐡?
+	// gen.Reply 娑撹櫣鈹栭敍鍫熌侀崹瀣弓閹稿鐗稿蹇氱翻閸戠尨绱氶弮鏈电瘍娑撳秴鍟撶紓鎾崇摠閿涘矂浼╅崗宥囩处鐎涙ê娼栭弫鐗堝祦
 	if len(gen.ToolExecs) == 0 && gen.Confidence >= confidenceHigh && gen.Reply != "" && pipe.embed.Err == nil && len(pipe.embed.Vectors) > 0 {
-		// L1: 绮剧‘缂撳瓨锛堥珮缃俊搴﹀洖澶嶏級
+		// L1: 缁墽鈥樼紓鎾崇摠閿涘牓鐝純顔讳繆鎼达箑娲栨径宥忕礆
 		go uc.ai.ExactCacheStore(context.Background(), req.Message, gen.Reply)
-		// L2: 璇箟缂撳瓨锛堝悜閲忓尮閰嶏級
+		// L2: 鐠囶厺绠熺紓鎾崇摠閿涘牆鎮滈柌蹇撳爱闁板稄绱?
 		go uc.ai.SemanticCacheStore(context.Background(), pipe.embed.Vectors[0], gen.Reply)
 	}
 
-	// 浣庣疆淇″害杞暟缁存姢
+	// 娴ｅ海鐤嗘穱鈥冲鏉烆喗鏆熺紒瀛樺Б
 	if gen.Confidence < confidenceLow {
 		pipe.session.LowConfidenceTurns++
 	} else {
@@ -321,11 +321,11 @@ func (uc *ChatUseCase) finalize(
 		SuggestedQuestions: gen.Suggested,
 	}
 
-	// 鐢ㄦ埛鐢熸皵浜?&& 浣庣疆淇″害锛岃浆浜哄伐
+	// 閻劍鍩涢悽鐔哥毜娴?&& 娴ｅ海鐤嗘穱鈥冲閿涘矁娴嗘禍鍝勪紣
 	needEscalate := pipe.session.LowConfidenceTurns >= autoEscalateThreshold ||
 		gen.Emotion == "angry" || gen.Emotion == "urgent"
 	if needEscalate {
-		uc.logger.Info("鑷姩杞汉宸?,
+		uc.logger.Info("閼奉亜濮╂潪顑挎眽瀹?,
 			logger.String("session", pipe.session.ID),
 			logger.String("emotion", gen.Emotion))
 		uc.metrics.IncAutoEscalation()
@@ -337,12 +337,12 @@ func (uc *ChatUseCase) finalize(
 	return resp
 }
 
-// 鐢ㄦ埛涓诲姩杞汉宸ワ紙鍏抽敭璇?鎰忓浘璇嗗埆锛夛紝瑕佸厛鏌ュ嚭 session锛岃鍔ㄨ浆宸茬粡鏈塻ession浜?
+// 閻劍鍩涙稉璇插З鏉烆兛姹夊銉礄閸忔娊鏁拠?閹板繐娴樼拠鍡楀焼閿涘绱濈憰浣稿帥閺屻儱鍤?session閿涘矁顫﹂崝銊ㄦ祮瀹歌尙绮￠張濉籩ssion娴?
 func (uc *ChatUseCase) handleTransfer(ctx context.Context, pipe *pipelineData, req *domain.ChatReq) *domain.ChatResp {
 	if pipe.session == nil {
 		session, err := uc.sessionRepo.LoadSession(ctx, req.SessionID)
 		if err != nil {
-			uc.logger.Warn("杞汉宸ユ椂浼氳瘽鍔犺浇澶辫触", logger.Error(err))
+			uc.logger.Warn("鏉烆兛姹夊銉︽娴兼俺鐦介崝鐘烘祰婢惰精瑙?, logger.Error(err))
 			return &domain.ChatResp{Reply: transferReply, Intent: domain.IntentTransferToHuman}
 		}
 		msgs, _ := uc.sessionRepo.LoadMessages(ctx, req.SessionID)
@@ -360,37 +360,37 @@ func (uc *ChatUseCase) handleTransfer(ctx context.Context, pipe *pipelineData, r
 	return resp
 }
 
-// 杞汉宸ョ粺涓€鍏ュ彛锛氱敤鎴蜂富鍔ㄨ浆锛岀郴缁熻嚜鍔ㄨ浆锛岄兘璋冪敤杩欎釜
+// 鏉烆兛姹夊銉х埠娑撯偓閸忋儱褰涢敍姘辨暏閹磋渹瀵岄崝銊ㄦ祮閿涘瞼閮寸紒鐔诲殰閸斻劏娴嗛敍宀勫厴鐠嬪啰鏁ゆ潻娆庨嚋
 func (uc *ChatUseCase) escalate(ctx context.Context, session *domain.Session, newMsgs []domain.Message, resp *domain.ChatResp) {
 	resp.HandoffSummary = uc.ai.BuildHandoff(ctx, session.RecentMessages(maxWindowSize))
 	cp := session.Clone()
 	cp.Status = domain.SessionHuman
 	cp.LowConfidenceTurns = 0
 	go func() {
-		// 娑堟伅闇€瑕佸叏閲忓巻鍙诧紝鍏冧俊鎭彧闇€瑕佺粓鎬侊紝鎵€浠ュ厓淇℃伅涓嶈蛋 Kafka锛屽彧鍦ㄧ粓鎬佹椂涓€娆℃€?FlushSession
+		// 濞戝牊浼呴棁鈧憰浣稿弿闁插繐宸婚崣璇х礉閸忓啩淇婇幁顖氬涧闂団偓鐟曚胶绮撻幀渚婄礉閹碘偓娴犮儱鍘撴穱鈩冧紖娑撳秷铔?Kafka閿涘苯褰ч崷銊х矒閹焦妞傛稉鈧▎鈩冣偓?FlushSession
 		uc.persistTurn(context.Background(), cp, newMsgs)
 		if err := uc.sessionRepo.FlushSession(context.Background(), cp); err != nil {
-			uc.logger.Error("鍒峰啓浼氳瘽鍏冧俊鎭け璐?, logger.Error(err))
+			uc.logger.Error("閸掑嘲鍟撴导姘崇樈閸忓啩淇婇幁顖氥亼鐠?, logger.Error(err))
 		}
 	}()
 }
 
-// --- 鎸佷箙鍖?--
+// --- 閹镐椒绠欓崠?--
 
-// 杩藉姞娑堟伅鍒?Redis 鐑眰 + Kafka 寮傛钀藉簱
+// 鏉╄棄濮炲☉鍫熶紖閸?Redis 閻戭厼鐪?+ Kafka 瀵倹顒為拃钘夌氨
 func (uc *ChatUseCase) persistTurn(ctx context.Context, session *domain.Session, newMsgs []domain.Message) {
 	session.Messages = append(session.Messages, newMsgs...)
 	session.UpdatedAt = time.Now()
 	if err := uc.sessionRepo.AppendMessages(ctx, session, newMsgs); err != nil {
-		uc.logger.Error("鎸佷箙鍖栦細璇濆け璐?, logger.Error(err))
+		uc.logger.Error("閹镐椒绠欓崠鏍︾窗鐠囨繂銇戠拹?, logger.Error(err))
 	}
 }
 
-// 缂撳瓨鍛戒腑鏃?session 鏈姞杞斤紝闇€鍒嗗埆鍔犺浇鍏冧俊鎭拰娑堟伅鍐嶈蛋 persistTurn
+// 缂傛挸鐡ㄩ崨鎴掕厬閺?session 閺堫亜濮炴潪鏂ょ礉闂団偓閸掑棗鍩嗛崝鐘烘祰閸忓啩淇婇幁顖氭嫲濞戝牊浼呴崘宥堣泲 persistTurn
 func (uc *ChatUseCase) persistCacheHit(sessionID, userMsg, reply string) {
 	session, err := uc.sessionRepo.LoadSession(context.Background(), sessionID)
 	if err != nil {
-		uc.logger.Warn("缂撳瓨鍛戒腑鎸佷箙鍖栨椂浼氳瘽鍔犺浇澶辫触", logger.Error(err))
+		uc.logger.Warn("缂傛挸鐡ㄩ崨鎴掕厬閹镐椒绠欓崠鏍ㄦ娴兼俺鐦介崝鐘烘祰婢惰精瑙?, logger.Error(err))
 		return
 	}
 	msgs, _ := uc.sessionRepo.LoadMessages(context.Background(), sessionID)
@@ -402,7 +402,7 @@ func (uc *ChatUseCase) persistCacheHit(sessionID, userMsg, reply string) {
 	})
 }
 
-// 杈呭姪鏂规硶
+// 鏉堝懎濮弬瑙勭《
 
 func (uc *ChatUseCase) buildGenerateReq(pipe *pipelineData, req *domain.ChatReq) GenerateReq {
 	return GenerateReq{
@@ -414,8 +414,8 @@ func (uc *ChatUseCase) buildGenerateReq(pipe *pipelineData, req *domain.ChatReq)
 	}
 }
 
-// updateConversationState 瑙ｆ瀽鏈疆宸ュ叿璋冪敤缁撴灉锛屾洿鏂?session.ConvFlow
-// ConvFlow 闅?session 鍦?persistTurn 閲屼竴璧疯惤 Redis锛屾棤闇€鍗曠嫭淇濆瓨
+// updateConversationState 鐟欙絾鐎介張顒冪枂瀹搞儱鍙跨拫鍐暏缂佹挻鐏夐敍灞炬纯閺?session.ConvFlow
+// ConvFlow 闂?session 閸?persistTurn 闁插奔绔寸挧鐤儰 Redis閿涘本妫ら棁鈧崡鏇犲娣囨繂鐡?
 func (uc *ChatUseCase) updateConversationState(session *domain.Session, toolExecs []domain.ToolExec) {
 	if session == nil || len(toolExecs) == 0 {
 		return
@@ -463,7 +463,7 @@ func (uc *ChatUseCase) updateConversationState(session *domain.Session, toolExec
 			if err := json.Unmarshal([]byte(exec.Arguments), &llmArgs); err == nil {
 				id, name := resolveProductRef(llmArgs.ProductRef, state)
 				if id != "" {
-					// 鏇存柊 current锛屼娇"鍐嶆潵涓€涓?鈫?product_ref="current" 浠嶇劧鏈夋晥
+					// 閺囧瓨鏌?current閿涘奔濞?閸愬秵娼垫稉鈧稉?閳?product_ref="current" 娴犲秶鍔ч張澶嬫櫏
 					state.CurrentProductID = id
 					state.CurrentProductName = name
 				}
@@ -485,14 +485,14 @@ func addDisclaimer(reply string, confidence float32) string {
 	case confidence >= confidenceHigh:
 		return reply
 	case confidence >= confidenceLow:
-		return reply + "\n\n锛堜互涓婁俊鎭粎渚涘弬鑰冿紝濡傞渶杩涗竴姝ュ府鍔╄鑱旂郴浜哄伐瀹㈡湇锛?
+		return reply + "\n\n閿涘牅浜掓稉濠佷繆閹垯绮庢笟娑樺棘閼板喛绱濇俊鍌炴付鏉╂稐绔村銉ュ簻閸斺晞顕懕鏃傞兇娴滃搫浼愮€广垺婀囬敍?
 	default:
-		return reply + "\n\n锛堜互涓婂洖绛斿彲鑳戒笉澶熷噯纭紝寤鸿鎮ㄨ仈绯讳汉宸ュ鏈嶈幏鍙栨洿涓撲笟鐨勫府鍔╋級"
+		return reply + "\n\n閿涘牅浜掓稉濠傛礀缁涙柨褰查懗鎴掔瑝婢剁喎鍣涵顕嗙礉瀵ら缚顔呴幃銊ㄤ粓缁姹夊銉ヮ吂閺堝秷骞忛崣鏍ㄦ纯娑撴挷绗熼惃鍕簻閸斺晪绱?
 	}
 }
 
 func isTransferKeyword(msg string) bool {
-	keywords := []string{"杞汉宸?, "浜哄伐瀹㈡湇", "鐪熶汉瀹㈡湇", "浜哄伐鏈嶅姟", "鎵惧鏈?, "瑕佸鏈?, "杩炰汉宸?, "鎺ヤ汉宸?, "浜哄伐", "瀹㈡湇"}
+	keywords := []string{"鏉烆兛姹夊?, "娴滃搫浼愮€广垺婀?, "閻喍姹夌€广垺婀?, "娴滃搫浼愰張宥呭", "閹垫儳顓归張?, "鐟曚礁顓归張?, "鏉╃偘姹夊?, "閹恒儰姹夊?, "娴滃搫浼?, "鐎广垺婀?}
 	for _, kw := range keywords {
 		if strings.Contains(msg, kw) {
 			return true
@@ -500,3 +500,5 @@ func isTransferKeyword(msg string) bool {
 	}
 	return false
 }
+
+

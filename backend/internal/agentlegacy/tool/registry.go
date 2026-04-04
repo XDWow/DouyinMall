@@ -1,4 +1,4 @@
-﻿//go:build legacy_agent
+//go:build legacy_agent
 
 package tool
 
@@ -220,4 +220,6 @@ func ParseToolArguments(raw string) map[string]any {
 	}
 	return m
 }
+
+
 

@@ -45,3 +45,5 @@ func NormalizeRequestType(raw string) RequestType {
 		return RequestTypeReturn
 	}
 }
+
+

@@ -7,7 +7,7 @@ import (
 )
 
 type UserCache interface {
-	// 暂时为空，后续按需添加缓存方法
+	// 鏆傛椂涓虹┖锛屽悗缁寜闇€娣诲姞缂撳瓨鏂规硶
 }
 
 type RedisUserCache struct {
@@ -21,3 +21,5 @@ func NewRedisUserCache(cmd redis.Cmdable) UserCache {
 		expiration: 15 * time.Minute,
 	}
 }
+
+

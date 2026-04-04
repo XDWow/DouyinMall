@@ -75,3 +75,5 @@ func sendMessages(producer sarama.SyncProducer, messages []*sarama.ProducerMessa
 	}
 	return results
 }
+
+

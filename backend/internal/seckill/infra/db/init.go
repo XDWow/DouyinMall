@@ -9,3 +9,5 @@ func InitTables(db *gorm.DB) error {
 		&SeckillOperation{},
 	)
 }
+
+

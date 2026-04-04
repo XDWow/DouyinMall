@@ -15,7 +15,7 @@ type merchantRepo struct {
 	l  logger.LoggerV1
 }
 
-// NewMerchantRepo 创建商家仓储（实现 domain.MerchantRepo 端口）
+// NewMerchantRepo 鍒涘缓鍟嗗浠撳偍锛堝疄鐜?domain.MerchantRepo 绔彛锛?
 func NewMerchantRepo(esClient *ESClient, l logger.LoggerV1) domain.MerchantRepo {
 	return &merchantRepo{es: esClient, l: l}
 }
@@ -39,7 +39,7 @@ func (r *merchantRepo) SearchMerchants(ctx context.Context, req *domain.SearchMe
 		} `json:"hits"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("解析商家搜索结果失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽鍟嗗鎼滅储缁撴灉澶辫触: %w", err)
 	}
 
 	merchants := make([]domain.MerchantSearchResult, 0, len(result.Hits.Hits))
@@ -77,7 +77,7 @@ func (r *merchantRepo) SearchMerchantSuggest(ctx context.Context, keyword string
 	return result, nil
 }
 
-// ==================== 索引管理 ====================
+// ==================== 绱㈠紩绠＄悊 ====================
 
 func (r *merchantRepo) SyncMerchant(ctx context.Context, action string, doc *domain.MerchantDocument) error {
 	docID := strconv.FormatInt(doc.ID, 10)
@@ -89,7 +89,7 @@ func (r *merchantRepo) SyncMerchant(ctx context.Context, action string, doc *dom
 	case "DELETE":
 		return r.es.DeleteDocument(ctx, MerchantIndex, docID)
 	default:
-		return fmt.Errorf("不支持的操作: %s", action)
+		return fmt.Errorf("涓嶆敮鎸佺殑鎿嶄綔: %s", action)
 	}
 }
 
@@ -128,7 +128,7 @@ func (r *merchantRepo) BatchDeleteMerchants(ctx context.Context, ids []int64) (i
 	return int64(len(ids)), 0, nil
 }
 
-// ==================== 查询构建 ====================
+// ==================== 鏌ヨ鏋勫缓 ====================
 
 func (r *merchantRepo) buildMerchantQuery(req *domain.SearchMerchantsReq) string {
 	queryObj := map[string]interface{}{
@@ -188,3 +188,5 @@ func (r *merchantRepo) buildMerchantQuery(req *domain.SearchMerchantsReq) string
 	body, _ := json.Marshal(queryObj)
 	return string(body)
 }
+
+

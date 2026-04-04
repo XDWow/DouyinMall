@@ -15,7 +15,7 @@ type OverrideFixer[T migrator.Entity] struct {
 }
 
 func NewOverrideFixer[T migrator.Entity](base *gorm.DB, target *gorm.DB) (*OverrideFixer[T], error) {
-	// 在这里需要查询一下数据库中究竟有哪些列
+	// 鍦ㄨ繖閲岄渶瑕佹煡璇竴涓嬫暟鎹簱涓┒绔熸湁鍝簺鍒?
 	//var t T
 	//rows, err := base.Model(&t).Limit(1).Rows()
 	//if err != nil {
@@ -32,11 +32,11 @@ func NewOverrideFixer[T migrator.Entity](base *gorm.DB, target *gorm.DB) (*Overr
 	}, nil
 }
 
-// 我拿到有问题的 id ，再判断是什么问题
+// 鎴戞嬁鍒版湁闂鐨?id 锛屽啀鍒ゆ柇鏄粈涔堥棶棰?
 func (o *OverrideFixer[T]) Fix(ctx context.Context, id int64) error {
 	var src T
 	err := o.base.WithContext(ctx).Where("id = ?", id).First(&src).Error
-	// 三种情况，通过查 src 返回的 err + upsert 就能分别处理
+	// 涓夌鎯呭喌锛岄€氳繃鏌?src 杩斿洖鐨?err + upsert 灏辫兘鍒嗗埆澶勭悊
 	switch err {
 	case nil:
 		return o.target.Clauses(&clause.OnConflict{
@@ -49,3 +49,5 @@ func (o *OverrideFixer[T]) Fix(ctx context.Context, id int64) error {
 		return err
 	}
 }
+
+

@@ -228,3 +228,5 @@ func (h *InventoryHandler) AdjustStock(ctx context.Context, req *inventoryv1.Adj
 
 	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
 }
+
+

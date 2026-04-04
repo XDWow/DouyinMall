@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// MockUserDAO 是 dao.UserDAO 的 mock 实现
+// MockUserDAO 鏄?dao.UserDAO 鐨?mock 瀹炵幇
 type MockUserDAO struct {
 	InsertFunc       func(ctx context.Context, u dao.User) (int64, error)
 	FindByEmailFunc  func(ctx context.Context, email string) (dao.User, error)
@@ -44,7 +44,7 @@ func (m *MockUserDAO) Delete(ctx context.Context, id int64) error {
 	return m.DeleteFunc(ctx, id)
 }
 
-// MockUserCache 是 cache.UserCache 的 mock 实现
+// MockUserCache 鏄?cache.UserCache 鐨?mock 瀹炵幇
 type MockUserCache struct{}
 
 func (m *MockUserCache) Get(ctx context.Context, id int64) (dao.User, error) {
@@ -72,7 +72,7 @@ func TestCachedUserRepository_Create(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "成功创建用户",
+			name: "鎴愬姛鍒涘缓鐢ㄦ埛",
 			user: domain.User{
 				Email:    "test@example.com",
 				Password: "hashed_password",
@@ -88,7 +88,7 @@ func TestCachedUserRepository_Create(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "邮箱重复",
+			name: "閭閲嶅",
 			user: domain.User{
 				Email:    "duplicate@example.com",
 				Password: "hashed_password",
@@ -125,7 +125,7 @@ func TestCachedUserRepository_FindByEmail(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name:  "成功查找用户",
+			name:  "鎴愬姛鏌ユ壘鐢ㄦ埛",
 			email: "test@example.com",
 			setupFn: func() {
 				mockDAO.FindByEmailFunc = func(ctx context.Context, email string) (dao.User, error) {
@@ -136,7 +136,7 @@ func TestCachedUserRepository_FindByEmail(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:  "用户不存在",
+			name:  "鐢ㄦ埛涓嶅瓨鍦?,
 			email: "notfound@example.com",
 			setupFn: func() {
 				mockDAO.FindByEmailFunc = func(ctx context.Context, email string) (dao.User, error) {
@@ -168,7 +168,7 @@ func TestCachedUserRepository_FindById(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "成功查找用户",
+			name: "鎴愬姛鏌ユ壘鐢ㄦ埛",
 			id:   1,
 			setupFn: func() {
 				mockDAO.FindByIdFunc = func(ctx context.Context, id int64) (dao.User, error) {
@@ -179,7 +179,7 @@ func TestCachedUserRepository_FindById(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "用户不存在",
+			name: "鐢ㄦ埛涓嶅瓨鍦?,
 			id:   999,
 			setupFn: func() {
 				mockDAO.FindByIdFunc = func(ctx context.Context, id int64) (dao.User, error) {
@@ -211,7 +211,7 @@ func TestCachedUserRepository_Update(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "成功更新用户",
+			name: "鎴愬姛鏇存柊鐢ㄦ埛",
 			user: domain.User{
 				ID:       1,
 				Email:    "updated@example.com",
@@ -226,7 +226,7 @@ func TestCachedUserRepository_Update(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "用户不存在",
+			name: "鐢ㄦ埛涓嶅瓨鍦?,
 			user: domain.User{
 				ID:    999,
 				Email: "notfound@example.com",
@@ -261,7 +261,7 @@ func TestCachedUserRepository_Delete(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "成功删除用户",
+			name: "鎴愬姛鍒犻櫎鐢ㄦ埛",
 			id:   1,
 			setupFn: func() {
 				mockDAO.DeleteFunc = func(ctx context.Context, id int64) error {
@@ -272,7 +272,7 @@ func TestCachedUserRepository_Delete(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "用户不存在",
+			name: "鐢ㄦ埛涓嶅瓨鍦?,
 			id:   999,
 			setupFn: func() {
 				mockDAO.DeleteFunc = func(ctx context.Context, id int64) error {
@@ -291,3 +291,5 @@ func TestCachedUserRepository_Delete(t *testing.T) {
 		})
 	}
 }
+
+

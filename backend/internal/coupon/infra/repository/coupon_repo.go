@@ -36,7 +36,7 @@ func (repo *couponRepository) ListByUserID(ctx context.Context, userID int64, st
 	var models []db.Coupon
 	err := repo.db.WithContext(ctx).
 		Model(&db.Coupon{}).
-		Preload("Template"). // 关联查询优惠券模板
+		Preload("Template"). // 鍏宠仈鏌ヨ浼樻儬鍒告ā鏉?
 		Where("user_id = ? AND status = ?", userID, status.AsUint8()).
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
@@ -45,7 +45,7 @@ func (repo *couponRepository) ListByUserID(ctx context.Context, userID int64, st
 		return nil, 0, err
 	}
 
-	// 统计总数
+	// 缁熻鎬绘暟
 	var total int64
 	err = repo.db.WithContext(ctx).
 		Model(&db.Coupon{}).
@@ -69,7 +69,7 @@ func (repo *couponRepository) ListAvailableByUserID(ctx context.Context, userID 
 
 	err := repo.db.WithContext(ctx).
 		Preload("Template").
-		Where("user_id = ? AND status = ? AND valid_from <= ? AND valid_to > ?", // 这里也查时间，严谨，避免定时任务执行空隙
+		Where("user_id = ? AND status = ? AND valid_from <= ? AND valid_to > ?", // 杩欓噷涔熸煡鏃堕棿锛屼弗璋紝閬垮厤瀹氭椂浠诲姟鎵ц绌洪殭
 			userID,
 			domain.UserCouponStatusUnused.AsUint8(),
 			now,
@@ -129,7 +129,7 @@ func (repo *couponRepository) CountByUserAndTemplate(ctx context.Context, userID
 	return int32(count), nil
 }
 
-// 批量预占：将状态改为 Locked，并设置 order_id
+// 鎵归噺棰勫崰锛氬皢鐘舵€佹敼涓?Locked锛屽苟璁剧疆 order_id
 func (repo *couponRepository) BatchReserve(ctx context.Context, couponIDs []int64, orderID int64) error {
 	if len(couponIDs) == 0 {
 		return nil
@@ -205,7 +205,7 @@ func entityToDomain(model *db.Coupon) *domain.Coupon {
 		CreatedAt:      model.CreatedAt,
 	}
 
-	// 处理可为空的字段
+	// 澶勭悊鍙负绌虹殑瀛楁
 	if model.OrderID != nil {
 		coupon.OrderID = *model.OrderID
 	}
@@ -214,7 +214,7 @@ func entityToDomain(model *db.Coupon) *domain.Coupon {
 		coupon.UsedAt = *model.UsedAt
 	}
 
-	// 转换关联的模板
+	// 杞崲鍏宠仈鐨勬ā鏉?
 	if model.Template.ID != 0 {
 		coupon.Template = templateEntityToDomain(&model.Template)
 	}
@@ -234,7 +234,7 @@ func templateEntityToDomain(model *db.CouponTemplate) *domain.CouponTemplate {
 		Enabled:       model.Status == 1,
 	}
 
-	// 处理可为空的字段
+	// 澶勭悊鍙负绌虹殑瀛楁
 	if model.MinOrderAmount != nil {
 		template.Threshold = int64(*model.MinOrderAmount)
 	}
@@ -243,7 +243,7 @@ func templateEntityToDomain(model *db.CouponTemplate) *domain.CouponTemplate {
 		template.MaxDiscount = int64(*model.MaxDiscountAmount)
 	}
 
-	// 处理有效期
+	// 澶勭悊鏈夋晥鏈?
 	if model.ValidDays != nil && *model.ValidDays > 0 {
 		template.ValidDays = int64(*model.ValidDays)
 	} else {
@@ -255,15 +255,15 @@ func templateEntityToDomain(model *db.CouponTemplate) *domain.CouponTemplate {
 		}
 	}
 
-	// 解析适用范围（根据优先级判断 Scope）
-	// 1. 商家券
+	// 瑙ｆ瀽閫傜敤鑼冨洿锛堟牴鎹紭鍏堢骇鍒ゆ柇 Scope锛?
+	// 1. 鍟嗗鍒?
 	if model.MerchantID != nil && *model.MerchantID > 0 {
 		template.Scope = domain.CouponScopeMerchant
 		template.MerchantIDs = []int64{*model.MerchantID}
 		return template
 	}
 
-	// 2. 商品券
+	// 2. 鍟嗗搧鍒?
 	var productIDs []int64
 	if model.ApplicableProductIDs != "" && model.ApplicableProductIDs != "null" {
 		_ = json.Unmarshal([]byte(model.ApplicableProductIDs), &productIDs)
@@ -274,7 +274,7 @@ func templateEntityToDomain(model *db.CouponTemplate) *domain.CouponTemplate {
 		return template
 	}
 
-	// 3. 品类券
+	// 3. 鍝佺被鍒?
 	var categoryIDs []int64
 	if model.ApplicableCategoryIDs != "" && model.ApplicableCategoryIDs != "null" {
 		_ = json.Unmarshal([]byte(model.ApplicableCategoryIDs), &categoryIDs)
@@ -285,7 +285,7 @@ func templateEntityToDomain(model *db.CouponTemplate) *domain.CouponTemplate {
 		return template
 	}
 
-	// 4. 全场券（默认）
+	// 4. 鍏ㄥ満鍒革紙榛樿锛?
 	template.Scope = domain.CouponScopeAll
 	return template
 }
@@ -302,3 +302,5 @@ func (repo *couponRepository) MarkExpiredCoupons(ctx context.Context) (int64, er
 
 	return result.RowsAffected, nil
 }
+
+

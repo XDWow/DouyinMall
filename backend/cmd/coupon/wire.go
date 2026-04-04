@@ -19,7 +19,7 @@ type App struct {
 
 func InitApp() *App {
 	wire.Build(
-		// 基础设施
+		// 鍩虹璁炬柦
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitKafkaClient,
@@ -38,11 +38,9 @@ func InitApp() *App {
 		usecase.NewRefundCouponUseCase,
 		usecase.NewIssueCouponUseCase,
 
-		// MQ消费者
-		mq.NewOrderConsumer,
+		// MQ娑堣垂鑰?		mq.NewOrderConsumer,
 
-		// Transport（gRPC handler）
-		grpc.NewCouponHandler,
+		// Transport锛坓RPC handler锛?		grpc.NewCouponHandler,
 
 		// Servers
 		ioc.InitGRPCServer,
@@ -62,3 +60,5 @@ func newApp(
 		OrderConsumer: orderConsumer,
 	}
 }
+
+

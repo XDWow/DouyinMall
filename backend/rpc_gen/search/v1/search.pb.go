@@ -9,15 +9,13 @@ import (
 	"github.com/cloudwego/prutal"
 )
 
-// 排序类型
+// 鎺掑簭绫诲瀷
 type SortType int32
 
 const (
-	SortType_RELEVANCE   SortType = 0 // 相关性（默认）
-	SortType_PRICE_ASC   SortType = 1 // 价格从低到高
-	SortType_PRICE_DESC  SortType = 2 // 价格从高到低
-	SortType_SALES_DESC  SortType = 3 // 销量从高到低（预留）
-	SortType_NEW_ARRIVAL SortType = 4 // 新品优先（预留）
+	SortType_RELEVANCE   SortType = 0 // 鐩稿叧鎬э紙榛樿锛?	SortType_PRICE_ASC   SortType = 1 // 浠锋牸浠庝綆鍒伴珮
+	SortType_PRICE_DESC  SortType = 2 // 浠锋牸浠庨珮鍒颁綆
+	SortType_SALES_DESC  SortType = 3 // 閿€閲忎粠楂樺埌浣庯紙棰勭暀锛?	SortType_NEW_ARRIVAL SortType = 4 // 鏂板搧浼樺厛锛堥鐣欙級
 )
 
 // Enum value maps for SortType.
@@ -45,12 +43,12 @@ func (x SortType) String() string {
 	return strconv.Itoa(int(x))
 }
 
-// 建议类型
+// 寤鸿绫诲瀷
 type SuggestType int32
 
 const (
-	SuggestType_PRODUCT  SuggestType = 0 // 商品建议
-	SuggestType_MERCHANT SuggestType = 1 // 商家建议
+	SuggestType_PRODUCT  SuggestType = 0 // 鍟嗗搧寤鸿
+	SuggestType_MERCHANT SuggestType = 1 // 鍟嗗寤鸿
 )
 
 // Enum value maps for SuggestType.
@@ -72,14 +70,13 @@ func (x SuggestType) String() string {
 	return strconv.Itoa(int(x))
 }
 
-// 建议来源
+// 寤鸿鏉ユ簮
 type SuggestSource int32
 
 const (
-	SuggestSource_HISTORY    SuggestSource = 0 // 历史搜索
-	SuggestSource_HOT        SuggestSource = 1 // 热门搜索
-	SuggestSource_NAME_MATCH SuggestSource = 2 // 名称匹配（商品名或商家名）
-)
+	SuggestSource_HISTORY    SuggestSource = 0 // 鍘嗗彶鎼滅储
+	SuggestSource_HOT        SuggestSource = 1 // 鐑棬鎼滅储
+	SuggestSource_NAME_MATCH SuggestSource = 2 // 鍚嶇О鍖归厤锛堝晢鍝佸悕鎴栧晢瀹跺悕锛?)
 
 // Enum value maps for SuggestSource.
 var SuggestSource_name = map[int32]string{
@@ -102,15 +99,12 @@ func (x SuggestSource) String() string {
 	return strconv.Itoa(int(x))
 }
 
-// 商家排序类型
+// 鍟嗗鎺掑簭绫诲瀷
 type MerchantSortType int32
 
 const (
-	MerchantSortType_MERCHANT_RELEVANCE   MerchantSortType = 0 // 相关性（默认）
-	MerchantSortType_MERCHANT_SALES_DESC  MerchantSortType = 1 // 销量从高到低
-	MerchantSortType_MERCHANT_RATING_DESC MerchantSortType = 2 // 评分从高到低
-	MerchantSortType_MERCHANT_NEW_ARRIVAL MerchantSortType = 3 // 新入驻优先
-)
+	MerchantSortType_MERCHANT_RELEVANCE   MerchantSortType = 0 // 鐩稿叧鎬э紙榛樿锛?	MerchantSortType_MERCHANT_SALES_DESC  MerchantSortType = 1 // 閿€閲忎粠楂樺埌浣?	MerchantSortType_MERCHANT_RATING_DESC MerchantSortType = 2 // 璇勫垎浠庨珮鍒颁綆
+	MerchantSortType_MERCHANT_NEW_ARRIVAL MerchantSortType = 3 // 鏂板叆椹讳紭鍏?)
 
 // Enum value maps for MerchantSortType.
 var MerchantSortType_name = map[int32]string{
@@ -140,15 +134,14 @@ type SearchProductsReq struct {
 	Page     int64  `protobuf:"varint,2,opt,name=page" json:"page,omitempty"`
 	PageSize int64  `protobuf:"varint,3,opt,name=page_size" json:"page_size,omitempty"`
 
-	// 筛选条件
-	Categories []string `protobuf:"bytes,4,rep,name=categories" json:"categories,omitempty"`    // 分类筛选（多选）
-	MinPrice   int64    `protobuf:"varint,5,opt,name=min_price" json:"min_price,omitempty"`     // 最低价格（分）
-	MaxPrice   int64    `protobuf:"varint,6,opt,name=max_price" json:"max_price,omitempty"`     // 最高价格（分）
-	MerchantId int64    `protobuf:"varint,7,opt,name=merchant_id" json:"merchant_id,omitempty"` // 商家 ID
-	SortBy     SortType `protobuf:"varint,8,opt,name=sort_by" json:"sort_by,omitempty"`         // 排序方式
+	// 绛涢€夋潯浠?	Categories []string `protobuf:"bytes,4,rep,name=categories" json:"categories,omitempty"`    // 鍒嗙被绛涢€夛紙澶氶€夛級
+	MinPrice   int64    `protobuf:"varint,5,opt,name=min_price" json:"min_price,omitempty"`     // 鏈€浣庝环鏍硷紙鍒嗭級
+	MaxPrice   int64    `protobuf:"varint,6,opt,name=max_price" json:"max_price,omitempty"`     // 鏈€楂樹环鏍硷紙鍒嗭級
+	MerchantId int64    `protobuf:"varint,7,opt,name=merchant_id" json:"merchant_id,omitempty"` // 鍟嗗 ID
+	SortBy     SortType `protobuf:"varint,8,opt,name=sort_by" json:"sort_by,omitempty"`         // 鎺掑簭鏂瑰紡
 
-	// 高级选项
-	EnableHighlight bool `protobuf:"varint,9,opt,name=enable_highlight" json:"enable_highlight,omitempty"` // 是否启用高亮
+	// 楂樼骇閫夐」
+	EnableHighlight bool `protobuf:"varint,9,opt,name=enable_highlight" json:"enable_highlight,omitempty"` // 鏄惁鍚敤楂樹寒
 }
 
 func (x *SearchProductsReq) Reset() { *x = SearchProductsReq{} }
@@ -267,16 +260,13 @@ type ProductSearchResult struct {
 	Description  string   `protobuf:"bytes,3,opt,name=description" json:"description,omitempty"`
 	Picture      string   `protobuf:"bytes,4,opt,name=picture" json:"picture,omitempty"`
 	SliderImgs   []string `protobuf:"bytes,5,rep,name=slider_imgs" json:"slider_imgs,omitempty"`
-	Price        int64    `protobuf:"varint,6,opt,name=price" json:"price,omitempty"`          // 价格（分）
-	Categories   []string `protobuf:"bytes,7,rep,name=categories" json:"categories,omitempty"` // 分类列表
-	InStock      bool     `protobuf:"varint,8,opt,name=in_stock" json:"in_stock,omitempty"`    // 是否有货（搜索结果不显示具体库存数量）
-	MerchantId   int64    `protobuf:"varint,9,opt,name=merchant_id" json:"merchant_id,omitempty"`
+	Price        int64    `protobuf:"varint,6,opt,name=price" json:"price,omitempty"`          // 浠锋牸锛堝垎锛?	Categories   []string `protobuf:"bytes,7,rep,name=categories" json:"categories,omitempty"` // 鍒嗙被鍒楄〃
+	InStock      bool     `protobuf:"varint,8,opt,name=in_stock" json:"in_stock,omitempty"`    // 鏄惁鏈夎揣锛堟悳绱㈢粨鏋滀笉鏄剧ず鍏蜂綋搴撳瓨鏁伴噺锛?	MerchantId   int64    `protobuf:"varint,9,opt,name=merchant_id" json:"merchant_id,omitempty"`
 	MerchantName string   `protobuf:"bytes,10,opt,name=merchant_name" json:"merchant_name,omitempty"`
 
-	// 搜索相关字段
-	Score                float32 `protobuf:"fixed32,11,opt,name=score" json:"score,omitempty"`                               // 相关性评分
-	NameHighlight        string  `protobuf:"bytes,12,opt,name=name_highlight" json:"name_highlight,omitempty"`               // 名称高亮片段
-	DescriptionHighlight string  `protobuf:"bytes,13,opt,name=description_highlight" json:"description_highlight,omitempty"` // 描述高亮片段
+	// 鎼滅储鐩稿叧瀛楁
+	Score                float32 `protobuf:"fixed32,11,opt,name=score" json:"score,omitempty"`                               // 鐩稿叧鎬ц瘎鍒?	NameHighlight        string  `protobuf:"bytes,12,opt,name=name_highlight" json:"name_highlight,omitempty"`               // 鍚嶇О楂樹寒鐗囨
+	DescriptionHighlight string  `protobuf:"bytes,13,opt,name=description_highlight" json:"description_highlight,omitempty"` // 鎻忚堪楂樹寒鐗囨
 }
 
 func (x *ProductSearchResult) Reset() { *x = ProductSearchResult{} }
@@ -377,10 +367,8 @@ func (x *ProductSearchResult) GetDescriptionHighlight() string {
 }
 
 type SearchSuggestReq struct {
-	Keyword string      `protobuf:"bytes,1,opt,name=keyword" json:"keyword,omitempty"` // 输入关键字
-	Limit   int64       `protobuf:"varint,2,opt,name=limit" json:"limit,omitempty"`    // 返回数量，默认 10
-	Type    SuggestType `protobuf:"varint,3,opt,name=type" json:"type,omitempty"`      // 建议类型（商品/商家）
-}
+	Keyword string      `protobuf:"bytes,1,opt,name=keyword" json:"keyword,omitempty"` // 杈撳叆鍏抽敭瀛?	Limit   int64       `protobuf:"varint,2,opt,name=limit" json:"limit,omitempty"`    // 杩斿洖鏁伴噺锛岄粯璁?10
+	Type    SuggestType `protobuf:"varint,3,opt,name=type" json:"type,omitempty"`      // 寤鸿绫诲瀷锛堝晢鍝?鍟嗗锛?}
 
 func (x *SearchSuggestReq) Reset() { *x = SearchSuggestReq{} }
 
@@ -426,11 +414,9 @@ func (x *SearchSuggestResp) GetSuggestions() []*SearchSuggestion {
 	return nil
 }
 
-// 搜索建议项
-type SearchSuggestion struct {
-	Keyword string        `protobuf:"bytes,1,opt,name=keyword" json:"keyword,omitempty"` // 建议的关键字
-	Source  SuggestSource `protobuf:"varint,2,opt,name=source" json:"source,omitempty"`  // 来源（历史/热门/名称匹配）
-	Count   int64         `protobuf:"varint,3,opt,name=count" json:"count,omitempty"`    // 搜索次数（热门度，可选）
+// 鎼滅储寤鸿椤?type SearchSuggestion struct {
+	Keyword string        `protobuf:"bytes,1,opt,name=keyword" json:"keyword,omitempty"` // 寤鸿鐨勫叧閿瓧
+	Source  SuggestSource `protobuf:"varint,2,opt,name=source" json:"source,omitempty"`  // 鏉ユ簮锛堝巻鍙?鐑棬/鍚嶇О鍖归厤锛?	Count   int64         `protobuf:"varint,3,opt,name=count" json:"count,omitempty"`    // 鎼滅储娆℃暟锛堢儹闂ㄥ害锛屽彲閫夛級
 }
 
 func (x *SearchSuggestion) Reset() { *x = SearchSuggestion{} }
@@ -461,8 +447,8 @@ func (x *SearchSuggestion) GetCount() int64 {
 }
 
 type SearchAggregationsResp struct {
-	Categories  []*CategoryAggregation   `protobuf:"bytes,1,rep,name=categories" json:"categories,omitempty"`     // 分类聚合
-	PriceRanges []*PriceRangeAggregation `protobuf:"bytes,2,rep,name=price_ranges" json:"price_ranges,omitempty"` // 价格区间聚合
+	Categories  []*CategoryAggregation   `protobuf:"bytes,1,rep,name=categories" json:"categories,omitempty"`     // 鍒嗙被鑱氬悎
+	PriceRanges []*PriceRangeAggregation `protobuf:"bytes,2,rep,name=price_ranges" json:"price_ranges,omitempty"` // 浠锋牸鍖洪棿鑱氬悎
 }
 
 func (x *SearchAggregationsResp) Reset() { *x = SearchAggregationsResp{} }
@@ -488,9 +474,8 @@ func (x *SearchAggregationsResp) GetPriceRanges() []*PriceRangeAggregation {
 }
 
 type CategoryAggregation struct {
-	Category string `protobuf:"bytes,1,opt,name=category" json:"category,omitempty"` // 分类名称
-	Count    int64  `protobuf:"varint,2,opt,name=count" json:"count,omitempty"`      // 该分类下的商品数量
-}
+	Category string `protobuf:"bytes,1,opt,name=category" json:"category,omitempty"` // 鍒嗙被鍚嶇О
+	Count    int64  `protobuf:"varint,2,opt,name=count" json:"count,omitempty"`      // 璇ュ垎绫讳笅鐨勫晢鍝佹暟閲?}
 
 func (x *CategoryAggregation) Reset() { *x = CategoryAggregation{} }
 
@@ -513,10 +498,8 @@ func (x *CategoryAggregation) GetCount() int64 {
 }
 
 type PriceRangeAggregation struct {
-	MinPrice int64  `protobuf:"varint,1,opt,name=min_price" json:"min_price,omitempty"` // 区间最低价（分）
-	MaxPrice int64  `protobuf:"varint,2,opt,name=max_price" json:"max_price,omitempty"` // 区间最高价（分）
-	Count    int64  `protobuf:"varint,3,opt,name=count" json:"count,omitempty"`         // 该区间的商品数量
-	Label    string `protobuf:"bytes,4,opt,name=label" json:"label,omitempty"`          // 显示标签，如 "0-100元"
+	MinPrice int64  `protobuf:"varint,1,opt,name=min_price" json:"min_price,omitempty"` // 鍖洪棿鏈€浣庝环锛堝垎锛?	MaxPrice int64  `protobuf:"varint,2,opt,name=max_price" json:"max_price,omitempty"` // 鍖洪棿鏈€楂樹环锛堝垎锛?	Count    int64  `protobuf:"varint,3,opt,name=count" json:"count,omitempty"`         // 璇ュ尯闂寸殑鍟嗗搧鏁伴噺
+	Label    string `protobuf:"bytes,4,opt,name=label" json:"label,omitempty"`          // 鏄剧ず鏍囩锛屽 "0-100鍏?
 }
 
 func (x *PriceRangeAggregation) Reset() { *x = PriceRangeAggregation{} }
@@ -555,19 +538,14 @@ func (x *PriceRangeAggregation) GetLabel() string {
 	return ""
 }
 
-// 商家搜索请求
+// 鍟嗗鎼滅储璇锋眰
 type SearchMerchantsReq struct {
-	Keyword  string `protobuf:"bytes,1,opt,name=keyword" json:"keyword,omitempty"`      // 搜索关键字（商家名称）
-	Page     int64  `protobuf:"varint,2,opt,name=page" json:"page,omitempty"`           // 页码，从 1 开始
-	PageSize int64  `protobuf:"varint,3,opt,name=page_size" json:"page_size,omitempty"` // 每页数量
+	Keyword  string `protobuf:"bytes,1,opt,name=keyword" json:"keyword,omitempty"`      // 鎼滅储鍏抽敭瀛楋紙鍟嗗鍚嶇О锛?	Page     int64  `protobuf:"varint,2,opt,name=page" json:"page,omitempty"`           // 椤电爜锛屼粠 1 寮€濮?	PageSize int64  `protobuf:"varint,3,opt,name=page_size" json:"page_size,omitempty"` // 姣忛〉鏁伴噺
 
-	// 筛选条件
-	Region       string  `protobuf:"bytes,4,opt,name=region" json:"region,omitempty"`                // 地区筛选（如 "北京"、"上海"）
-	MinRating    float32 `protobuf:"fixed32,5,opt,name=min_rating" json:"min_rating,omitempty"`      // 最低评分（0-5）
-	VerifiedOnly bool    `protobuf:"varint,6,opt,name=verified_only" json:"verified_only,omitempty"` // 只看认证商家
+	// 绛涢€夋潯浠?	Region       string  `protobuf:"bytes,4,opt,name=region" json:"region,omitempty"`                // 鍦板尯绛涢€夛紙濡?"鍖椾含"銆?涓婃捣"锛?	MinRating    float32 `protobuf:"fixed32,5,opt,name=min_rating" json:"min_rating,omitempty"`      // 鏈€浣庤瘎鍒嗭紙0-5锛?	VerifiedOnly bool    `protobuf:"varint,6,opt,name=verified_only" json:"verified_only,omitempty"` // 鍙湅璁よ瘉鍟嗗
 
-	// 排序
-	SortBy MerchantSortType `protobuf:"varint,7,opt,name=sort_by" json:"sort_by,omitempty"` // 排序方式
+	// 鎺掑簭
+	SortBy MerchantSortType `protobuf:"varint,7,opt,name=sort_by" json:"sort_by,omitempty"` // 鎺掑簭鏂瑰紡
 }
 
 func (x *SearchMerchantsReq) Reset() { *x = SearchMerchantsReq{} }
@@ -625,12 +603,11 @@ func (x *SearchMerchantsReq) GetSortBy() MerchantSortType {
 	return MerchantSortType_MERCHANT_RELEVANCE
 }
 
-// 商家搜索响应
+// 鍟嗗鎼滅储鍝嶅簲
 type SearchMerchantsResp struct {
-	Merchants []*MerchantSearchResult `protobuf:"bytes,1,rep,name=merchants" json:"merchants,omitempty"`  // 商家列表
-	Total     int64                   `protobuf:"varint,2,opt,name=total" json:"total,omitempty"`         // 总数
-	Page      int64                   `protobuf:"varint,3,opt,name=page" json:"page,omitempty"`           // 当前页
-	PageSize  int64                   `protobuf:"varint,4,opt,name=page_size" json:"page_size,omitempty"` // 每页数量
+	Merchants []*MerchantSearchResult `protobuf:"bytes,1,rep,name=merchants" json:"merchants,omitempty"`  // 鍟嗗鍒楄〃
+	Total     int64                   `protobuf:"varint,2,opt,name=total" json:"total,omitempty"`         // 鎬绘暟
+	Page      int64                   `protobuf:"varint,3,opt,name=page" json:"page,omitempty"`           // 褰撳墠椤?	PageSize  int64                   `protobuf:"varint,4,opt,name=page_size" json:"page_size,omitempty"` // 姣忛〉鏁伴噺
 }
 
 func (x *SearchMerchantsResp) Reset() { *x = SearchMerchantsResp{} }
@@ -667,21 +644,17 @@ func (x *SearchMerchantsResp) GetPageSize() int64 {
 	return 0
 }
 
-// 商家搜索结果
+// 鍟嗗鎼滅储缁撴灉
 type MerchantSearchResult struct {
 	Id           int64   `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`
-	Name         string  `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`                    // 商家名称
-	Description  string  `protobuf:"bytes,3,opt,name=description" json:"description,omitempty"`      // 商家描述
-	Logo         string  `protobuf:"bytes,4,opt,name=logo" json:"logo,omitempty"`                    // 商家 Logo
-	Region       string  `protobuf:"bytes,5,opt,name=region" json:"region,omitempty"`                // 所在地区
-	Rating       float32 `protobuf:"fixed32,6,opt,name=rating" json:"rating,omitempty"`              // 评分（0-5）
-	SalesCount   int64   `protobuf:"varint,7,opt,name=sales_count" json:"sales_count,omitempty"`     // 销量
-	ProductCount int64   `protobuf:"varint,8,opt,name=product_count" json:"product_count,omitempty"` // 商品数量
-	Verified     bool    `protobuf:"varint,9,opt,name=verified" json:"verified,omitempty"`           // 是否认证
+	Name         string  `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`                    // 鍟嗗鍚嶇О
+	Description  string  `protobuf:"bytes,3,opt,name=description" json:"description,omitempty"`      // 鍟嗗鎻忚堪
+	Logo         string  `protobuf:"bytes,4,opt,name=logo" json:"logo,omitempty"`                    // 鍟嗗 Logo
+	Region       string  `protobuf:"bytes,5,opt,name=region" json:"region,omitempty"`                // 鎵€鍦ㄥ湴鍖?	Rating       float32 `protobuf:"fixed32,6,opt,name=rating" json:"rating,omitempty"`              // 璇勫垎锛?-5锛?	SalesCount   int64   `protobuf:"varint,7,opt,name=sales_count" json:"sales_count,omitempty"`     // 閿€閲?	ProductCount int64   `protobuf:"varint,8,opt,name=product_count" json:"product_count,omitempty"` // 鍟嗗搧鏁伴噺
+	Verified     bool    `protobuf:"varint,9,opt,name=verified" json:"verified,omitempty"`           // 鏄惁璁よ瘉
 
-	// 搜索相关字段
-	Score         float32 `protobuf:"fixed32,10,opt,name=score" json:"score,omitempty"`                 // 相关性评分
-	NameHighlight string  `protobuf:"bytes,11,opt,name=name_highlight" json:"name_highlight,omitempty"` // 名称高亮片段
+	// 鎼滅储鐩稿叧瀛楁
+	Score         float32 `protobuf:"fixed32,10,opt,name=score" json:"score,omitempty"`                 // 鐩稿叧鎬ц瘎鍒?	NameHighlight string  `protobuf:"bytes,11,opt,name=name_highlight" json:"name_highlight,omitempty"` // 鍚嶇О楂樹寒鐗囨
 }
 
 func (x *MerchantSearchResult) Reset() { *x = MerchantSearchResult{} }
@@ -767,17 +740,14 @@ func (x *MerchantSearchResult) GetNameHighlight() string {
 	return ""
 }
 
-// ES 数据初始化请求
-// 注意：索引结构已在服务启动时自动创建（类似数据库的 AutoMigrate）
-// 此接口用于从数据源（MySQL/Product Service）全量导入数据到 ES
-// 适用场景：首次部署、重建索引、数据修复
-type InitESReq struct {
-	RecreateIndices bool `protobuf:"varint,1,opt,name=recreate_indices" json:"recreate_indices,omitempty"` // 是否重建索引（删除后重新创建），默认 false
-	SyncProducts    bool `protobuf:"varint,2,opt,name=sync_products" json:"sync_products,omitempty"`       // 是否同步商品数据（从数据源拉取全量数据）
-	SyncMerchants   bool `protobuf:"varint,3,opt,name=sync_merchants" json:"sync_merchants,omitempty"`     // 是否同步商家数据（从数据源拉取全量数据）
+// ES 鏁版嵁鍒濆鍖栬姹?// 娉ㄦ剰锛氱储寮曠粨鏋勫凡鍦ㄦ湇鍔″惎鍔ㄦ椂鑷姩鍒涘缓锛堢被浼兼暟鎹簱鐨?AutoMigrate锛?// 姝ゆ帴鍙ｇ敤浜庝粠鏁版嵁婧愶紙MySQL/Product Service锛夊叏閲忓鍏ユ暟鎹埌 ES
+// 閫傜敤鍦烘櫙锛氶娆￠儴缃层€侀噸寤虹储寮曘€佹暟鎹慨澶?type InitESReq struct {
+	RecreateIndices bool `protobuf:"varint,1,opt,name=recreate_indices" json:"recreate_indices,omitempty"` // 鏄惁閲嶅缓绱㈠紩锛堝垹闄ゅ悗閲嶆柊鍒涘缓锛夛紝榛樿 false
+	SyncProducts    bool `protobuf:"varint,2,opt,name=sync_products" json:"sync_products,omitempty"`       // 鏄惁鍚屾鍟嗗搧鏁版嵁锛堜粠鏁版嵁婧愭媺鍙栧叏閲忔暟鎹級
+	SyncMerchants   bool `protobuf:"varint,3,opt,name=sync_merchants" json:"sync_merchants,omitempty"`     // 鏄惁鍚屾鍟嗗鏁版嵁锛堜粠鏁版嵁婧愭媺鍙栧叏閲忔暟鎹級
 
-	// 分批同步参数（避免一次性加载过多数据）
-	BatchSize int64 `protobuf:"varint,4,opt,name=batch_size" json:"batch_size,omitempty"` // 每批次数量，默认 1000
+	// 鍒嗘壒鍚屾鍙傛暟锛堥伩鍏嶄竴娆℃€у姞杞借繃澶氭暟鎹級
+	BatchSize int64 `protobuf:"varint,4,opt,name=batch_size" json:"batch_size,omitempty"` // 姣忔壒娆℃暟閲忥紝榛樿 1000
 }
 
 func (x *InitESReq) Reset() { *x = InitESReq{} }
@@ -814,20 +784,13 @@ func (x *InitESReq) GetBatchSize() int64 {
 	return 0
 }
 
-// ES 数据初始化响应
-type InitESResp struct {
+// ES 鏁版嵁鍒濆鍖栧搷搴?type InitESResp struct {
 	Success bool   `protobuf:"varint,1,opt,name=success" json:"success,omitempty"`
 	Message string `protobuf:"bytes,2,opt,name=message" json:"message,omitempty"`
 
-	// 索引创建结果（如果执行了重建）
-	IndicesCreated bool `protobuf:"varint,3,opt,name=indices_created" json:"indices_created,omitempty"` // 索引是否创建/重建成功
+	// 绱㈠紩鍒涘缓缁撴灉锛堝鏋滄墽琛屼簡閲嶅缓锛?	IndicesCreated bool `protobuf:"varint,3,opt,name=indices_created" json:"indices_created,omitempty"` // 绱㈠紩鏄惁鍒涘缓/閲嶅缓鎴愬姛
 
-	// 数据同步结果（如果执行了同步）
-	ProductsSynced  int64    `protobuf:"varint,4,opt,name=products_synced" json:"products_synced,omitempty"`   // 同步成功的商品数量
-	ProductsFailed  int64    `protobuf:"varint,5,opt,name=products_failed" json:"products_failed,omitempty"`   // 同步失败的商品数量
-	MerchantsSynced int64    `protobuf:"varint,6,opt,name=merchants_synced" json:"merchants_synced,omitempty"` // 同步成功的商家数量
-	MerchantsFailed int64    `protobuf:"varint,7,opt,name=merchants_failed" json:"merchants_failed,omitempty"` // 同步失败的商家数量
-	Errors          []string `protobuf:"bytes,8,rep,name=errors" json:"errors,omitempty"`                      // 错误信息列表
+	// 鏁版嵁鍚屾缁撴灉锛堝鏋滄墽琛屼簡鍚屾锛?	ProductsSynced  int64    `protobuf:"varint,4,opt,name=products_synced" json:"products_synced,omitempty"`   // 鍚屾鎴愬姛鐨勫晢鍝佹暟閲?	ProductsFailed  int64    `protobuf:"varint,5,opt,name=products_failed" json:"products_failed,omitempty"`   // 鍚屾澶辫触鐨勫晢鍝佹暟閲?	MerchantsSynced int64    `protobuf:"varint,6,opt,name=merchants_synced" json:"merchants_synced,omitempty"` // 鍚屾鎴愬姛鐨勫晢瀹舵暟閲?	MerchantsFailed int64    `protobuf:"varint,7,opt,name=merchants_failed" json:"merchants_failed,omitempty"` // 鍚屾澶辫触鐨勫晢瀹舵暟閲?	Errors          []string `protobuf:"bytes,8,rep,name=errors" json:"errors,omitempty"`                      // 閿欒淇℃伅鍒楄〃
 }
 
 func (x *InitESResp) Reset() { *x = InitESResp{} }
@@ -893,10 +856,9 @@ func (x *InitESResp) GetErrors() []string {
 }
 
 type AISearchProductsReq struct {
-	Query           string `protobuf:"bytes,1,opt,name=query" json:"query,omitempty"` // 用户原始查询（自然语言）
-	Page            int64  `protobuf:"varint,2,opt,name=page" json:"page,omitempty"`
+	Query           string `protobuf:"bytes,1,opt,name=query" json:"query,omitempty"` // 鐢ㄦ埛鍘熷鏌ヨ锛堣嚜鐒惰瑷€锛?	Page            int64  `protobuf:"varint,2,opt,name=page" json:"page,omitempty"`
 	PageSize        int64  `protobuf:"varint,3,opt,name=page_size" json:"page_size,omitempty"`
-	EnableRag       bool   `protobuf:"varint,4,opt,name=enable_rag" json:"enable_rag,omitempty"` // 是否生成 RAG 摘要
+	EnableRag       bool   `protobuf:"varint,4,opt,name=enable_rag" json:"enable_rag,omitempty"` // 鏄惁鐢熸垚 RAG 鎽樿
 	EnableHighlight bool   `protobuf:"varint,5,opt,name=enable_highlight" json:"enable_highlight,omitempty"`
 }
 
@@ -946,9 +908,7 @@ type AISearchProductsResp struct {
 	Total       int64                  `protobuf:"varint,2,opt,name=total" json:"total,omitempty"`
 	Page        int64                  `protobuf:"varint,3,opt,name=page" json:"page,omitempty"`
 	PageSize    int64                  `protobuf:"varint,4,opt,name=page_size" json:"page_size,omitempty"`
-	QueryIntent *QueryIntent           `protobuf:"bytes,5,opt,name=query_intent" json:"query_intent,omitempty"` // LLM 解析的意图
-	RagSummary  string                 `protobuf:"bytes,6,opt,name=rag_summary" json:"rag_summary,omitempty"`   // RAG 生成的搜索摘要
-	Metrics     *PipelineMetrics       `protobuf:"bytes,7,opt,name=metrics" json:"metrics,omitempty"`           // 管线各阶段耗时
+	QueryIntent *QueryIntent           `protobuf:"bytes,5,opt,name=query_intent" json:"query_intent,omitempty"` // LLM 瑙ｆ瀽鐨勬剰鍥?	RagSummary  string                 `protobuf:"bytes,6,opt,name=rag_summary" json:"rag_summary,omitempty"`   // RAG 鐢熸垚鐨勬悳绱㈡憳瑕?	Metrics     *PipelineMetrics       `protobuf:"bytes,7,opt,name=metrics" json:"metrics,omitempty"`           // 绠＄嚎鍚勯樁娈佃€楁椂
 }
 
 func (x *AISearchProductsResp) Reset() { *x = AISearchProductsResp{} }
@@ -1006,15 +966,10 @@ func (x *AISearchProductsResp) GetMetrics() *PipelineMetrics {
 	return nil
 }
 
-// LLM 解析的查询意图
-type QueryIntent struct {
-	RewrittenQuery string   `protobuf:"bytes,1,opt,name=rewritten_query" json:"rewritten_query,omitempty"` // 重写后的关键词
-	Categories     []string `protobuf:"bytes,2,rep,name=categories" json:"categories,omitempty"`           // 识别的类目
-	MinPrice       int64    `protobuf:"varint,3,opt,name=min_price" json:"min_price,omitempty"`            // 价格下限（分）
-	MaxPrice       int64    `protobuf:"varint,4,opt,name=max_price" json:"max_price,omitempty"`            // 价格上限（分）
-	SortBy         string   `protobuf:"bytes,5,opt,name=sort_by" json:"sort_by,omitempty"`                 // 排序意图
-	Intent         string   `protobuf:"bytes,6,opt,name=intent" json:"intent,omitempty"`                   // 意图描述
-	NeedRag        bool     `protobuf:"varint,7,opt,name=need_rag" json:"need_rag,omitempty"`              // 是否需要 RAG
+// LLM 瑙ｆ瀽鐨勬煡璇㈡剰鍥?type QueryIntent struct {
+	RewrittenQuery string   `protobuf:"bytes,1,opt,name=rewritten_query" json:"rewritten_query,omitempty"` // 閲嶅啓鍚庣殑鍏抽敭璇?	Categories     []string `protobuf:"bytes,2,rep,name=categories" json:"categories,omitempty"`           // 璇嗗埆鐨勭被鐩?	MinPrice       int64    `protobuf:"varint,3,opt,name=min_price" json:"min_price,omitempty"`            // 浠锋牸涓嬮檺锛堝垎锛?	MaxPrice       int64    `protobuf:"varint,4,opt,name=max_price" json:"max_price,omitempty"`            // 浠锋牸涓婇檺锛堝垎锛?	SortBy         string   `protobuf:"bytes,5,opt,name=sort_by" json:"sort_by,omitempty"`                 // 鎺掑簭鎰忓浘
+	Intent         string   `protobuf:"bytes,6,opt,name=intent" json:"intent,omitempty"`                   // 鎰忓浘鎻忚堪
+	NeedRag        bool     `protobuf:"varint,7,opt,name=need_rag" json:"need_rag,omitempty"`              // 鏄惁闇€瑕?RAG
 }
 
 func (x *QueryIntent) Reset() { *x = QueryIntent{} }
@@ -1072,8 +1027,7 @@ func (x *QueryIntent) GetNeedRag() bool {
 	return false
 }
 
-// 管线可观测性指标（各阶段耗时 ms）
-type PipelineMetrics struct {
+// 绠＄嚎鍙娴嬫€ф寚鏍囷紙鍚勯樁娈佃€楁椂 ms锛?type PipelineMetrics struct {
 	QueryUnderstandingMs int64 `protobuf:"varint,1,opt,name=query_understanding_ms" json:"query_understanding_ms,omitempty"`
 	KeywordRecallMs      int64 `protobuf:"varint,2,opt,name=keyword_recall_ms" json:"keyword_recall_ms,omitempty"`
 	VectorRecallMs       int64 `protobuf:"varint,3,opt,name=vector_recall_ms" json:"vector_recall_ms,omitempty"`
@@ -1162,3 +1116,5 @@ type SearchService interface {
 	InitES(ctx context.Context, req *InitESReq) (res *InitESResp, err error)
 	AISearchProducts(ctx context.Context, req *AISearchProductsReq) (res *AISearchProductsResp, err error)
 }
+
+

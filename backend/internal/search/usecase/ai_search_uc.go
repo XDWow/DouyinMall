@@ -21,32 +21,32 @@ const (
 	defaultPageSize = int64(10)
 )
 
-const queryUnderstandingPrompt = `你是电商搜索系统的 Query 理解模块。请分析用户搜索词，并只输出 JSON：
+const queryUnderstandingPrompt = `浣犳槸鐢靛晢鎼滅储绯荤粺鐨?Query 鐞嗚В妯″潡銆傝鍒嗘瀽鐢ㄦ埛鎼滅储璇嶏紝骞跺彧杈撳嚭 JSON锛?
 {
-  "rewritten_query": "优化后的搜索关键词",
-  "categories": ["识别出的商品类目"],
+  "rewritten_query": "浼樺寲鍚庣殑鎼滅储鍏抽敭璇?,
+  "categories": ["璇嗗埆鍑虹殑鍟嗗搧绫荤洰"],
   "min_price": 0,
   "max_price": 0,
   "sort_by": "",
-  "intent": "用户意图简述",
+  "intent": "鐢ㄦ埛鎰忓浘绠€杩?,
   "need_rag": true
 }
 
-规则：
-- rewritten_query: 提取核心商品词，去掉口语化表达，补全简称
-- categories: 如果能识别出类目就填写，否则返回空数组
-- min_price/max_price: 单位为分，没有价格意图时填 0
-- sort_by: 只能是 PRICE_ASC、PRICE_DESC、SALES_DESC 或空字符串
-- need_rag: 默认 true；只有当用户明确搜索某个非常具体的型号、SKU 或单品时才返回 false`
+瑙勫垯锛?
+- rewritten_query: 鎻愬彇鏍稿績鍟嗗搧璇嶏紝鍘绘帀鍙ｈ鍖栬〃杈撅紝琛ュ叏绠€绉?
+- categories: 濡傛灉鑳借瘑鍒嚭绫荤洰灏卞～鍐欙紝鍚﹀垯杩斿洖绌烘暟缁?
+- min_price/max_price: 鍗曚綅涓哄垎锛屾病鏈変环鏍兼剰鍥炬椂濉?0
+- sort_by: 鍙兘鏄?PRICE_ASC銆丳RICE_DESC銆丼ALES_DESC 鎴栫┖瀛楃涓?
+- need_rag: 榛樿 true锛涘彧鏈夊綋鐢ㄦ埛鏄庣‘鎼滅储鏌愪釜闈炲父鍏蜂綋鐨勫瀷鍙枫€丼KU 鎴栧崟鍝佹椂鎵嶈繑鍥?false`
 
-const ragPrompt = `你是电商搜索助手。请根据用户查询和搜索结果，生成一段简洁自然的推荐摘要。
+const ragPrompt = `浣犳槸鐢靛晢鎼滅储鍔╂墜銆傝鏍规嵁鐢ㄦ埛鏌ヨ鍜屾悳绱㈢粨鏋滐紝鐢熸垚涓€娈电畝娲佽嚜鐒剁殑鎺ㄨ崘鎽樿銆?
 
-要求：
-1. 长度控制在 50 到 150 字
-2. 提到价格区间
-3. 如果商品涉及多个类目，指出类目分布
-4. 点出销量最高的 1 到 2 个商品
-5. 只能基于给定搜索结果，不要编造信息`
+瑕佹眰锛?
+1. 闀垮害鎺у埗鍦?50 鍒?150 瀛?
+2. 鎻愬埌浠锋牸鍖洪棿
+3. 濡傛灉鍟嗗搧娑夊強澶氫釜绫荤洰锛屾寚鍑虹被鐩垎甯?
+4. 鐐瑰嚭閿€閲忔渶楂樼殑 1 鍒?2 涓晢鍝?
+5. 鍙兘鍩轰簬缁欏畾鎼滅储缁撴灉锛屼笉瑕佺紪閫犱俊鎭痐
 
 type AISearchUseCase struct {
 	llmClient   ai.LLMClient
@@ -378,7 +378,7 @@ func (uc *AISearchUseCase) generateRAGSummary(
 	for i := 0; i < topN; i++ {
 		product := products[i]
 		priceYuan := float64(product.Price) / 100
-		fmt.Fprintf(&sb, "%d. %s | %.2f元 | 销量 %d | %s\n",
+		fmt.Fprintf(&sb, "%d. %s | %.2f鍏?| 閿€閲?%d | %s\n",
 			i+1, product.Name, priceYuan, product.SalesCount, strings.Join(product.Categories, "/"))
 
 		if minPrice == 0 || product.Price < minPrice {
@@ -396,9 +396,9 @@ func (uc *AISearchUseCase) generateRAGSummary(
 		}
 	}
 
-	fmt.Fprintf(&sb, "\n统计：价格 %.2f元~%.2f元", float64(minPrice)/100, float64(maxPrice)/100)
+	fmt.Fprintf(&sb, "\n缁熻锛氫环鏍?%.2f鍏儈%.2f鍏?, float64(minPrice)/100, float64(maxPrice)/100)
 	if bestSeller != "" {
-		fmt.Fprintf(&sb, "，最高销量商品为 %s（%d）", bestSeller, bestSales)
+		fmt.Fprintf(&sb, "锛屾渶楂橀攢閲忓晢鍝佷负 %s锛?d锛?, bestSeller, bestSales)
 	}
 	if len(categorySet) > 0 {
 		categories := make([]string, 0, len(categorySet))
@@ -406,7 +406,7 @@ func (uc *AISearchUseCase) generateRAGSummary(
 			categories = append(categories, category)
 		}
 		sort.Strings(categories)
-		fmt.Fprintf(&sb, "，涉及类目：%s", strings.Join(categories, "、"))
+		fmt.Fprintf(&sb, "锛屾秹鍙婄被鐩細%s", strings.Join(categories, "銆?))
 	}
 
 	resp, err := uc.llmClient.ChatCompletion(ctx, ai.ChatRequest{
@@ -414,7 +414,7 @@ func (uc *AISearchUseCase) generateRAGSummary(
 			{Role: "system", Content: ragPrompt},
 			{
 				Role: "user",
-				Content: fmt.Sprintf("用户搜索：%s\n意图：%s\n\n搜索结果：\n%s",
+				Content: fmt.Sprintf("鐢ㄦ埛鎼滅储锛?s\n鎰忓浘锛?s\n\n鎼滅储缁撴灉锛歕n%s",
 					query, intent.Intent, sb.String()),
 			},
 		},
@@ -467,3 +467,5 @@ func float32Ptr(v float32) *float32 {
 func intPtr(v int) *int {
 	return &v
 }
+
+

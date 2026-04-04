@@ -15,7 +15,7 @@ type PrometheusHook struct {
 
 func NewPrometheusHook(opt prometheus.SummaryOpts) *PrometheusHook {
 	vector := prometheus.NewSummaryVec(opt,
-		// key_exist 是否命中缓存
+		// key_exist 鏄惁鍛戒腑缂撳瓨
 		[]string{"cmd", "key_exist"})
 	prometheus.MustRegister(vector)
 	return &PrometheusHook{
@@ -31,7 +31,7 @@ func (p *PrometheusHook) DialHook(next redis.DialHook) redis.DialHook {
 
 func (p *PrometheusHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 	return func(ctx context.Context, cmd redis.Cmder) error {
-		// 在Redis执行之前
+		// 鍦≧edis鎵ц涔嬪墠
 		startTime := time.Now()
 		var err error
 		defer func() {
@@ -40,9 +40,9 @@ func (p *PrometheusHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
 			keyExist := err != redis.Nil
 			p.vector.WithLabelValues(cmd.Name(), strconv.FormatBool(keyExist)).Observe(float64(duration))
 		}()
-		// 这个会最终发送命令到 redis 上
+		// 杩欎釜浼氭渶缁堝彂閫佸懡浠ゅ埌 redis 涓?
 		err = next(ctx, cmd)
-		// redis 执行完了
+		// redis 鎵ц瀹屼簡
 		return err
 	}
 }
@@ -51,3 +51,5 @@ func (p *PrometheusHook) ProcessPipelineHook(next redis.ProcessPipelineHook) red
 	//TODO implement me
 	panic("implement me")
 }
+
+

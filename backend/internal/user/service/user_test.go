@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// MockUserRepository 是 repo.UserRepository 的 mock 实现
+// MockUserRepository 鏄?repo.UserRepository 鐨?mock 瀹炵幇
 type MockUserRepository struct {
 	CreateFunc      func(ctx context.Context, u domain.User) (int64, error)
 	FindByEmailFunc func(ctx context.Context, email string) (domain.User, error)
@@ -58,7 +58,7 @@ func TestUserService_Signup(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "成功注册",
+			name: "鎴愬姛娉ㄥ唽",
 			user: domain.User{
 				Email:    "test@example.com",
 				Password: "password123",
@@ -66,7 +66,7 @@ func TestUserService_Signup(t *testing.T) {
 			setupFn: func() {
 				mockRepo.CreateFunc = func(ctx context.Context, u domain.User) (int64, error) {
 					assert.Equal(t, "test@example.com", u.Email)
-					// 验证密码已被加密
+					// 楠岃瘉瀵嗙爜宸茶鍔犲瘑
 					err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte("password123"))
 					assert.NoError(t, err)
 					return 1, nil
@@ -75,7 +75,7 @@ func TestUserService_Signup(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "邮箱已存在",
+			name: "閭宸插瓨鍦?,
 			user: domain.User{
 				Email:    "duplicate@example.com",
 				Password: "password123",
@@ -103,7 +103,7 @@ func TestUserService_Login(t *testing.T) {
 	mockLogger := newMockLogger()
 	svc := NewUserService(mockRepo, mockLogger)
 
-	// 生成一个已加密的密码
+	// 鐢熸垚涓€涓凡鍔犲瘑鐨勫瘑鐮?
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("correctpassword"), bcrypt.DefaultCost)
 
 	tests := []struct {
@@ -114,7 +114,7 @@ func TestUserService_Login(t *testing.T) {
 		wantErr  error
 	}{
 		{
-			name:     "成功登录",
+			name:     "鎴愬姛鐧诲綍",
 			email:    "test@example.com",
 			password: "correctpassword",
 			setupFn: func() {
@@ -130,7 +130,7 @@ func TestUserService_Login(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:     "用户不存在",
+			name:     "鐢ㄦ埛涓嶅瓨鍦?,
 			email:    "notfound@example.com",
 			password: "password",
 			setupFn: func() {
@@ -141,7 +141,7 @@ func TestUserService_Login(t *testing.T) {
 			wantErr: ErrInvalidUserOrPassword,
 		},
 		{
-			name:     "密码错误",
+			name:     "瀵嗙爜閿欒",
 			email:    "test@example.com",
 			password: "wrongpassword",
 			setupFn: func() {
@@ -182,7 +182,7 @@ func TestUserService_Query(t *testing.T) {
 		wantErr  error
 	}{
 		{
-			name: "成功获取用户信息",
+			name: "鎴愬姛鑾峰彇鐢ㄦ埛淇℃伅",
 			id:   1,
 			setupFn: func() {
 				mockRepo.FindByIdFunc = func(ctx context.Context, id int64) (domain.User, error) {
@@ -194,7 +194,7 @@ func TestUserService_Query(t *testing.T) {
 			wantErr:  nil,
 		},
 		{
-			name: "用户不存在",
+			name: "鐢ㄦ埛涓嶅瓨鍦?,
 			id:   999,
 			setupFn: func() {
 				mockRepo.FindByIdFunc = func(ctx context.Context, id int64) (domain.User, error) {
@@ -231,7 +231,7 @@ func TestUserService_UpdateProfile(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "成功更新",
+			name: "鎴愬姛鏇存柊",
 			user: domain.User{
 				ID:       1,
 				UserName: "NewUserName",
@@ -246,7 +246,7 @@ func TestUserService_UpdateProfile(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "用户不存在",
+			name: "鐢ㄦ埛涓嶅瓨鍦?,
 			user: domain.User{
 				ID:       999,
 				UserName: "NewUserName",
@@ -274,7 +274,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 	mockLogger := newMockLogger()
 	svc := NewUserService(mockRepo, mockLogger)
 
-	// 生成已加密的旧密码
+	// 鐢熸垚宸插姞瀵嗙殑鏃у瘑鐮?
 	oldHashedPassword, _ := bcrypt.GenerateFromPassword([]byte("oldpassword"), bcrypt.DefaultCost)
 
 	tests := []struct {
@@ -286,7 +286,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 		wantErr     error
 	}{
 		{
-			name:        "成功修改密码",
+			name:        "鎴愬姛淇敼瀵嗙爜",
 			userID:      1,
 			oldPassword: "oldpassword",
 			newPassword: "newpassword",
@@ -299,7 +299,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 				}
 				mockRepo.UpdateFunc = func(ctx context.Context, u domain.User) error {
 					assert.Equal(t, int64(1), u.ID)
-					// 验证新密码已被加密
+					// 楠岃瘉鏂板瘑鐮佸凡琚姞瀵?
 					err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte("newpassword"))
 					assert.NoError(t, err)
 					return nil
@@ -308,7 +308,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:        "旧密码错误",
+			name:        "鏃у瘑鐮侀敊璇?,
 			userID:      1,
 			oldPassword: "wrongpassword",
 			newPassword: "newpassword",
@@ -349,7 +349,7 @@ func TestUserService_ChangeEmail(t *testing.T) {
 		wantErr  error
 	}{
 		{
-			name:     "成功修改邮箱",
+			name:     "鎴愬姛淇敼閭",
 			userID:   1,
 			password: "password",
 			newEmail: "newemail@example.com",
@@ -370,7 +370,7 @@ func TestUserService_ChangeEmail(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:     "密码错误",
+			name:     "瀵嗙爜閿欒",
 			userID:   1,
 			password: "wrongpassword",
 			newEmail: "newemail@example.com",
@@ -410,7 +410,7 @@ func TestUserService_Delete(t *testing.T) {
 		wantErr  error
 	}{
 		{
-			name:     "成功删除账号",
+			name:     "鎴愬姛鍒犻櫎璐﹀彿",
 			userID:   1,
 			password: "password",
 			setupFn: func() {
@@ -423,7 +423,7 @@ func TestUserService_Delete(t *testing.T) {
 					}, nil
 				}
 				mockRepo.UpdateFunc = func(ctx context.Context, u domain.User) error {
-					// 验证邮箱和手机号已被标记为删除
+					// 楠岃瘉閭鍜屾墜鏈哄彿宸茶鏍囪涓哄垹闄?
 					assert.Contains(t, u.Email, "deleted_")
 					assert.Contains(t, u.Phone, "deleted_")
 					return nil
@@ -436,7 +436,7 @@ func TestUserService_Delete(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:     "密码错误",
+			name:     "瀵嗙爜閿欒",
 			userID:   1,
 			password: "wrongpassword",
 			setupFn: func() {
@@ -459,3 +459,5 @@ func TestUserService_Delete(t *testing.T) {
 		})
 	}
 }
+
+

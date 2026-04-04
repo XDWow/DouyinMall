@@ -22,21 +22,23 @@ func main() {
 
 func initViperWatch() {
 	cfile := pflag.String("config",
-		"internal/user/config/dev.yaml", "配置文件路径")
+		"internal/user/config/dev.yaml", "閰嶇疆鏂囦欢璺緞")
 	pflag.Parse()
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("读取配置文件失败: %w", err))
+		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w", err))
 	}
 
-	// 支持环境变量覆盖配置文件（环境变量优先）
+	// 鏀寔鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢锛堢幆澧冨彉閲忎紭鍏堬級
 	viper.AutomaticEnv()
-	// 设置环境变量前缀（可选）
+	// 璁剧疆鐜鍙橀噺鍓嶇紑锛堝彲閫夛級
 	// viper.SetEnvPrefix("USER_SERVICE")
 	
-	// 手动绑定环境变量到配置键
+	// 鎵嬪姩缁戝畾鐜鍙橀噺鍒伴厤缃敭
 	viper.BindEnv("db.dsn", "DB_DSN")
 	viper.BindEnv("redis.addr", "REDIS_ADDR")
 	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 }
+
+

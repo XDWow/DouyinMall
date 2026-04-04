@@ -44,3 +44,5 @@ func InitGRPCServer(cfg aftersaleconfig.Config, handler *aftersalegrpc.Handler) 
 
 	return aftersalev1service.NewServer(handler, options...), nil
 }
+
+

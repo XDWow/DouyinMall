@@ -32,3 +32,5 @@ type ServerConfig struct {
 type KafkaConfig struct {
 	Brokers []string `yaml:"brokers"`
 }
+
+

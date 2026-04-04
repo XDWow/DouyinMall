@@ -27,3 +27,5 @@ func (uc *GetAfterSaleRequestUseCase) Execute(ctx context.Context, cmd GetAfterS
 	}
 	return uc.repo.GetByRequestNo(ctx, requestNo)
 }
+
+

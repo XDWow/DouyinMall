@@ -1,8 +1,8 @@
 package domain
 
-// ==================== AI 搜索领域模型 ====================
+// ==================== AI 鎼滅储棰嗗煙妯″瀷 ====================
 
-// QueryIntent LLM 解析后的用户查询意图
+// QueryIntent LLM 瑙ｆ瀽鍚庣殑鐢ㄦ埛鏌ヨ鎰忓浘
 type QueryIntent struct {
 	RewrittenQuery string
 	Categories     []string
@@ -13,12 +13,12 @@ type QueryIntent struct {
 	NeedRAG        bool
 }
 
-// RecallResult 单路召回结果（融合排序前的中间结果）
+// RecallResult 鍗曡矾鍙洖缁撴灉锛堣瀺鍚堟帓搴忓墠鐨勪腑闂寸粨鏋滐級
 type RecallResult struct {
 	ProductID  int64
 	Score      float32
 	Source     RecallSource
-	SalesCount int64 // 业务信号：用于排序加权
+	SalesCount int64 // 涓氬姟淇″彿锛氱敤浜庢帓搴忓姞鏉?
 }
 
 type RecallSource string
@@ -28,7 +28,7 @@ const (
 	RecallVector  RecallSource = "vector"
 )
 
-// PipelineMetrics 管线各阶段耗时（毫秒），供前端/监控使用
+// PipelineMetrics 绠＄嚎鍚勯樁娈佃€楁椂锛堟绉掞級锛屼緵鍓嶇/鐩戞帶浣跨敤
 type PipelineMetrics struct {
 	QueryUnderstandingMs int64
 	KeywordRecallMs      int64
@@ -37,11 +37,11 @@ type PipelineMetrics struct {
 	FetchMs              int64
 	RAGMs                int64
 	TotalMs              int64
-	KeywordRecallCount   int32 // 关键词召回数量
-	VectorRecallCount    int32 // 向量召回数量
+	KeywordRecallCount   int32 // 鍏抽敭璇嶅彫鍥炴暟閲?
+	VectorRecallCount    int32 // 鍚戦噺鍙洖鏁伴噺
 }
 
-// AISearchProductsReq AI 搜索请求
+// AISearchProductsReq AI 鎼滅储璇锋眰
 type AISearchProductsReq struct {
 	Query           string
 	Page            int64
@@ -50,7 +50,7 @@ type AISearchProductsReq struct {
 	EnableHighlight bool
 }
 
-// AISearchProductsResp AI 搜索响应
+// AISearchProductsResp AI 鎼滅储鍝嶅簲
 type AISearchProductsResp struct {
 	Products []ProductSearchResult
 	Total    int64
@@ -59,5 +59,7 @@ type AISearchProductsResp struct {
 
 	QueryIntent *QueryIntent
 	RAGSummary  string
-	Metrics     *PipelineMetrics // 管线可观测性
+	Metrics     *PipelineMetrics // 绠＄嚎鍙娴嬫€?
 }
+
+

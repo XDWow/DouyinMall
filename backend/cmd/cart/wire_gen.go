@@ -37,7 +37,9 @@ func InitApp() *App {
 
 // wire.go:
 
-// newApp 组装 App
+// newApp 缁勮 App
 func newApp(svr server.Server, consumer *mq.OrderConsumer) *App {
 	return &App{Server: svr, OrderConsumer: consumer}
 }
+
+

@@ -10,7 +10,7 @@ type LLMClient interface {
 	ChatCompletionStream(ctx context.Context, req ChatRequest) (<-chan ChatStreamResponse, error)
 }
 
-// StreamToken 流式响应的单个 token（已废弃，使用 ChatStreamResponse）
+// StreamToken 娴佸紡鍝嶅簲鐨勫崟涓?token锛堝凡搴熷純锛屼娇鐢?ChatStreamResponse锛?
 type StreamToken struct {
 	Delta     string
 	ToolCalls []ToolCall
@@ -25,29 +25,29 @@ type Reranker interface {
 	Rerank(ctx context.Context, query string, docs []string) ([]float32, error)
 }
 
-// ==================== 对接心流平台 API ====================
+// ==================== 瀵规帴蹇冩祦骞冲彴 API ====================
 
-// ---------- 请求结构 -----------------
+// ---------- 璇锋眰缁撴瀯 -----------------
 type ChatRequest struct {
-	Messages         []Message       `json:"messages"`                    // 必填
-	Model            string          `json:"model"`                       // 必填
-	FrequencyPenalty *float32        `json:"frequency_penalty,omitempty"` // 默认 0.5
-	MaxTokens        *int            `json:"max_tokens,omitempty"`        // 默认 512
-	N                *int            `json:"n,omitempty"`                 // 默认 1
-	ResponseFormat   *ResponseFormat `json:"response_format,omitempty"`   // 可选
+	Messages         []Message       `json:"messages"`                    // 蹇呭～
+	Model            string          `json:"model"`                       // 蹇呭～
+	FrequencyPenalty *float32        `json:"frequency_penalty,omitempty"` // 榛樿 0.5
+	MaxTokens        *int            `json:"max_tokens,omitempty"`        // 榛樿 512
+	N                *int            `json:"n,omitempty"`                 // 榛樿 1
+	ResponseFormat   *ResponseFormat `json:"response_format,omitempty"`   // 鍙€?
 	Stop             []string        `json:"stop,omitempty"`
-	Stream           bool            `json:"stream,omitempty"`      // 默认 false
-	Temperature      *float32        `json:"temperature,omitempty"` // 默认 0.7
+	Stream           bool            `json:"stream,omitempty"`      // 榛樿 false
+	Temperature      *float32        `json:"temperature,omitempty"` // 榛樿 0.7
 	Tools            []ToolDef       `json:"tools,omitempty"`
-	TopK             *float32        `json:"top_k,omitempty"` // 默认 50
-	TopP             *float32        `json:"top_p,omitempty"` // 默认 0.7
+	TopK             *float32        `json:"top_k,omitempty"` // 榛樿 50
+	TopP             *float32        `json:"top_p,omitempty"` // 榛樿 0.7
 }
 
 type Message struct {
 	Role       string     `json:"role"`                   // system/user/assistant/tool
-	Content    string     `json:"content"`                // 文本内容
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`   // 模型回复：role=assistant 时，LLM 返回的工具调用需求
-	ToolCallID string     `json:"tool_call_id,omitempty"` // role=tool 时，发给 llm 的工具调用结果，并表明ID，对应某次tool调用
+	Content    string     `json:"content"`                // 鏂囨湰鍐呭
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`   // 妯″瀷鍥炲锛歳ole=assistant 鏃讹紝LLM 杩斿洖鐨勫伐鍏疯皟鐢ㄩ渶姹?
+	ToolCallID string     `json:"tool_call_id,omitempty"` // role=tool 鏃讹紝鍙戠粰 llm 鐨勫伐鍏疯皟鐢ㄧ粨鏋滐紝骞惰〃鏄嶪D锛屽搴旀煇娆ool璋冪敤
 }
 
 type ResponseFormat struct {
@@ -63,11 +63,11 @@ type FunctionDef struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Parameters  json.RawMessage `json:"parameters"`       // JSON Schema
-	Strict      *bool           `json:"strict,omitempty"` // 默认 false
+	Strict      *bool           `json:"strict,omitempty"` // 榛樿 false
 }
 
-// -------------------- 响应结构 ------------------------
-// 非流式响应
+// -------------------- 鍝嶅簲缁撴瀯 ------------------------
+// 闈炴祦寮忓搷搴?
 type ChatResponse struct {
 	ID      string   `json:"id"`
 	Created int64    `json:"created"`
@@ -83,7 +83,7 @@ type Choice struct {
 	Message      Message `json:"message"`
 }
 
-// 流式响应
+// 娴佸紡鍝嶅簲
 type ChatStreamResponse struct {
 	ID      string                 `json:"id"`
 	Model   string                 `json:"model"`
@@ -92,7 +92,7 @@ type ChatStreamResponse struct {
 	Usage   *UsageObj              `json:"usage,omitempty"`
 	Choices []ProviderStreamChoice `json:"choices"`
 
-	// 暂时没用
+	// 鏆傛椂娌＄敤
 	ServiceTier       *string `json:"service_tier,omitempty"`
 	SystemFingerprint *string `json:"system_fingerprint"`
 }
@@ -115,13 +115,15 @@ type ProviderDelta struct {
 	Content string `json:"content,omitempty"`
 }
 
-// 工具调用定义
+// 宸ュ叿璋冪敤瀹氫箟
 type ToolCall struct {
 	Index    int    `json:"index,omitempty"`
-	ID       string `json:"id,omitempty"`   // 工具调用唯一标识
-	Type     string `json:"type,omitempty"` // 枚举: function
+	ID       string `json:"id,omitempty"`   // 宸ュ叿璋冪敤鍞竴鏍囪瘑
+	Type     string `json:"type,omitempty"` // 鏋氫妇: function
 	Function struct {
 		Name      string `json:"name,omitempty"`
 		Arguments string `json:"arguments,omitempty"` // JSON string
 	} `json:"function"`
 }
+
+

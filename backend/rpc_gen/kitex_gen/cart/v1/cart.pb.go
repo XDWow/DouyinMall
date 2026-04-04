@@ -9,8 +9,7 @@ import (
 )
 
 type CartItem struct {
-	// 跟购物车相关的字段
-	ProductId int64 `protobuf:"varint,1,opt,name=product_id" json:"product_id,omitempty"`
+	// 璺熻喘鐗╄溅鐩稿叧鐨勫瓧娈?	ProductId int64 `protobuf:"varint,1,opt,name=product_id" json:"product_id,omitempty"`
 	Quantity  int64 `protobuf:"varint,2,opt,name=quantity" json:"quantity,omitempty"`
 }
 
@@ -314,3 +313,5 @@ type CartService interface {
 	IncrementQty(ctx context.Context, req *IncrementQtyReq) (res *IncrementQtyResp, err error)
 	DecrementQty(ctx context.Context, req *DecrementQtyReq) (res *DecrementQtyResp, err error)
 }
+
+

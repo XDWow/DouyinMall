@@ -34,3 +34,5 @@ func (c *redisInventoryCache) Get(ctx context.Context, key string) (string, erro
 func (c *redisInventoryCache) Set(ctx context.Context, key string, value string, expiration time.Duration) (string, error) {
 	return c.cmd.Set(ctx, key, value, expiration).Result()
 }
+
+

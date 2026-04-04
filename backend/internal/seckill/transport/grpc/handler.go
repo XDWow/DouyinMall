@@ -101,3 +101,5 @@ func (h *Handler) GetSeckillResult(ctx context.Context, req *seckillv1.GetSeckil
 		FailReason: result.FailReason,
 	}, nil
 }
+
+

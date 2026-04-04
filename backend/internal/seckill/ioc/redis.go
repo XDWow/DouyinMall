@@ -12,3 +12,5 @@ func InitRedis() redis.Cmdable {
 	}
 	return redis.NewClient(&redis.Options{Addr: addr})
 }
+
+

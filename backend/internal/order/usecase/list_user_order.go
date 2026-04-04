@@ -26,17 +26,17 @@ func NewListUserOrderUseCase(
 
 type ListUserOrderCmd struct {
 	UserID int64
-	Cursor int64 // 上一页最后的orderID，首次查询传0
+	Cursor int64 // 涓婁竴椤垫渶鍚庣殑orderID锛岄娆℃煡璇紶0
 	Limit  int32
 }
 
 type ListUserOrderResult struct {
 	Orders     []*domain.Order
-	NextCursor int64 // 下一页的cursor，0表示没有更多数据
+	NextCursor int64 // 涓嬩竴椤电殑cursor锛?琛ㄧず娌℃湁鏇村鏁版嵁
 }
 
 func (uc *ListUserOrderUseCase) Execute(cmd ListUserOrderCmd) (*ListUserOrderResult, error) {
-	// cmd不可信，参数校验
+	// cmd涓嶅彲淇★紝鍙傛暟鏍￠獙
 	if cmd.UserID <= 0 || cmd.Cursor < 0 || cmd.Limit <= 0 {
 		return nil, errors.New("invalid list order query")
 	}
@@ -45,7 +45,7 @@ func (uc *ListUserOrderUseCase) Execute(cmd ListUserOrderCmd) (*ListUserOrderRes
 	defer cancel()
 	orders, nextCursor, err := uc.orderRepo.ListByUserID(ctx, cmd.UserID, cmd.Cursor, int(cmd.Limit))
 	if err != nil {
-		uc.log.Error("查询用户订单列表失败",
+		uc.log.Error("鏌ヨ鐢ㄦ埛璁㈠崟鍒楄〃澶辫触",
 			logger.Int64("userID", cmd.UserID),
 			logger.Int64("cursor", cmd.Cursor),
 			logger.Int32("limit", cmd.Limit),
@@ -57,3 +57,5 @@ func (uc *ListUserOrderUseCase) Execute(cmd ListUserOrderCmd) (*ListUserOrderRes
 		NextCursor: nextCursor,
 	}, nil
 }
+
+

@@ -230,3 +230,5 @@ func isDuplicate(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "1062") || strings.Contains(msg, "Duplicate entry")
 }
+
+

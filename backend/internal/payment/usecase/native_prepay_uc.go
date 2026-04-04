@@ -86,3 +86,5 @@ type PrePaymentCmd struct {
 	BizTradeNo  string
 	Description string
 }
+
+

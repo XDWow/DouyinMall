@@ -75,3 +75,5 @@ func (p *kInventoryServiceClient) AdjustStock(ctx context.Context, req *v1.Adjus
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.AdjustStock(ctx, req)
 }
+
+

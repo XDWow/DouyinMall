@@ -35,3 +35,5 @@ func (uc *GetResultUseCase) Execute(ctx context.Context, requestNo string) (*dom
 	_ = uc.cache.SetResult(ctx, *result)
 	return result, nil
 }
+
+

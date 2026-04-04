@@ -36,7 +36,7 @@ func (m *MerchantConsumer) Start() error {
 			[]string{topicSyncMerchant},
 			saramax.NewHandler(m.l, m.Consume))
 		if err != nil {
-			m.l.Error("退出了消费循环异常", logger.Error(err))
+			m.l.Error("閫€鍑轰簡娑堣垂寰幆寮傚父", logger.Error(err))
 		}
 	}()
 	return nil
@@ -49,3 +49,5 @@ func (m *MerchantConsumer) Consume(msg *sarama.ConsumerMessage, evt domain.SyncE
 	ctx := context.Background()
 	return m.syncUC.Sync(ctx, evt)
 }
+
+

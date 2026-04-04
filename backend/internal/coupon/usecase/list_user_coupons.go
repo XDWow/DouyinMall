@@ -28,7 +28,7 @@ type ListUserCouponsOutput struct {
 }
 
 func (uc *ListUserCouponsUseCase) Execute(ctx context.Context, input ListUserCouponsInput) (*ListUserCouponsOutput, error) {
-	// 校验参数
+	// 鏍￠獙鍙傛暟
 	if input.UserID <= 0 {
 		return nil, errors.New("invalid user_id")
 	}
@@ -42,3 +42,5 @@ func (uc *ListUserCouponsUseCase) Execute(ctx context.Context, input ListUserCou
 		Total:   total,
 	}, nil
 }
+
+

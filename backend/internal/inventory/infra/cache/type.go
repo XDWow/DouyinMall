@@ -6,22 +6,24 @@ import (
 )
 
 type InventoryCache interface {
-	// Lua 脚本执行（核心）
-	// 用于：ReserveStock、ReleaseStock 的原子操作
+	// Lua 鑴氭湰鎵ц锛堟牳蹇冿級
+	// 鐢ㄤ簬锛歊eserveStock銆丷eleaseStock 鐨勫師瀛愭搷浣?
 	Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error)
 
-	// Hash 批量读取
-	// 用于：RefundStock 批量读取预扣记录
-	// 批量一般返回：[]interface{} 对应fields的值，这样不存在的field返回nil，可以区分""和空
+	// Hash 鎵归噺璇诲彇
+	// 鐢ㄤ簬锛歊efundStock 鎵归噺璇诲彇棰勬墸璁板綍
+	// 鎵归噺涓€鑸繑鍥烇細[]interface{} 瀵瑰簲fields鐨勫€硷紝杩欐牱涓嶅瓨鍦ㄧ殑field杩斿洖nil锛屽彲浠ュ尯鍒?"鍜岀┖
 	HMGet(ctx context.Context, key string, fields ...string) ([]interface{}, error)
 
-	// 数值增加
-	// 用于：RefundStock 恢复Redis预库存
+	// 鏁板€煎鍔?
+	// 鐢ㄤ簬锛歊efundStock 鎭㈠Redis棰勫簱瀛?
 	IncrBy(ctx context.Context, key string, delta int32) (int64, error)
 
-	// 用于：CacheRepairJob 查询预库存
+	// 鐢ㄤ簬锛欳acheRepairJob 鏌ヨ棰勫簱瀛?
 	Get(ctx context.Context, key string) (string, error)
 
-	// 用于：CacheRepairJob 修复预库存
+	// 鐢ㄤ簬锛欳acheRepairJob 淇棰勫簱瀛?
 	Set(ctx context.Context, key string, value string, expiration time.Duration) (string, error)
 }
+
+

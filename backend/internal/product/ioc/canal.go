@@ -34,10 +34,10 @@ func InitCanalProducer(kafkaProducer sarama.SyncProducer, logger logger.LoggerV1
 	cfg.Addr = fmt.Sprintf("%s:%d", host, port)
 	cfg.User = user
 	cfg.Password = password
-	// 设置 server_id（用于 binlog replication，每个 Canal 实例需要唯一）
+	// 璁剧疆 server_id锛堢敤浜?binlog replication锛屾瘡涓?Canal 瀹炰緥闇€瑕佸敮涓€锛?
 	cfg.ServerID = uint32(viper.GetInt("canal.server_id"))
 	if cfg.ServerID == 0 {
-		cfg.ServerID = 1234 // 默认值
+		cfg.ServerID = 1234 // 榛樿鍊?
 	}
 	cfg.Dump.ExecutionPath = ""
 	cfg.Dump.TableDB = "DouyinMall"
@@ -46,8 +46,10 @@ func InitCanalProducer(kafkaProducer sarama.SyncProducer, logger logger.LoggerV1
 
 	canalProducer, err := prod.NewCanalProducer(cfg, kafkaProducer, logger, positionDao)
 	if err != nil {
-		panic(fmt.Errorf("初始化 Canal Producer 失败: %w", err))
+		panic(fmt.Errorf("鍒濆鍖?Canal Producer 澶辫触: %w", err))
 	}
 
 	return canalProducer
 }
+
+

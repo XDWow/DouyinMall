@@ -36,7 +36,7 @@ func (c *RedisCache) HSet(ctx context.Context, key, field string, value int64) e
 	return c.client.Expire(ctx, key, c.ttl).Err()
 }
 
-// HIncrBy 通过 Pipeline 对一个或多个 field 执行 HINCRBY +1，只需一次网络往返
+// HIncrBy 閫氳繃 Pipeline 瀵逛竴涓垨澶氫釜 field 鎵ц HINCRBY +1锛屽彧闇€涓€娆＄綉缁滃線杩?
 func (c *RedisCache) HIncrBy(ctx context.Context, key string, fields ...string) ([]int64, error) {
 	pipe := c.client.Pipeline()
 	cmds := make([]*redis.IntCmd, len(fields))
@@ -54,7 +54,7 @@ func (c *RedisCache) HIncrBy(ctx context.Context, key string, fields ...string) 
 	return result, nil
 }
 
-// HSetBatch 通过单条 HSET 命令批量写入多个 field-value（Redis 3.0+ 支持可变参数）
+// HSetBatch 閫氳繃鍗曟潯 HSET 鍛戒护鎵归噺鍐欏叆澶氫釜 field-value锛圧edis 3.0+ 鏀寔鍙彉鍙傛暟锛?
 func (c *RedisCache) HSetBatch(ctx context.Context, key string, fieldValues map[string]int64) error {
 	if len(fieldValues) == 0 {
 		return nil
@@ -85,8 +85,10 @@ func (c *RedisCache) DecrementIfGreaterThanOne(ctx context.Context, key, field s
 
 	newQty, ok := result.(int64)
 	if !ok || newQty < 0 {
-		return 0, fmt.Errorf("商品数量不能再减少了")
+		return 0, fmt.Errorf("鍟嗗搧鏁伴噺涓嶈兘鍐嶅噺灏戜簡")
 	}
 
 	return newQty, nil
 }
+
+

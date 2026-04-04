@@ -44,10 +44,12 @@ type KnowledgeItem struct {
 
 func (KnowledgeItem) TableName() string { return "knowledge_items" }
 
-// KnowledgeItemRow RAG 鍥炴煡缁撴灉 DTO
+// KnowledgeItemRow RAG 閸ョ偞鐓＄紒鎾寸亯 DTO
 type KnowledgeItemRow struct {
 	VectorID string
 	Title    string
 	Content  string
 	Category string
 }
+
+

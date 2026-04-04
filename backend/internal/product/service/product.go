@@ -39,26 +39,26 @@ func (svc *productService) GetProduct(ctx context.Context, id int64) (product do
 }
 
 func (svc *productService) CreateProduct(ctx context.Context, product domain.Product) (productID int64, err error) {
-	// 敏感词校验
+	// 鏁忔劅璇嶆牎楠?
 	if err := svc.checkSensitiveWords(ctx, product.Name, product.Description); err != nil {
-		svc.logger.Error("产品包含敏感词，创建失败")
+		svc.logger.Error("浜у搧鍖呭惈鏁忔劅璇嶏紝鍒涘缓澶辫触")
 		return 0, err
 	}
 	if len(product.Picture) != 0 || len(product.SlideImgs) != 0 {
-		// 上传一下 照片，轮播图
+		// 涓婁紶涓€涓?鐓х墖锛岃疆鎾浘
 	}
 	return svc.repo.CreateProduct(ctx, product)
 }
 
 func (svc *productService) UpdateProduct(ctx context.Context, product domain.Product) (productID int64, err error) {
-	// 敏感词校验（只校验非空字段）
+	// 鏁忔劅璇嶆牎楠岋紙鍙牎楠岄潪绌哄瓧娈碉級
 	if err := svc.checkSensitiveWords(ctx, product.Name, product.Description); err != nil {
-		svc.logger.Error("产品包含敏感词，创建失败")
+		svc.logger.Error("浜у搧鍖呭惈鏁忔劅璇嶏紝鍒涘缓澶辫触")
 		return 0, err
 	}
 
 	if len(product.Picture) != 0 || len(product.SlideImgs) != 0 {
-		// 更新照片，轮播图
+		// 鏇存柊鐓х墖锛岃疆鎾浘
 	}
 	return svc.repo.UpdateProduct(ctx, product)
 }
@@ -68,9 +68,11 @@ func (svc *productService) DeleteProduct(ctx context.Context, id, userID int64) 
 }
 
 func (svc *productService) checkSensitiveWords(ctx context.Context, productName string, productDescription string) error {
-	// 后面搞 ai 检测
-	if strings.ContainsAny(productName, "敏感词") || strings.ContainsAny(productDescription, "敏感词") {
-		return fmt.Errorf("产品名字或描述存在敏感词汇！")
+	// 鍚庨潰鎼?ai 妫€娴?
+	if strings.ContainsAny(productName, "鏁忔劅璇?) || strings.ContainsAny(productDescription, "鏁忔劅璇?) {
+		return fmt.Errorf("浜у搧鍚嶅瓧鎴栨弿杩板瓨鍦ㄦ晱鎰熻瘝姹囷紒")
 	}
 	return nil
 }
+
+

@@ -5,7 +5,7 @@ import (
 	searchv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/search/v1"
 )
 
-// ==================== Proto → Domain ====================
+// ==================== Proto 鈫?Domain ====================
 
 func toDomainSearchProductsReq(req *searchv1.SearchProductsReq) *domain.SearchProductsReq {
 	return &domain.SearchProductsReq{
@@ -25,7 +25,7 @@ func toDomainSearchMerchantsReq(req *searchv1.SearchMerchantsReq) *domain.Search
 	}
 }
 
-// ==================== Domain → Proto ====================
+// ==================== Domain 鈫?Proto ====================
 
 func toProtoProductList(products []domain.ProductSearchResult) []*searchv1.ProductSearchResult {
 	res := make([]*searchv1.ProductSearchResult, len(products))
@@ -89,3 +89,5 @@ func toProtoPriceRangeAggList(aggs []domain.PriceRangeAggregation) []*searchv1.P
 	}
 	return res
 }
+
+

@@ -76,8 +76,8 @@ const (
 	OrderActionRefund   = orderv1.ChangeOrderAction_CHANGE_ORDER_ACTION_REFUND
 )
 
-var ErrInvalidStatusTransition = errors.New("无效的订单状态流转")
-var ErrOrderStatusUnchanged = errors.New("订单状态未变化")
+var ErrInvalidStatusTransition = errors.New("鏃犳晥鐨勮鍗曠姸鎬佹祦杞?)
+var ErrOrderStatusUnchanged = errors.New("璁㈠崟鐘舵€佹湭鍙樺寲")
 
 func (o *Order) Pay() error {
 	if o.Status == OrderStatusPaid {
@@ -138,3 +138,5 @@ func (o *Order) Refund() error {
 	o.Status = OrderStatusRefunded
 	return nil
 }
+
+

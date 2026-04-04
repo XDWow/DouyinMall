@@ -60,3 +60,5 @@ func TestOrderCommandsAreIdempotentOnSameTargetState(t *testing.T) {
 	require.ErrorIs(t, err, domain.ErrOrderStatusUnchanged)
 	require.Equal(t, domain.OrderStatusCanceled, order.Status)
 }
+
+

@@ -108,3 +108,5 @@ func (mr *MockProductRepoMockRecorder) UpdateProduct(ctx, product any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProduct", reflect.TypeOf((*MockProductRepo)(nil).UpdateProduct), ctx, product)
 }
 
+
+

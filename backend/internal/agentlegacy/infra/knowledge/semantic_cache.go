@@ -14,15 +14,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// SemanticCacheImpl 浜岀骇璇箟缂撳瓨锛歊edis hash + Milvus 灏忛泦鍚?
-// 娴佺▼锛歟mbedding 鈫?Milvus 鏌ヨ繎浼煎悜閲?鈫?鍛戒腑涓斿垎鏁?> 闃堝€?鈫?Redis 鍙栧洖澶?
+// SemanticCacheImpl 娴滃瞼楠囩拠顓濈疅缂傛挸鐡ㄩ敍姝奺dis hash + Milvus 鐏忓繘娉﹂崥?
+// 濞翠胶鈻奸敍姝焟bedding 閳?Milvus 閺屻儴绻庢导鐓庢倻闁?閳?閸涙垝鑵戞稉鏂垮瀻閺?> 闂冨牆鈧?閳?Redis 閸欐牕娲栨径?
 type SemanticCacheImpl struct {
 	rdb       redis.Cmdable
 	milvus    MilvusClient
 	logger    logger.LoggerV1
-	threshold float32       // 鍚戦噺鐩镐技搴﹂槇鍊硷紝榛樿 0.95
-	ttl       time.Duration // Redis 缂撳瓨杩囨湡鏃堕棿
-}
+	threshold float32       // 閸氭垿鍣洪惄闀愭妧鎼达箓妲囬崐纭风礉姒涙顓?0.95
+	ttl       time.Duration // Redis 缂傛挸鐡ㄦ潻鍥ㄦ埂閺冨爼妫?}
 
 func NewSemanticCache(
 	rdb redis.Cmdable,
@@ -48,9 +47,8 @@ func vectorHash(vector []float32) string {
 	return fmt.Sprintf("%x", h[:8])
 }
 
-// Lookup 璇箟缂撳瓨鏌ユ壘
-// 1. vector 鈫?Milvus agent_semantic_cache 闆嗗悎鏌?Top-1
-// 2. 鍒嗘暟 > threshold 鈫?鐢ㄥ懡涓殑 ID 鍘?Redis 鍙栫紦瀛樺洖澶?
+// Lookup 鐠囶厺绠熺紓鎾崇摠閺屻儲澹?// 1. vector 閳?Milvus agent_semantic_cache 闂嗗棗鎮庨弻?Top-1
+// 2. 閸掑棙鏆?> threshold 閳?閻劌鎳℃稉顓犳畱 ID 閸?Redis 閸欐牜绱︾€涙ê娲栨径?
 func (c *SemanticCacheImpl) Lookup(ctx context.Context, vector []float32) (string, bool) {
 	hits, err := c.milvus.Search(ctx, CollectionCache, vector, 1)
 	if err != nil || len(hits) == 0 {
@@ -62,33 +60,34 @@ func (c *SemanticCacheImpl) Lookup(ctx context.Context, vector []float32) (strin
 		return "", false
 	}
 
-	// 浠?Redis 鍙栫紦瀛樺洖澶?
+	// 娴?Redis 閸欐牜绱︾€涙ê娲栨径?
 	reply, err := c.rdb.Get(ctx, c.cacheKey(hit.ID)).Result()
 	if err != nil {
-		// Milvus 鏈変絾 Redis 杩囨湡浜嗭紝涓嶇畻鍛戒腑
+		// Milvus 閺堝绲?Redis 鏉╁洦婀℃禍鍡礉娑撳秶鐣婚崨鎴掕厬
 		return "", false
 	}
 
-	c.logger.Debug("璇箟缂撳瓨鍛戒腑",
+	c.logger.Debug("鐠囶厺绠熺紓鎾崇摠閸涙垝鑵?,
 		logger.String("vector_id", hit.ID),
 		logger.Float64("score", float64(hit.Score)))
 	return reply, true
 }
 
-// Store 瀛樺叆璇箟缂撳瓨
-// 1. vector 鈫?Milvus agent_semantic_cache 闆嗗悎鍐欏叆
-// 2. ID 鈫?Redis 瀛樺洖澶嶆枃鏈?
+// Store 鐎涙ê鍙嗙拠顓濈疅缂傛挸鐡?// 1. vector 閳?Milvus agent_semantic_cache 闂嗗棗鎮庨崘娆忓弳
+// 2. ID 閳?Redis 鐎涙ê娲栨径宥嗘瀮閺?
 func (c *SemanticCacheImpl) Store(ctx context.Context, vector []float32, reply string) {
 	id := vectorHash(vector)
 
-	// 鍐?Milvus
+	// 閸?Milvus
 	if err := c.milvus.Insert(ctx, CollectionCache, id, vector, nil); err != nil {
-		c.logger.Warn("璇箟缂撳瓨鍐?Milvus 澶辫触", logger.Error(err))
+		c.logger.Warn("鐠囶厺绠熺紓鎾崇摠閸?Milvus 婢惰精瑙?, logger.Error(err))
 		return
 	}
 
-	// 鍐?Redis
+	// 閸?Redis
 	if err := c.rdb.Set(ctx, c.cacheKey(id), reply, c.ttl).Err(); err != nil {
-		c.logger.Warn("璇箟缂撳瓨鍐?Redis 澶辫触", logger.Error(err))
+		c.logger.Warn("鐠囶厺绠熺紓鎾崇摠閸?Redis 婢惰精瑙?, logger.Error(err))
 	}
 }
+
+

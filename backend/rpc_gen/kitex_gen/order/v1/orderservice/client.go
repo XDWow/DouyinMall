@@ -65,3 +65,5 @@ func (p *kOrderServiceClient) ListOrder(ctx context.Context, Req *v1.ListOrderRe
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ListOrder(ctx, Req)
 }
+
+

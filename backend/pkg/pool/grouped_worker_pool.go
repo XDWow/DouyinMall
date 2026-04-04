@@ -31,7 +31,7 @@ func NewGroupedWorkerPool(numWorkers, queueSize int, handler TaskHandler) *Group
 		queueSize = 1024
 	}
 	if handler == nil {
-		panic("TaskHandler 为空")
+		panic("TaskHandler 涓虹┖")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -56,7 +56,7 @@ func NewGroupedWorkerPool(numWorkers, queueSize int, handler TaskHandler) *Group
 func (p *GroupedWorkerPool) Submit(task GroupedTask) error {
 	select {
 	case <-p.ctx.Done():
-		return errors.New("协程池关闭")
+		return errors.New("鍗忕▼姹犲叧闂?)
 	default:
 	}
 
@@ -67,7 +67,7 @@ func (p *GroupedWorkerPool) Submit(task GroupedTask) error {
 
 	select {
 	case <-p.ctx.Done():
-		return errors.New("协程池关闭")
+		return errors.New("鍗忕▼姹犲叧闂?)
 	case p.workerChs[workerID] <- task:
 		return nil
 	}
@@ -91,7 +91,9 @@ func (p *GroupedWorkerPool) worker(workerID int) {
 }
 
 func (p *GroupedWorkerPool) Shutdown() {
-	// 优雅关闭：先通知，再等待到所有协程真的退出
+	// 浼橀泤鍏抽棴锛氬厛閫氱煡锛屽啀绛夊緟鍒版墍鏈夊崗绋嬬湡鐨勯€€鍑?
 	p.cancel()
 	p.wg.Wait()
 }
+
+

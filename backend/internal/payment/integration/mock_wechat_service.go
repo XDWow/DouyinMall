@@ -10,8 +10,8 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/payment/domain"
 )
 
-// MockWechatNativeService 实现 domain.WechatNativeService 接口
-// 它通过 HTTP 调用 Mock 微信服务器
+// MockWechatNativeService 瀹炵幇 domain.WechatNativeService 鎺ュ彛
+// 瀹冮€氳繃 HTTP 璋冪敤 Mock 寰俊鏈嶅姟鍣?
 type MockWechatNativeService struct {
 	baseURL string
 	client  *http.Client
@@ -25,7 +25,7 @@ func NewMockWechatNativeService(baseURL string) *MockWechatNativeService {
 }
 
 func (m *MockWechatNativeService) Prepay(ctx context.Context, req domain.PrepayRequest) (string, error) {
-	// 构建请求体
+	// 鏋勫缓璇锋眰浣?
 	body := map[string]interface{}{
 		"appid":        req.AppID,
 		"mchid":        req.MchID,
@@ -43,7 +43,7 @@ func (m *MockWechatNativeService) Prepay(ctx context.Context, req domain.PrepayR
 		return "", fmt.Errorf("marshal request body failed: %w", err)
 	}
 
-	// 调用 Mock 服务器
+	// 璋冪敤 Mock 鏈嶅姟鍣?
 	url := m.baseURL + "/v3/pay/transactions/native"
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
 	if err != nil {
@@ -112,3 +112,5 @@ func (m *MockWechatNativeService) QueryOrderByOutTradeNo(ctx context.Context, ou
 		},
 	}, nil
 }
+
+

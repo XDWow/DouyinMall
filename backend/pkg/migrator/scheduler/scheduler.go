@@ -16,8 +16,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Scheduler 用来统一管理整个迁移过程
-// 它不是必须的，你可以理解为这是为了方便用户操作（和你理解）而引入的。
+// Scheduler 鐢ㄦ潵缁熶竴绠＄悊鏁翠釜杩佺Щ杩囩▼
+// 瀹冧笉鏄繀椤荤殑锛屼綘鍙互鐞嗚В涓鸿繖鏄负浜嗘柟渚跨敤鎴锋搷浣滐紙鍜屼綘鐞嗚В锛夎€屽紩鍏ョ殑銆?
 type Scheduler[T migrator.Entity] struct {
 	lock     sync.Mutex
 	src      *gorm.DB
@@ -49,11 +49,11 @@ func NewScheduler[T migrator.Entity](
 	}
 }
 
-// 这一个也不是必须的，就是你可以考虑利用配置中心，监听配置中心的变化
-// 把全量校验，增量校验做成分布式任务，利用分布式任务调度平台来调度
+// 杩欎竴涓篃涓嶆槸蹇呴』鐨勶紝灏辨槸浣犲彲浠ヨ€冭檻鍒╃敤閰嶇疆涓績锛岀洃鍚厤缃腑蹇冪殑鍙樺寲
+// 鎶婂叏閲忔牎楠岋紝澧為噺鏍￠獙鍋氭垚鍒嗗竷寮忎换鍔★紝鍒╃敤鍒嗗竷寮忎换鍔¤皟搴﹀钩鍙版潵璋冨害
 func (s *Scheduler[T]) RegisterRoutes(server *gin.RouterGroup) {
-	// 将这个暴露为 HTTP 接口
-	// 你可以配上对应的 UI
+	// 灏嗚繖涓毚闇蹭负 HTTP 鎺ュ彛
+	// 浣犲彲浠ラ厤涓婂搴旂殑 UI
 	server.POST("/src_only", ginx.Wrap(s.SrcOnly))
 	server.POST("/src_first", ginx.Wrap(s.SrcFirst))
 	server.POST("/dst_first", ginx.Wrap(s.DstFirst))
@@ -64,9 +64,9 @@ func (s *Scheduler[T]) RegisterRoutes(server *gin.RouterGroup) {
 	server.POST("/incr/start", ginx.WrapReq[StartIncrRequest](s.StartIncrValidation))
 }
 
-// ---- 下面是四个阶段 ---- //
-// 切换的实质是改变 connpool 的操作：修改 pattern
-// SrcOnly 只读写源表
+// ---- 涓嬮潰鏄洓涓樁娈?---- //
+// 鍒囨崲鐨勫疄璐ㄦ槸鏀瑰彉 connpool 鐨勬搷浣滐細淇敼 pattern
+// SrcOnly 鍙鍐欐簮琛?
 func (s *Scheduler[T]) SrcOnly(c *gin.Context) (ginx.Result, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -112,11 +112,11 @@ func (s *Scheduler[T]) DstOnly(c *gin.Context) (ginx.Result, error) {
 }
 
 func (s *Scheduler[T]) StartFullValidation(c *gin.Context) (ginx.Result, error) {
-	// 这里锁大有用处
-	// 与切换方法共享这个锁，保证了在校验时无法切换模式，一定程度上保护了数据正确性
+	// 杩欓噷閿佸ぇ鏈夌敤澶?
+	// 涓庡垏鎹㈡柟娉曞叡浜繖涓攣锛屼繚璇佷簡鍦ㄦ牎楠屾椂鏃犳硶鍒囨崲妯″紡锛屼竴瀹氱▼搴︿笂淇濇姢浜嗘暟鎹纭€?
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	// 准备取消上一次的ctx，释放资源
+	// 鍑嗗鍙栨秷涓婁竴娆＄殑ctx锛岄噴鏀捐祫婧?
 	cancel := s.cancelFull
 	v, err := s.newValidator()
 	if err != nil {
@@ -124,12 +124,12 @@ func (s *Scheduler[T]) StartFullValidation(c *gin.Context) (ginx.Result, error) 
 	}
 	var ctx context.Context
 	ctx, s.cancelFull = context.WithCancel(context.Background())
-	// 异步校验，主线程返回结果
+	// 寮傛鏍￠獙锛屼富绾跨▼杩斿洖缁撴灉
 	go func() {
 		cancel()
 		err := v.Validate(ctx)
 		if err != nil {
-			s.l.Warn("退出全量校验", logger.Error(err))
+			s.l.Warn("閫€鍑哄叏閲忔牎楠?, logger.Error(err))
 		}
 	}()
 	return ginx.Result{
@@ -149,32 +149,32 @@ func (s *Scheduler[T]) StopFullValidation(c *gin.Context) (ginx.Result, error) {
 }
 
 func (s *Scheduler[T]) StartIncrValidation(c *gin.Context, req StartIncrRequest) (ginx.Result, error) {
-	// 这里锁大有用处
-	// 1、防止多个线程过来都开启校验，人家搞到一半，你再来一起校验没意义，或者取消别人的校验也不行
-	// 2、与切换方法共享这个锁，保证了在校验时无法切换模式，一定程度上保护了数据正确性
+	// 杩欓噷閿佸ぇ鏈夌敤澶?
+	// 1銆侀槻姝㈠涓嚎绋嬭繃鏉ラ兘寮€鍚牎楠岋紝浜哄鎼炲埌涓€鍗婏紝浣犲啀鏉ヤ竴璧锋牎楠屾病鎰忎箟锛屾垨鑰呭彇娑堝埆浜虹殑鏍￠獙涔熶笉琛?
+	// 2銆佷笌鍒囨崲鏂规硶鍏变韩杩欎釜閿侊紝淇濊瘉浜嗗湪鏍￠獙鏃舵棤娉曞垏鎹㈡ā寮忥紝涓€瀹氱▼搴︿笂淇濇姢浜嗘暟鎹纭€?
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	// 准备取消上一次的ctx，释放资源
+	// 鍑嗗鍙栨秷涓婁竴娆＄殑ctx锛岄噴鏀捐祫婧?
 	cancel := s.cancelFull
 	v, err := s.newValidator()
 	if err != nil {
 		return ginx.Result{}, err
 	}
-	// 修改模式为增量校验，并传入utime,SleepInterval
+	// 淇敼妯″紡涓哄閲忔牎楠岋紝骞朵紶鍏time,SleepInterval
 	v.Incr().Utime(req.Utime).SleepInterval(time.Duration(req.Interval) * time.Millisecond)
 	var ctx context.Context
 	ctx, s.cancelFull = context.WithCancel(context.Background())
-	// 异步校验，主线程返回结果
+	// 寮傛鏍￠獙锛屼富绾跨▼杩斿洖缁撴灉
 	go func() {
 		cancel()
 		err := v.Validate(ctx)
 		if err != nil {
-			s.l.Warn("退出增量校验", logger.Error(err))
+			s.l.Warn("閫€鍑哄閲忔牎楠?, logger.Error(err))
 		}
 	}()
 	return ginx.Result{
 		Code: 200,
-		Msg:  "启动增量校验成功",
+		Msg:  "鍚姩澧為噺鏍￠獙鎴愬姛",
 	}, nil
 }
 
@@ -201,7 +201,9 @@ func (s *Scheduler[T]) newValidator() (*validator.Validator[T], error) {
 
 type StartIncrRequest struct {
 	Utime int64 `json:"utime"`
-	// 毫秒数
-	// json 不能正确处理 time.Duration 类型
+	// 姣鏁?
+	// json 涓嶈兘姝ｇ‘澶勭悊 time.Duration 绫诲瀷
 	Interval int64 `json:"interval"`
 }
+
+

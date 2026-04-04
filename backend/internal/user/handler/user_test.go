@@ -12,12 +12,12 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// stringPtr 返回字符串指针
+// stringPtr 杩斿洖瀛楃涓叉寚閽?
 func stringPtr(s string) *string {
 	return &s
 }
 
-// MockUserService 是 service.UserService 的 mock 实现
+// MockUserService 鏄?service.UserService 鐨?mock 瀹炵幇
 type MockUserService struct {
 	SignupFunc         func(ctx context.Context, user domain.User) (int64, error)
 	LoginFunc          func(ctx context.Context, email, password string) (int64, error)
@@ -72,7 +72,7 @@ func TestUserServiceServer_Signup(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功注册",
+			name: "鎴愬姛娉ㄥ唽",
 			req: &userv1.SignupReq{
 				Email:    "test@example.com",
 				Password: "password123",
@@ -87,7 +87,7 @@ func TestUserServiceServer_Signup(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "注册失败-邮箱重复",
+			name: "娉ㄥ唽澶辫触-閭閲嶅",
 			req: &userv1.SignupReq{
 				Email:    "duplicate@example.com",
 				Password: "password123",
@@ -127,7 +127,7 @@ func TestUserServiceServer_Login(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功登录",
+			name: "鎴愬姛鐧诲綍",
 			req: &userv1.LoginReq{
 				Email:    "test@example.com",
 				Password: "password123",
@@ -142,7 +142,7 @@ func TestUserServiceServer_Login(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "登录失败-用户不存在或密码错误",
+			name: "鐧诲綍澶辫触-鐢ㄦ埛涓嶅瓨鍦ㄦ垨瀵嗙爜閿欒",
 			req: &userv1.LoginReq{
 				Email:    "notfound@example.com",
 				Password: "wrongpassword",
@@ -188,7 +188,7 @@ func TestUserServiceServer_Query(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功获取用户信息",
+			name: "鎴愬姛鑾峰彇鐢ㄦ埛淇℃伅",
 			req: &userv1.QueryUserReq{
 				UserId: 1,
 			},
@@ -201,7 +201,7 @@ func TestUserServiceServer_Query(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "用户不存在",
+			name: "鐢ㄦ埛涓嶅瓨鍦?,
 			req: &userv1.QueryUserReq{
 				UserId: 999,
 			},
@@ -242,7 +242,7 @@ func TestUserServiceServer_UpdateProfile(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功更新",
+			name: "鎴愬姛鏇存柊",
 			req: &userv1.UpdateProfileReq{
 				UserId:   1,
 				Username: stringPtr("NewUserName"),
@@ -257,7 +257,7 @@ func TestUserServiceServer_UpdateProfile(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "用户不存在",
+			name: "鐢ㄦ埛涓嶅瓨鍦?,
 			req: &userv1.UpdateProfileReq{
 				UserId:   999,
 				Username: stringPtr("NewUserName"),
@@ -296,7 +296,7 @@ func TestUserServiceServer_ChangePassword(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功修改密码",
+			name: "鎴愬姛淇敼瀵嗙爜",
 			req: &userv1.ChangePasswordReq{
 				UserId:      1,
 				OldPassword: "oldpassword",
@@ -313,7 +313,7 @@ func TestUserServiceServer_ChangePassword(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "旧密码错误",
+			name: "鏃у瘑鐮侀敊璇?,
 			req: &userv1.ChangePasswordReq{
 				UserId:      1,
 				OldPassword: "wrongpassword",
@@ -353,7 +353,7 @@ func TestUserServiceServer_ChangeEmail(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功修改邮箱",
+			name: "鎴愬姛淇敼閭",
 			req: &userv1.ChangeEmailReq{
 				UserId:   1,
 				Password: "password",
@@ -370,7 +370,7 @@ func TestUserServiceServer_ChangeEmail(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "密码错误",
+			name: "瀵嗙爜閿欒",
 			req: &userv1.ChangeEmailReq{
 				UserId:   1,
 				Password: "wrongpassword",
@@ -410,7 +410,7 @@ func TestUserServiceServer_Delete(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功删除",
+			name: "鎴愬姛鍒犻櫎",
 			req: &userv1.DeleteUserReq{
 				UserId:   1,
 				Password: "password",
@@ -425,7 +425,7 @@ func TestUserServiceServer_Delete(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "密码错误",
+			name: "瀵嗙爜閿欒",
 			req: &userv1.DeleteUserReq{
 				UserId:   1,
 				Password: "wrongpassword",
@@ -452,3 +452,5 @@ func TestUserServiceServer_Delete(t *testing.T) {
 		})
 	}
 }
+
+

@@ -18,12 +18,12 @@ func main() {
 
 	for i, consumer := range app.Consumers {
 		if err := consumer.Start(); err != nil {
-			log.Fatalf("Consumer %d 启动失败: %v", i+1, err)
+			log.Fatalf("Consumer %d 鍚姩澶辫触: %v", i+1, err)
 		}
-		log.Printf("Consumer %d 已启动", i+1)
+		log.Printf("Consumer %d 宸插惎鍔?, i+1)
 	}
 
-	// 启动 gRPC Server（阻塞）
+	// 鍚姩 gRPC Server锛堥樆濉烇級
 	if err := app.Server.Run(); err != nil {
 		log.Fatalf("server run error: %v", err)
 	}
@@ -31,21 +31,23 @@ func main() {
 
 func initViperWatch() {
 	cfile := pflag.String("config",
-		"internal/search/config/dev.yaml", "配置文件路径")
+		"internal/search/config/dev.yaml", "閰嶇疆鏂囦欢璺緞")
 	pflag.Parse()
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("读取配置文件失败: %w", err))
+		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w", err))
 	}
 
-	// 支持环境变量覆盖配置文件（环境变量优先）
+	// 鏀寔鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢锛堢幆澧冨彉閲忎紭鍏堬級
 	viper.AutomaticEnv()
 
-	// 手动绑定环境变量到配置键
+	// 鎵嬪姩缁戝畾鐜鍙橀噺鍒伴厤缃敭
 	viper.BindEnv("elasticsearch.addresses", "ES_ADDRESSES")
 	viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
 	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	viper.BindEnv("grpc.server.port", "GRPC_PORT")
 	viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 }
+
+

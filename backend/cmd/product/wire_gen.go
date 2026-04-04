@@ -38,7 +38,7 @@ func InitApp() *App {
 
 // wire.go:
 
-// newApp 组装 App
+// newApp 缁勮 App
 func newApp(svr server.Server, p producer.Producer) *App {
 	return &App{
 		Server: svr,
@@ -47,3 +47,5 @@ func newApp(svr server.Server, p producer.Producer) *App {
 		},
 	}
 }
+
+

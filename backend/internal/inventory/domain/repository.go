@@ -10,3 +10,5 @@ type InventoryRepository interface {
 	RefundStock(ctx context.Context, operationID string) error
 	AdjustStock(ctx context.Context, operationID string, reason string, changes []StockChange) error
 }
+
+

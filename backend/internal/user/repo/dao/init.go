@@ -7,3 +7,4 @@ func InitTables(db *gorm.DB) error {
 		&User{},
 	)
 }
+

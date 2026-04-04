@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-// 初始化 Product Service RPC 客户端（用于批量同步数据）
+// 鍒濆鍖?Product Service RPC 瀹㈡埛绔紙鐢ㄤ簬鎵归噺鍚屾鏁版嵁锛?
 func InitProductClient() productservice.Client {
-	// 初始化 etcd 服务发现
+	// 鍒濆鍖?etcd 鏈嶅姟鍙戠幇
 	endpoints := viper.GetStringSlice("etcd.endpoints")
 	if len(endpoints) == 0 {
 		if ep := viper.GetString("etcd.endpoints"); ep != "" {
@@ -21,17 +21,19 @@ func InitProductClient() productservice.Client {
 
 	r, err := etcd.NewEtcdResolver(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("创建 etcd 服务发现失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓 etcd 鏈嶅姟鍙戠幇澶辫触: %w", err))
 	}
 
-	// 创建 Product Service 客户端
+	// 鍒涘缓 Product Service 瀹㈡埛绔?
 	productClient, err := productservice.NewClient(
-		"product-service", // 服务名称，需要与 Product Service 注册的名称一致
+		"product-service", // 鏈嶅姟鍚嶇О锛岄渶瑕佷笌 Product Service 娉ㄥ唽鐨勫悕绉颁竴鑷?
 		client.WithResolver(r),
 	)
 	if err != nil {
-		panic(fmt.Errorf("创建 Product Service RPC 客户端失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓 Product Service RPC 瀹㈡埛绔け璐? %w", err))
 	}
 
 	return productClient
 }
+
+

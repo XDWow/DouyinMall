@@ -10,16 +10,16 @@ import (
 	productv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1"
 )
 
-// IDGenerator 订单ID生成器（雪花ID）
+// IDGenerator 璁㈠崟ID鐢熸垚鍣紙闆姳ID锛?
 type IDGenerator interface {
 	GenerateOrderID() int64
 }
 
-// ==================== Proto → Domain 转换 ====================
+// ==================== Proto 鈫?Domain 杞崲 ====================
 
-// buildOrderLines 将前端传入的 CheckoutItem 与 Product 详情合并为 OrderLine，
-// 直接在构建时分流：可购买的放 available，失效的放 unavailable。
-// InStock 作为可购买判断，库存数量的强校验在 PlaceOrder.ReserveStock 里做。
+// buildOrderLines 灏嗗墠绔紶鍏ョ殑 CheckoutItem 涓?Product 璇︽儏鍚堝苟涓?OrderLine锛?
+// 鐩存帴鍦ㄦ瀯寤烘椂鍒嗘祦锛氬彲璐拱鐨勬斁 available锛屽け鏁堢殑鏀?unavailable銆?
+// InStock 浣滀负鍙喘涔板垽鏂紝搴撳瓨鏁伴噺鐨勫己鏍￠獙鍦?PlaceOrder.ReserveStock 閲屽仛銆?
 func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Product) (available, unavailable []domain.OrderLine) {
 	prodMap := make(map[int64]*productv1.Product, len(protoProducts))
 	for _, p := range protoProducts {
@@ -33,7 +33,7 @@ func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Pro
 				ProductID:     item.ProductID,
 				Quantity:      item.Quantity,
 				Available:     false,
-				UnavailReason: "商品不存在",
+				UnavailReason: "鍟嗗搧涓嶅瓨鍦?,
 			})
 			continue
 		}
@@ -47,7 +47,7 @@ func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Pro
 				Quantity:      item.Quantity,
 				Subtotal:      p.Price * item.Quantity,
 				Available:     false,
-				UnavailReason: "商品已下架",
+				UnavailReason: "鍟嗗搧宸蹭笅鏋?,
 			})
 			continue
 		}
@@ -65,7 +65,7 @@ func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Pro
 	return
 }
 
-// toCouponOrderItems 从 OrderLine 提取 coupon 服务要求的 OrderItem
+// toCouponOrderItems 浠?OrderLine 鎻愬彇 coupon 鏈嶅姟瑕佹眰鐨?OrderItem
 func toCouponOrderItems(lines []domain.OrderLine) []*couponv1.OrderItem {
 	result := make([]*couponv1.OrderItem, 0, len(lines))
 	for _, l := range lines {
@@ -81,10 +81,10 @@ func toCouponOrderItems(lines []domain.OrderLine) []*couponv1.OrderItem {
 	return result
 }
 
-// toCouponOptions 将 UserCoupon 列表转为 domain CouponOption，含每行摊分的优惠金额。
-// lines 只包含 Available=true 的订单行，用于按比例分配折扣。
+// toCouponOptions 灏?UserCoupon 鍒楄〃杞负 domain CouponOption锛屽惈姣忚鎽婂垎鐨勪紭鎯犻噾棰濄€?
+// lines 鍙寘鍚?Available=true 鐨勮鍗曡锛岀敤浜庢寜姣斾緥鍒嗛厤鎶樻墸銆?
 func toCouponOptions(coupons []*couponv1.UserCoupon, lines []domain.OrderLine) []domain.CouponOption {
-	// 计算可用行的商品总价
+	// 璁＄畻鍙敤琛岀殑鍟嗗搧鎬讳环
 	var productTotal int64
 	for _, l := range lines {
 		if l.Available {
@@ -109,17 +109,17 @@ func toCouponOptions(coupons []*couponv1.UserCoupon, lines []domain.OrderLine) [
 	return result
 }
 
-// calculateCouponDiscount 根据券模板类型计算总优惠金额
+// calculateCouponDiscount 鏍规嵁鍒告ā鏉跨被鍨嬭绠楁€讳紭鎯犻噾棰?
 func calculateCouponDiscount(tmpl *couponv1.CouponTemplate, productTotal int64) int64 {
 	switch tmpl.Type {
-	case couponv1.CouponType_COUPON_TYPE_AMOUNT: // 满减
+	case couponv1.CouponType_COUPON_TYPE_AMOUNT: // 婊″噺
 		if productTotal >= tmpl.Threshold {
 			return tmpl.DiscountValue
 		}
 		return 0
-	case couponv1.CouponType_COUPON_TYPE_FIXED: // 立减
+	case couponv1.CouponType_COUPON_TYPE_FIXED: // 绔嬪噺
 		return tmpl.DiscountValue
-	case couponv1.CouponType_COUPON_TYPE_PERCENT: // 折扣，如 DiscountValue=80 表示8折
+	case couponv1.CouponType_COUPON_TYPE_PERCENT: // 鎶樻墸锛屽 DiscountValue=80 琛ㄧず8鎶?
 		discount := productTotal * (100 - tmpl.DiscountValue) / 100
 		if tmpl.MaxDiscount > 0 && discount > tmpl.MaxDiscount {
 			discount = tmpl.MaxDiscount
@@ -130,8 +130,8 @@ func calculateCouponDiscount(tmpl *couponv1.CouponTemplate, productTotal int64) 
 	}
 }
 
-// allocateDiscountToLines 按订单行小计比例分配总折扣，余数归最贵的行（避免舍入丢分）。
-// 返回 map[ProductID]discountAmount。
+// allocateDiscountToLines 鎸夎鍗曡灏忚姣斾緥鍒嗛厤鎬绘姌鎵ｏ紝浣欐暟褰掓渶璐电殑琛岋紙閬垮厤鑸嶅叆涓㈠垎锛夈€?
+// 杩斿洖 map[ProductID]discountAmount銆?
 func allocateDiscountToLines(lines []domain.OrderLine, totalDiscount, productTotal int64) map[int64]int64 {
 	if totalDiscount == 0 || productTotal == 0 {
 		return nil
@@ -146,18 +146,18 @@ func allocateDiscountToLines(lines []domain.OrderLine, totalDiscount, productTot
 		if !l.Available {
 			continue
 		}
-		// 按比例：lineDiscount = totalDiscount * lineSubtotal / productTotal
+		// 鎸夋瘮渚嬶細lineDiscount = totalDiscount * lineSubtotal / productTotal
 		lineDiscount := totalDiscount * l.Subtotal / productTotal
 		result[l.ProductID] = lineDiscount
 		allocated += lineDiscount
-		// 记录小计最大的行，用于接收余数
+		// 璁板綍灏忚鏈€澶х殑琛岋紝鐢ㄤ簬鎺ユ敹浣欐暟
 		if l.Subtotal > maxSubtotal {
 			maxSubtotal = l.Subtotal
 			maxProductID = l.ProductID
 		}
 	}
 
-	// 余数（舍入误差）归最贵的行
+	// 浣欐暟锛堣垗鍏ヨ宸級褰掓渶璐电殑琛?
 	if remainder := totalDiscount - allocated; remainder > 0 && maxProductID != 0 {
 		result[maxProductID] += remainder
 	}
@@ -165,7 +165,7 @@ func allocateDiscountToLines(lines []domain.OrderLine, totalDiscount, productTot
 	return result
 }
 
-// toInventoryStockItems 将 CheckoutItem 转为 inventory 服务的 StockItem
+// toInventoryStockItems 灏?CheckoutItem 杞负 inventory 鏈嶅姟鐨?StockItem
 func toInventoryStockItems(items []domain.CheckoutItem) []*inventoryv1.StockItem {
 	result := make([]*inventoryv1.StockItem, 0, len(items))
 	for _, item := range items {
@@ -177,7 +177,7 @@ func toInventoryStockItems(items []domain.CheckoutItem) []*inventoryv1.StockItem
 	return result
 }
 
-// toOrderAddress 将 domain Address 转为 order proto Address
+// toOrderAddress 灏?domain Address 杞负 order proto Address
 func toOrderAddress(addr domain.Address) *orderv1.Address {
 	return &orderv1.Address{
 		StreetAddress: addr.Street,
@@ -188,7 +188,7 @@ func toOrderAddress(addr domain.Address) *orderv1.Address {
 	}
 }
 
-// toOrderItems 将 OrderLine 转为 order proto OrderItem
+// toOrderItems 灏?OrderLine 杞负 order proto OrderItem
 func toOrderItems(lines []domain.OrderLine, currency string) []*orderv1.OrderItem {
 	result := make([]*orderv1.OrderItem, 0, len(lines))
 	for _, line := range lines {
@@ -204,13 +204,13 @@ func toOrderItems(lines []domain.OrderLine, currency string) []*orderv1.OrderIte
 			Quantity:         line.Quantity,
 			SnapshotPrice:    line.Price,
 			SnapshotCurrency: snapCurrency,
-			ConvertedPrice:   line.Price, // TODO: 汇率转换
+			ConvertedPrice:   line.Price, // TODO: 姹囩巼杞崲
 		})
 	}
 	return result
 }
 
-// ==================== 通用辅助函数 ====================
+// ==================== 閫氱敤杈呭姪鍑芥暟 ====================
 
 func extractProductIDs(items []domain.CheckoutItem) []int64 {
 	ids := make([]int64, 0, len(items))
@@ -220,7 +220,7 @@ func extractProductIDs(items []domain.CheckoutItem) []int64 {
 	return ids
 }
 
-// sumSelectedCouponDiscount 汇总用户选中的优惠券的折扣金额
+// sumSelectedCouponDiscount 姹囨€荤敤鎴烽€変腑鐨勪紭鎯犲埜鐨勬姌鎵ｉ噾棰?
 func sumSelectedCouponDiscount(coupons []domain.CouponOption, selectedIDs []int64) int64 {
 	selectedSet := make(map[int64]struct{}, len(selectedIDs))
 	for _, id := range selectedIDs {
@@ -235,13 +235,13 @@ func sumSelectedCouponDiscount(coupons []domain.CouponOption, selectedIDs []int6
 	return total
 }
 
-// operationID 生成库存操作的幂等ID
+// operationID 鐢熸垚搴撳瓨鎿嶄綔鐨勫箓绛塈D
 func operationID(orderID int64, action string) string {
 	return fmt.Sprintf("order_%d_%s", orderID, action)
 }
 
-// toInsufficientStockError 将 inventory 服务返回的库存不足明细转为 domain 结构化错误。
-// lines 用于补充商品名称（proto 只有 product_id）。
+// toInsufficientStockError 灏?inventory 鏈嶅姟杩斿洖鐨勫簱瀛樹笉瓒虫槑缁嗚浆涓?domain 缁撴瀯鍖栭敊璇€?
+// lines 鐢ㄤ簬琛ュ厖鍟嗗搧鍚嶇О锛坧roto 鍙湁 product_id锛夈€?
 func toInsufficientStockError(items []*inventoryv1.InsufficientItem, lines []domain.OrderLine) *domain.InsufficientStockError {
 	nameMap := make(map[int64]string, len(lines))
 	for _, l := range lines {
@@ -260,7 +260,7 @@ func toInsufficientStockError(items []*inventoryv1.InsufficientItem, lines []dom
 	return &domain.InsufficientStockError{Items: result}
 }
 
-// toCouponUnavailableError 将 coupon 服务返回的失败明细转为 domain 结构化错误。
+// toCouponUnavailableError 灏?coupon 鏈嶅姟杩斿洖鐨勫け璐ユ槑缁嗚浆涓?domain 缁撴瀯鍖栭敊璇€?
 func toCouponUnavailableError(failures []*couponv1.CouponFailure) *domain.CouponUnavailableError {
 	items := make([]domain.CouponFailureItem, len(failures))
 	for i, f := range failures {
@@ -271,3 +271,5 @@ func toCouponUnavailableError(failures []*couponv1.CouponFailure) *domain.Coupon
 	}
 	return &domain.CouponUnavailableError{Failures: items}
 }
+
+

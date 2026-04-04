@@ -16,7 +16,7 @@ import (
 type Server struct {
 	*grpc.Server
 	Port int
-	// ETCD 服务注册租约 TTL
+	// ETCD 鏈嶅姟娉ㄥ唽绉熺害 TTL
 	EtcdTTL     int64
 	EtcdClient  *clientv3.Client
 	etcdManager endpoints.Manager
@@ -26,10 +26,10 @@ type Server struct {
 	L           logger.LoggerV1
 }
 
-// Serve 启动服务器并且阻塞
+// Serve 鍚姩鏈嶅姟鍣ㄥ苟涓旈樆濉?
 func (s *Server) Serve() error {
-	// 初始化一个控制整个过程的 ctx
-	// 你也可以考虑让外面传进来，这样的话就是 main 函数自己去控制了
+	// 鍒濆鍖栦竴涓帶鍒舵暣涓繃绋嬬殑 ctx
+	// 浣犱篃鍙互鑰冭檻璁╁闈紶杩涙潵锛岃繖鏍风殑璇濆氨鏄?main 鍑芥暟鑷繁鍘绘帶鍒朵簡
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 	port := strconv.Itoa(s.Port)
@@ -37,7 +37,7 @@ func (s *Server) Serve() error {
 	if err != nil {
 		return err
 	}
-	// 要先确保启动成功，再注册服务，这里是服务发现
+	// 瑕佸厛纭繚鍚姩鎴愬姛锛屽啀娉ㄥ唽鏈嶅姟锛岃繖閲屾槸鏈嶅姟鍙戠幇
 	err = s.register(ctx, port)
 	if err != nil {
 		return err
@@ -45,7 +45,7 @@ func (s *Server) Serve() error {
 	return s.Server.Serve(l)
 }
 
-// 服务注册
+// 鏈嶅姟娉ㄥ唽
 func (s *Server) register(ctx context.Context, port string) error {
 	cli := s.EtcdClient
 	serviceName := "service/" + s.Name
@@ -61,18 +61,18 @@ func (s *Server) register(ctx context.Context, port string) error {
 	if err != nil {
 		return err
 	}
-	// 开启续约，可通过 ctx 来控制续约，也就控制了服务注册
+	// 寮€鍚画绾︼紝鍙€氳繃 ctx 鏉ユ帶鍒剁画绾︼紝涔熷氨鎺у埗浜嗘湇鍔℃敞鍐?
 	ch, err := cli.KeepAlive(ctx, leaseResp.ID)
 	if err != nil {
 		return err
 	}
 	go func() {
-		// 可以预期，当我们的 cancel 被调用的时候，就会退出这个循环
+		// 鍙互棰勬湡锛屽綋鎴戜滑鐨?cancel 琚皟鐢ㄧ殑鏃跺€欙紝灏变細閫€鍑鸿繖涓惊鐜?
 		for chResp := range ch {
-			s.L.Debug("续约：", logger.String("resp", chResp.String()))
+			s.L.Debug("缁害锛?, logger.String("resp", chResp.String()))
 		}
 	}()
-	// metadata 我们这里没啥要提供的
+	// metadata 鎴戜滑杩欓噷娌″暐瑕佹彁渚涚殑
 	return em.AddEndpoint(ctx, s.etcdKey, endpoints.Endpoint{Addr: addr}, clientv3.WithLease(leaseResp.ID))
 }
 
@@ -93,3 +93,5 @@ func (s *Server) Close() error {
 	s.Server.GracefulStop()
 	return nil
 }
+
+

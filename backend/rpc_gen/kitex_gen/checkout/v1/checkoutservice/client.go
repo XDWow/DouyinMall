@@ -59,3 +59,5 @@ func (p *kCheckoutServiceClient) PayOrder(ctx context.Context, Req *v1.PayOrderR
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.PayOrder(ctx, Req)
 }
+
+

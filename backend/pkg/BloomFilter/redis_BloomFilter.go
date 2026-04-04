@@ -4,7 +4,7 @@ import (
 	"math"
 )
 
-// 布隆过滤器结构体
+// 甯冮殕杩囨护鍣ㄧ粨鏋勪綋
 type BloomFilter struct {
 	m    uint64 // (number of bits)
 	k    uint64 // (number of hash functions)
@@ -24,7 +24,7 @@ func NewBloomFilter(expectedN uint64, falsePositiveRate float64) *BloomFilter {
 	}
 }
 
-// estimateParameters 根据预期的元素数量n和误报率p计算最佳的m和k
+// estimateParameters 鏍规嵁棰勬湡鐨勫厓绱犳暟閲弉鍜岃鎶ョ巼p璁＄畻鏈€浣崇殑m鍜宬
 // m = - (n * ln(p)) / (ln(2))^2
 // k = (m / n) * ln(2)
 func estimateParameters(n uint64, p float64) (m uint64, k uint64) {
@@ -42,3 +42,5 @@ func estimateParameters(n uint64, p float64) (m uint64, k uint64) {
 	}
 	return
 }
+
+

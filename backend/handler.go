@@ -43,3 +43,5 @@ func (s *SearchServiceImpl) AISearchProducts(ctx context.Context, req *v1.AISear
 	// TODO: Your code here...
 	return
 }
+
+

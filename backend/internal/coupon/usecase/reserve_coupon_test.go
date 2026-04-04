@@ -87,3 +87,5 @@ func (s *stubCouponRepository) UpdateStatusByOrderID(context.Context, int64, dom
 func (s *stubCouponRepository) MarkExpiredCoupons(context.Context) (int64, error) {
 	panic("unexpected call")
 }
+
+

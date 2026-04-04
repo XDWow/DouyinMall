@@ -39,11 +39,11 @@ func (b *MiddlewareBuilder) Build() gin.HandlerFunc {
 		}
 		al := &AccessLog{
 			Method: ctx.Request.Method,
-			// URL 本身也可能很长
+			// URL 鏈韩涔熷彲鑳藉緢闀?
 			Url: url,
 		}
 		if b.allowReqBody && ctx.Request.Body != nil {
-			// Body 读完就没有了
+			// Body 璇诲畬灏辨病鏈変簡
 			body, _ := ctx.GetRawData()
 			reader := io.NopCloser(bytes.NewReader(body))
 			ctx.Request.Body = reader
@@ -54,8 +54,8 @@ func (b *MiddlewareBuilder) Build() gin.HandlerFunc {
 			if len(body) > 1024 {
 				body = body[:1024]
 			}
-			// 这其实是一个很消耗 CPU 和内存的操作
-			// 因为会引起复制
+			// 杩欏叾瀹炴槸涓€涓緢娑堣€?CPU 鍜屽唴瀛樼殑鎿嶄綔
+			// 鍥犱负浼氬紩璧峰鍒?
 			al.ReqBody = string(body)
 		}
 
@@ -71,7 +71,7 @@ func (b *MiddlewareBuilder) Build() gin.HandlerFunc {
 			b.loggerFunc(ctx, al)
 		}()
 
-		// 执行到业务逻辑
+		// 鎵ц鍒颁笟鍔￠€昏緫
 		ctx.Next()
 	}
 }
@@ -97,12 +97,14 @@ func (w responseWriter) WriteString(data string) (int, error) {
 }
 
 type AccessLog struct {
-	// HTTP 请求的方法
+	// HTTP 璇锋眰鐨勬柟娉?
 	Method string
-	// Url 整个请求 URL
+	// Url 鏁翠釜璇锋眰 URL
 	Url      string
 	Duration string
 	ReqBody  string
 	RespBody string
 	Status   int
 }
+
+

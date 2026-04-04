@@ -34,7 +34,7 @@ func NewGORMProductDao(db *gorm.DB) ProductDao {
 func (d *GORMProductDao) ListProducts(ctx context.Context, page, pageSize int64, category string) (products []Product, err error) {
 	query := d.db.WithContext(ctx).Model(&Product{})
 
-	// 只看有货
+	// 鍙湅鏈夎揣
 	query = query.Where("in_stock = ?", true)
 
 	if category != "" {
@@ -86,32 +86,34 @@ func (d *GORMProductDao) Delete(ctx context.Context, id, userID int64) (err erro
 }
 
 type Product struct {
-	ID int64 `gorm:"primaryKey;autoIncrement;comment:商品ID"`
+	ID int64 `gorm:"primaryKey;autoIncrement;comment:鍟嗗搧ID"`
 
-	// GORM 自动管理的时间字段
-	CreatedAt time.Time      `gorm:"autoCreateTime;comment:创建时间"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime;comment:更新时间"`
-	DeletedAt gorm.DeletedAt `gorm:"index;comment:删除时间(软删除)"`
+	// GORM 鑷姩绠＄悊鐨勬椂闂村瓧娈?
+	CreatedAt time.Time      `gorm:"autoCreateTime;comment:鍒涘缓鏃堕棿"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime;comment:鏇存柊鏃堕棿"`
+	DeletedAt gorm.DeletedAt `gorm:"index;comment:鍒犻櫎鏃堕棿(杞垹闄?"`
 
-	Name       string `gorm:"type:varchar(255);not null;index;comment:商品名称"`
-	Price      int64  `gorm:"type:bigint;not null;default:0;comment:商品价格(分)"`
-	InStock    bool   `gorm:"type:boolean;not null;default:true;comment:是否有货(来自库存服务事件)"`
-	MerchantID int64  `gorm:"type:bigint;not null;index;comment:商家ID"`
+	Name       string `gorm:"type:varchar(255);not null;index;comment:鍟嗗搧鍚嶇О"`
+	Price      int64  `gorm:"type:bigint;not null;default:0;comment:鍟嗗搧浠锋牸(鍒?"`
+	InStock    bool   `gorm:"type:boolean;not null;default:true;comment:鏄惁鏈夎揣(鏉ヨ嚜搴撳瓨鏈嶅姟浜嬩欢)"`
+	MerchantID int64  `gorm:"type:bigint;not null;index;comment:鍟嗗ID"`
 
-	Description  sql.NullString `gorm:"type:text;comment:商品描述"`
-	Picture      sql.NullString `gorm:"type:varchar(512);comment:商品主图URL"`
-	SlideImgs    string         `gorm:"type:json;comment:商品轮播图URL列表(JSON数组)"`
-	Categories   string         `gorm:"type:json;comment:商品分类名称列表(JSON数组)"`
-	MerchantName sql.NullString `gorm:"type:varchar(255);comment:商家名称(冗余字段)"`
+	Description  sql.NullString `gorm:"type:text;comment:鍟嗗搧鎻忚堪"`
+	Picture      sql.NullString `gorm:"type:varchar(512);comment:鍟嗗搧涓诲浘URL"`
+	SlideImgs    string         `gorm:"type:json;comment:鍟嗗搧杞挱鍥綰RL鍒楄〃(JSON鏁扮粍)"`
+	Categories   string         `gorm:"type:json;comment:鍟嗗搧鍒嗙被鍚嶇О鍒楄〃(JSON鏁扮粍)"`
+	MerchantName sql.NullString `gorm:"type:varchar(255);comment:鍟嗗鍚嶇О(鍐椾綑瀛楁)"`
 
-	// ========== 扩展字段（可选）==========
-	// Status 商品状态：上架/下架/审核中等
-	// Status int8 `gorm:"type:tinyint;not null;default:1;comment:商品状态(1:上架 2:下架 3:审核中)"`
+	// ========== 鎵╁睍瀛楁锛堝彲閫夛級==========
+	// Status 鍟嗗搧鐘舵€侊細涓婃灦/涓嬫灦/瀹℃牳涓瓑
+	// Status int8 `gorm:"type:tinyint;not null;default:1;comment:鍟嗗搧鐘舵€?1:涓婃灦 2:涓嬫灦 3:瀹℃牳涓?"`
 
-	// Sort 排序权重：用于商品列表排序
-	// Sort int64 `gorm:"type:bigint;not null;default:0;comment:排序权重"`
+	// Sort 鎺掑簭鏉冮噸锛氱敤浜庡晢鍝佸垪琛ㄦ帓搴?
+	// Sort int64 `gorm:"type:bigint;not null;default:0;comment:鎺掑簭鏉冮噸"`
 }
 
 func (Product) TableName() string {
 	return "product"
 }
+
+

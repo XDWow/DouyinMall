@@ -35,8 +35,10 @@ func (uc *GetOrderUseCase) Execute(ctx context.Context, cmd GetOrderCmd) (*domai
 
 	order, err := uc.orderRepo.FindByID(c, cmd.OrderID)
 	if err != nil {
-		uc.log.Error("查询订单失败", logger.Int64("orderID", cmd.OrderID), logger.Error(err))
+		uc.log.Error("鏌ヨ璁㈠崟澶辫触", logger.Int64("orderID", cmd.OrderID), logger.Error(err))
 		return nil, err
 	}
 	return &order, nil
 }
+
+

@@ -45,14 +45,14 @@ type CouponIntegrationSuite struct {
 	// Job
 	expireJob *job.ExpireCouponJob
 
-	// 测试数据
+	// 娴嬭瘯鏁版嵁
 	testUserID     int64
 	testTemplateID int64
 }
 
 func TestCouponIntegration(t *testing.T) {
 	if testing.Short() {
-		t.Skip("跳过集成测试（短模式）")
+		t.Skip("璺宠繃闆嗘垚娴嬭瘯锛堢煭妯″紡锛?)
 	}
 	suite.Run(t, new(CouponIntegrationSuite))
 }
@@ -60,7 +60,7 @@ func TestCouponIntegration(t *testing.T) {
 func (s *CouponIntegrationSuite) SetupSuite() {
 	ctx := context.Background()
 
-	// 启动 MySQL 容器
+	// 鍚姩 MySQL 瀹瑰櫒
 	mysqlReq := testcontainers.ContainerRequest{
 		Image:        "mysql:8.0",
 		ExposedPorts: []string{"3306/tcp"},
@@ -86,7 +86,7 @@ func (s *CouponIntegrationSuite) SetupSuite() {
 
 	dsn := "root:root@tcp(" + mysqlHost + ":" + mysqlPort.Port() + ")/coupon_test?charset=utf8mb4&parseTime=True&loc=Local"
 
-	// 重试连接MySQL
+	// 閲嶈瘯杩炴帴MySQL
 	var gormDB *gorm.DB
 	for i := 0; i < 10; i++ {
 		gormDB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
@@ -103,17 +103,17 @@ func (s *CouponIntegrationSuite) SetupSuite() {
 	require.NoError(s.T(), err)
 	s.db = gormDB
 
-	// 自动迁移表结构
+	// 鑷姩杩佺Щ琛ㄧ粨鏋?
 	err = db.InitTables(gormDB)
 	require.NoError(s.T(), err)
 
-	// 初始化组件
+	// 鍒濆鍖栫粍浠?
 	testLogger := logger.NewNopLogger()
 	s.couponRepo = repository.NewCouponRepository(gormDB, testLogger)
 	s.templateRepo = repository.NewCouponTemplateRepository(gormDB, testLogger)
 	s.operationRepo = repository.NewCouponOperationRepository(gormDB, testLogger)
 
-	// 初始化 UseCase
+	// 鍒濆鍖?UseCase
 	s.issueCouponUC = usecase.NewIssueCouponUseCase(
 		s.templateRepo,
 		s.couponRepo,
@@ -126,13 +126,13 @@ func (s *CouponIntegrationSuite) SetupSuite() {
 	s.releaseUC = usecase.NewReleaseCouponUseCase(s.couponRepo)
 	s.refundUC = usecase.NewRefundCouponUseCase(s.couponRepo)
 
-	// 初始化 Job
+	// 鍒濆鍖?Job
 	s.expireJob = job.NewExpireCouponJob(s.couponRepo, testLogger)
 
-	// 测试数据
+	// 娴嬭瘯鏁版嵁
 	s.testUserID = 12345
 
-	s.T().Log("✅ 测试环境初始化完成")
+	s.T().Log("鉁?娴嬭瘯鐜鍒濆鍖栧畬鎴?)
 }
 
 func (s *CouponIntegrationSuite) TearDownSuite() {
@@ -140,34 +140,34 @@ func (s *CouponIntegrationSuite) TearDownSuite() {
 	if s.mysqlContainer != nil {
 		s.mysqlContainer.Terminate(ctx)
 	}
-	s.T().Log("✅ 测试环境清理完成")
+	s.T().Log("鉁?娴嬭瘯鐜娓呯悊瀹屾垚")
 }
 
 func (s *CouponIntegrationSuite) SetupTest() {
-	// 每个测试前清理数据
+	// 姣忎釜娴嬭瘯鍓嶆竻鐞嗘暟鎹?
 	s.db.Exec("TRUNCATE TABLE coupons")
 	s.db.Exec("TRUNCATE TABLE coupon_templates")
 	s.db.Exec("TRUNCATE TABLE coupon_operations")
 
-	// 创建测试优惠券模板
+	// 鍒涘缓娴嬭瘯浼樻儬鍒告ā鏉?
 	s.createTestTemplate()
 }
 
 func (s *CouponIntegrationSuite) createTestTemplate() {
 	now := time.Now()
 	template := &db.CouponTemplate{
-		Name:           "测试满减券",
-		Description:    "满100减20",
-		CouponType:     1, // 满减券
+		Name:           "娴嬭瘯婊″噺鍒?,
+		Description:    "婊?00鍑?0",
+		CouponType:     1, // 婊″噺鍒?
 		DiscountValue:  2000,
 		MinOrderAmount: ptrInt32(10000),
-		ValidType:      1, // 固定时间
+		ValidType:      1, // 鍥哄畾鏃堕棿
 		ValidStartTime: &now,
 		ValidEndTime:   ptrTime(now.Add(7 * 24 * time.Hour)),
 		TotalCount:     100,
 		IssuedCount:    0,
 		PerUserLimit:   3,
-		Status:         1, // 启用
+		Status:         1, // 鍚敤
 	}
 
 	err := s.db.Create(template).Error
@@ -175,13 +175,13 @@ func (s *CouponIntegrationSuite) createTestTemplate() {
 	s.testTemplateID = template.ID
 }
 
-// ==================== 测试用例 ====================
+// ==================== 娴嬭瘯鐢ㄤ緥 ====================
 
-// TestIssueCoupon_Success 测试成功发放优惠券
+// TestIssueCoupon_Success 娴嬭瘯鎴愬姛鍙戞斁浼樻儬鍒?
 func (s *CouponIntegrationSuite) TestIssueCoupon_Success() {
 	ctx := context.Background()
 
-	// 发放优惠券
+	// 鍙戞斁浼樻儬鍒?
 	output, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      s.testUserID,
 		TemplateID:  s.testTemplateID,
@@ -191,22 +191,22 @@ func (s *CouponIntegrationSuite) TestIssueCoupon_Success() {
 	require.NoError(s.T(), err)
 	assert.NotZero(s.T(), output.CouponID)
 
-	// 验证券已创建
+	// 楠岃瘉鍒稿凡鍒涘缓
 	coupons, total, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusUnused, 1, 10)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int32(1), total)
 	assert.Equal(s.T(), output.CouponID, coupons[0].ID)
 	assert.Equal(s.T(), domain.UserCouponStatusUnused, coupons[0].Status)
 
-	s.T().Log("✅ 发放优惠券测试通过")
+	s.T().Log("鉁?鍙戞斁浼樻儬鍒告祴璇曢€氳繃")
 }
 
-// TestIssueCoupon_Idempotent 测试幂等发放
+// TestIssueCoupon_Idempotent 娴嬭瘯骞傜瓑鍙戞斁
 func (s *CouponIntegrationSuite) TestIssueCoupon_Idempotent() {
 	ctx := context.Background()
 	operationID := "coupon:test:user_12345_template_1_idempotent"
 
-	// 第一次发放
+	// 绗竴娆″彂鏀?
 	output1, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      s.testUserID,
 		TemplateID:  s.testTemplateID,
@@ -214,7 +214,7 @@ func (s *CouponIntegrationSuite) TestIssueCoupon_Idempotent() {
 	})
 	require.NoError(s.T(), err)
 
-	// 第二次发放（相同operationID）
+	// 绗簩娆″彂鏀撅紙鐩稿悓operationID锛?
 	output2, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      s.testUserID,
 		TemplateID:  s.testTemplateID,
@@ -222,23 +222,23 @@ func (s *CouponIntegrationSuite) TestIssueCoupon_Idempotent() {
 	})
 	require.NoError(s.T(), err)
 
-	// 应该返回相同的券ID
+	// 搴旇杩斿洖鐩稿悓鐨勫埜ID
 	assert.Equal(s.T(), output1.CouponID, output2.CouponID)
 
-	// 验证只有一张券
+	// 楠岃瘉鍙湁涓€寮犲埜
 	_, total, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusUnused, 1, 10)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int32(1), total)
 
-	s.T().Log("✅ 幂等发放测试通过")
+	s.T().Log("鉁?骞傜瓑鍙戞斁娴嬭瘯閫氳繃")
 }
 
-// TestCouponLifecycle_ReserveAndCommit 测试预扣-确认流程
+// TestCouponLifecycle_ReserveAndCommit 娴嬭瘯棰勬墸-纭娴佺▼
 func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAndCommit() {
 	ctx := context.Background()
 	orderID := int64(99999)
 
-	// 1. 发放优惠券
+	// 1. 鍙戞斁浼樻儬鍒?
 	output, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      s.testUserID,
 		TemplateID:  s.testTemplateID,
@@ -247,7 +247,7 @@ func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAndCommit() {
 	require.NoError(s.T(), err)
 	couponID := output.CouponID
 
-	// 2. 预扣优惠券（模拟下单）
+	// 2. 棰勬墸浼樻儬鍒革紙妯℃嫙涓嬪崟锛?
 	reserveOutput, err := s.reserveUC.Execute(ctx, usecase.ReserveCouponInput{
 		UserID:    s.testUserID,
 		CouponIDs: []int64{couponID},
@@ -257,32 +257,32 @@ func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAndCommit() {
 	assert.True(s.T(), reserveOutput.Success)
 	assert.Equal(s.T(), 1, reserveOutput.ReservedCount)
 
-	// 验证券状态为Locked
+	// 楠岃瘉鍒哥姸鎬佷负Locked
 	coupons, _, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusLocked, 1, 10)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(coupons))
 	assert.Equal(s.T(), orderID, coupons[0].OrderID)
 
-	// 3. 确认核销（模拟支付成功）
+	// 3. 纭鏍搁攢锛堟ā鎷熸敮浠樻垚鍔燂級
 	err = s.commitUC.Execute(ctx, usecase.CommitCouponInput{
 		OrderID: orderID,
 	})
 	require.NoError(s.T(), err)
 
-	// 验证券状态为Used
+	// 楠岃瘉鍒哥姸鎬佷负Used
 	usedCoupons, _, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusUsed, 1, 10)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(usedCoupons))
 
-	s.T().Log("✅ 预扣-确认流程测试通过")
+	s.T().Log("鉁?棰勬墸-纭娴佺▼娴嬭瘯閫氳繃")
 }
 
-// TestCouponLifecycle_ReserveAndRelease 测试预扣-释放流程
+// TestCouponLifecycle_ReserveAndRelease 娴嬭瘯棰勬墸-閲婃斁娴佺▼
 func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAndRelease() {
 	ctx := context.Background()
 	orderID := int64(88888)
 
-	// 1. 发放优惠券
+	// 1. 鍙戞斁浼樻儬鍒?
 	output, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      s.testUserID,
 		TemplateID:  s.testTemplateID,
@@ -291,7 +291,7 @@ func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAndRelease() {
 	require.NoError(s.T(), err)
 	couponID := output.CouponID
 
-	// 2. 预扣优惠券
+	// 2. 棰勬墸浼樻儬鍒?
 	_, err = s.reserveUC.Execute(ctx, usecase.ReserveCouponInput{
 		UserID:    s.testUserID,
 		CouponIDs: []int64{couponID},
@@ -299,28 +299,28 @@ func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAndRelease() {
 	})
 	require.NoError(s.T(), err)
 
-	// 3. 释放优惠券（模拟订单取消）
+	// 3. 閲婃斁浼樻儬鍒革紙妯℃嫙璁㈠崟鍙栨秷锛?
 	err = s.releaseUC.Execute(ctx, usecase.ReleaseCouponInput{
 		OrderID: orderID,
 	})
 	require.NoError(s.T(), err)
 
-	// 验证券状态恢复为Unused
+	// 楠岃瘉鍒哥姸鎬佹仮澶嶄负Unused
 	coupons, _, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusUnused, 1, 10)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(coupons))
 	assert.Equal(s.T(), int64(0), coupons[0].OrderID)
 	assert.True(s.T(), coupons[0].UsedAt.IsZero())
 
-	s.T().Log("✅ 预扣-释放流程测试通过")
+	s.T().Log("鉁?棰勬墸-閲婃斁娴佺▼娴嬭瘯閫氳繃")
 }
 
-// TestCouponLifecycle_CommitAndRefund 测试确认-退还流程
+// TestCouponLifecycle_CommitAndRefund 娴嬭瘯纭-閫€杩樻祦绋?
 func (s *CouponIntegrationSuite) TestCouponLifecycle_CommitAndRefund() {
 	ctx := context.Background()
 	orderID := int64(77777)
 
-	// 1. 发放 -> 预扣 -> 确认
+	// 1. 鍙戞斁 -> 棰勬墸 -> 纭
 	output, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      s.testUserID,
 		TemplateID:  s.testTemplateID,
@@ -340,23 +340,23 @@ func (s *CouponIntegrationSuite) TestCouponLifecycle_CommitAndRefund() {
 	})
 	require.NoError(s.T(), err)
 
-	// 2. 退还优惠券（模拟订单退款）
+	// 2. 閫€杩樹紭鎯犲埜锛堟ā鎷熻鍗曢€€娆撅級
 	err = s.refundUC.Execute(ctx, usecase.RefundCouponInput{
 		OrderID: orderID,
 	})
 	require.NoError(s.T(), err)
 
-	// 验证券状态恢复为Unused
+	// 楠岃瘉鍒哥姸鎬佹仮澶嶄负Unused
 	coupons, _, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusUnused, 1, 10)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(coupons))
 	assert.Equal(s.T(), int64(0), coupons[0].OrderID)
 	assert.True(s.T(), coupons[0].UsedAt.IsZero())
 
-	s.T().Log("✅ 确认-退还流程测试通过")
+	s.T().Log("鉁?纭-閫€杩樻祦绋嬫祴璇曢€氳繃")
 }
 
-// TestEvaluateOrderCoupons 测试评估订单可用券
+// TestEvaluateOrderCoupons 娴嬭瘯璇勪及璁㈠崟鍙敤鍒?
 func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAllOrNothing() {
 	ctx := context.Background()
 	orderID := int64(66666)
@@ -406,7 +406,7 @@ func (s *CouponIntegrationSuite) TestCouponLifecycle_ReserveAllOrNothing() {
 func (s *CouponIntegrationSuite) TestEvaluateOrderCoupons() {
 	ctx := context.Background()
 
-	// 1. 发放优惠券
+	// 1. 鍙戞斁浼樻儬鍒?
 	_, err := s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      s.testUserID,
 		TemplateID:  s.testTemplateID,
@@ -414,45 +414,45 @@ func (s *CouponIntegrationSuite) TestEvaluateOrderCoupons() {
 	})
 	require.NoError(s.T(), err)
 
-	// 2. 评估订单（满足门槛：100元）
+	// 2. 璇勪及璁㈠崟锛堟弧瓒抽棬妲涳細100鍏冿級
 	output, err := s.evaluateUC.Execute(ctx, usecase.EvaluateOrderCouponsInput{
 		UserID: s.testUserID,
 		Items: []domain.OrderItem{
-			{ProductID: 1, CategoryID: 1, Subtotal: 10000}, // 100元
+			{ProductID: 1, CategoryID: 1, Subtotal: 10000}, // 100鍏?
 		},
 	})
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(output.Coupons))
 	assert.True(s.T(), output.Coupons[0].Usable)
 
-	// 3. 评估订单（不满足门槛：50元）
+	// 3. 璇勪及璁㈠崟锛堜笉婊¤冻闂ㄦ锛?0鍏冿級
 	output2, err := s.evaluateUC.Execute(ctx, usecase.EvaluateOrderCouponsInput{
 		UserID: s.testUserID,
 		Items: []domain.OrderItem{
-			{ProductID: 1, CategoryID: 1, Subtotal: 5000}, // 50元
+			{ProductID: 1, CategoryID: 1, Subtotal: 5000}, // 50鍏?
 		},
 	})
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(output2.Coupons))
 	assert.False(s.T(), output2.Coupons[0].Usable)
-	assert.Contains(s.T(), output2.Coupons[0].Reason, "门槛")
+	assert.Contains(s.T(), output2.Coupons[0].Reason, "闂ㄦ")
 
-	s.T().Log("✅ 评估订单可用券测试通过")
+	s.T().Log("鉁?璇勪及璁㈠崟鍙敤鍒告祴璇曢€氳繃")
 }
 
-// TestExpireCouponJob 测试过期券扫描
+// TestExpireCouponJob 娴嬭瘯杩囨湡鍒告壂鎻?
 func (s *CouponIntegrationSuite) TestExpireCouponJob() {
 	ctx := context.Background()
 
-	// 1. 创建已过期的模板
+	// 1. 鍒涘缓宸茶繃鏈熺殑妯℃澘
 	pastTime := time.Now().Add(-24 * time.Hour)
 	expiredTemplate := &db.CouponTemplate{
-		Name:           "已过期券",
+		Name:           "宸茶繃鏈熷埜",
 		CouponType:     1,
 		DiscountValue:  1000,
 		ValidType:      1,
 		ValidStartTime: ptrTime(pastTime.Add(-7 * 24 * time.Hour)),
-		ValidEndTime:   &pastTime, // 昨天过期
+		ValidEndTime:   &pastTime, // 鏄ㄥぉ杩囨湡
 		TotalCount:     10,
 		Status:         1,
 		PerUserLimit:   1,
@@ -460,7 +460,7 @@ func (s *CouponIntegrationSuite) TestExpireCouponJob() {
 	err := s.db.Create(expiredTemplate).Error
 	require.NoError(s.T(), err)
 
-	// 2. 发放过期券
+	// 2. 鍙戞斁杩囨湡鍒?
 	_, err = s.issueCouponUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      s.testUserID,
 		TemplateID:  expiredTemplate.ID,
@@ -468,19 +468,19 @@ func (s *CouponIntegrationSuite) TestExpireCouponJob() {
 	})
 	require.NoError(s.T(), err)
 
-	// 3. 执行过期扫描Job
+	// 3. 鎵ц杩囨湡鎵弿Job
 	err = s.expireJob.Run()
 	require.NoError(s.T(), err)
 
-	// 4. 验证券状态已更新为Expired
+	// 4. 楠岃瘉鍒哥姸鎬佸凡鏇存柊涓篍xpired
 	expiredCoupons, _, err := s.couponRepo.ListByUserID(ctx, s.testUserID, domain.UserCouponStatusExpired, 1, 10)
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(expiredCoupons))
 
-	s.T().Log("✅ 过期券扫描测试通过")
+	s.T().Log("鉁?杩囨湡鍒告壂鎻忔祴璇曢€氳繃")
 }
 
-// ==================== 辅助函数 ====================
+// ==================== 杈呭姪鍑芥暟 ====================
 
 func ptrInt32(v int32) *int32 {
 	return &v
@@ -489,3 +489,5 @@ func ptrInt32(v int32) *int32 {
 func ptrTime(t time.Time) *time.Time {
 	return &t
 }
+
+

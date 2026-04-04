@@ -47,3 +47,5 @@ type ToolConfig struct {
 	Description string `mapstructure:"description"`
 	Enabled     bool   `mapstructure:"enabled"`
 }
+
+

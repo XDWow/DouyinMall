@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/XDWow/DouyinMall/backend/internal/agent/rag"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/components/rag"
 )
 
 type KnowledgeStore struct {

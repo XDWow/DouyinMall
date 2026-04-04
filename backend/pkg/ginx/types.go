@@ -14,7 +14,7 @@ func (s *Server) Start() error {
 	return s.Engine.Run(s.Addr)
 }
 
-// Result 你可以通过在 Result 里面定义更加多的字段，来配合 Wrap 方法
+// Result 浣犲彲浠ラ€氳繃鍦?Result 閲岄潰瀹氫箟鏇村姞澶氱殑瀛楁锛屾潵閰嶅悎 Wrap 鏂规硶
 type Result struct {
 	Code int    `json:"code"`
 	Msg  string `json:"msg"`
@@ -27,3 +27,5 @@ type UserClaims struct {
 	Ssid      string
 	jwt.RegisteredClaims
 }
+
+

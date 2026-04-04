@@ -48,7 +48,7 @@ func (q *OrderDelayQueue) DrainDue(ctx context.Context, now time.Time) ([]int64,
 		for _, member := range members {
 			orderID, convErr := parseOrderID(member)
 			if convErr != nil {
-				q.log.Warn("订单延时队列中存在非法成员",
+				q.log.Warn("璁㈠崟寤舵椂闃熷垪涓瓨鍦ㄩ潪娉曟垚鍛?,
 					logger.String("member", member),
 					logger.Error(convErr))
 				continue
@@ -69,3 +69,5 @@ func formatOrderID(orderID int64) string {
 func parseOrderID(member string) (int64, error) {
 	return strconv.ParseInt(member, 10, 64)
 }
+
+

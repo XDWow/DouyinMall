@@ -12,18 +12,18 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var ErrInvalidUserOrPassword = errors.New("邮箱或密码错误")
+var ErrInvalidUserOrPassword = errors.New("閭鎴栧瘑鐮侀敊璇?)
 
-// 用户服务
+// 鐢ㄦ埛鏈嶅姟
 type UserService interface {
 	Signup(ctx context.Context, user domain.User) (int64, error)
 	Login(ctx context.Context, email, password string) (int64, error)
-	// UpdateProfile 更新非敏感信息（用户名、头像）
+	// UpdateProfile 鏇存柊闈炴晱鎰熶俊鎭紙鐢ㄦ埛鍚嶃€佸ご鍍忥級
 	UpdateProfile(ctx context.Context, user domain.User) error
 	ChangePassword(ctx context.Context, userID int64, oldPassword, newPassword string) error
 	ChangeEmail(ctx context.Context, userID int64, password, newEmail string) error
 	ChangePhone(ctx context.Context, userID int64, password, newPhone string) error
-	// Delete 软删除，需要验证密码，同时修改邮箱和手机号避免唯一索引冲突
+	// Delete 杞垹闄わ紝闇€瑕侀獙璇佸瘑鐮侊紝鍚屾椂淇敼閭鍜屾墜鏈哄彿閬垮厤鍞竴绱㈠紩鍐茬獊
 	Delete(ctx context.Context, userID int64, password string) error
 	Query(ctx context.Context, id int64) (domain.User, error)
 }
@@ -52,7 +52,7 @@ func (svc *userService) Signup(ctx context.Context, user domain.User) (int64, er
 func (svc *userService) Login(ctx context.Context, email, password string) (int64, error) {
 	u, err := svc.repo.FindByEmail(ctx, email)
 	if err == repo.ErrUserNorFound {
-		return 0, ErrInvalidUserOrPassword // 不告诉用户到底是邮箱还是密码错误
+		return 0, ErrInvalidUserOrPassword // 涓嶅憡璇夌敤鎴峰埌搴曟槸閭杩樻槸瀵嗙爜閿欒
 	}
 	if err != nil {
 		return 0, err
@@ -66,9 +66,9 @@ func (svc *userService) Login(ctx context.Context, email, password string) (int6
 	return u.ID, nil
 }
 
-// UpdateProfile 更新非敏感信息（用户名、头像）
+// UpdateProfile 鏇存柊闈炴晱鎰熶俊鎭紙鐢ㄦ埛鍚嶃€佸ご鍍忥級
 func (svc *userService) UpdateProfile(ctx context.Context, user domain.User) error {
-	// 确保不会更新敏感字段
+	// 纭繚涓嶄細鏇存柊鏁忔劅瀛楁
 	user.Email = ""
 	user.Password = ""
 	user.Phone = ""
@@ -81,12 +81,12 @@ func (svc *userService) ChangePassword(ctx context.Context, userID int64, oldPas
 		return err
 	}
 
-	// 验证旧密码
+	// 楠岃瘉鏃у瘑鐮?
 	if err = bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(oldPassword)); err != nil {
 		return ErrInvalidUserOrPassword
 	}
 
-	// 加密新密码
+	// 鍔犲瘑鏂板瘑鐮?
 	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func (svc *userService) ChangeEmail(ctx context.Context, userID int64, password,
 		return err
 	}
 
-	// 验证密码
+	// 楠岃瘉瀵嗙爜
 	if err = bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password)); err != nil {
 		return ErrInvalidUserOrPassword
 	}
@@ -110,10 +110,10 @@ func (svc *userService) ChangeEmail(ctx context.Context, userID int64, password,
 }
 
 func (svc *userService) ChangePhone(ctx context.Context, userID int64, password, newPhone string) error {
-	panic("还没实现，等 sms 服务")
+	panic("杩樻病瀹炵幇锛岀瓑 sms 鏈嶅姟")
 }
 
-// Delete 软删除，验证密码后修改邮箱和手机号避免唯一索引冲突
+// Delete 杞垹闄わ紝楠岃瘉瀵嗙爜鍚庝慨鏀归偖绠卞拰鎵嬫満鍙烽伩鍏嶅敮涓€绱㈠紩鍐茬獊
 func (svc *userService) Delete(ctx context.Context, userID int64, password string) error {
 	u, err := svc.repo.FindById(ctx, userID)
 	if err != nil {
@@ -124,7 +124,7 @@ func (svc *userService) Delete(ctx context.Context, userID int64, password strin
 		return ErrInvalidUserOrPassword
 	}
 
-	// 修改邮箱和手机号，加上 deleted_ 前缀和时间戳，避免唯一索引冲突
+	// 淇敼閭鍜屾墜鏈哄彿锛屽姞涓?deleted_ 鍓嶇紑鍜屾椂闂存埑锛岄伩鍏嶅敮涓€绱㈠紩鍐茬獊
 	timestamp := time.Now().Unix()
 	deletedEmail := fmt.Sprintf("deleted_%d_%s", timestamp, u.Email)
 	deletedPhone := fmt.Sprintf("deleted_%d_%s", timestamp, u.Phone)
@@ -142,3 +142,5 @@ func (svc *userService) Delete(ctx context.Context, userID int64, password strin
 func (svc *userService) Query(ctx context.Context, id int64) (domain.User, error) {
 	return svc.repo.FindById(ctx, id)
 }
+
+

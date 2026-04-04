@@ -8,23 +8,24 @@ import (
 )
 
 func InitLogger() logger.LoggerV1 {
-	// 配置Lumberjack以支持日志文件的滚动
+	// 閰嶇疆Lumberjack浠ユ敮鎸佹棩蹇楁枃浠剁殑婊氬姩
 	lumberjackLogger := &lumberjack.Logger{
-		// 注意有没有权限
-		Filename:   "/var/log/user.log", // 指定日志文件路径
-		MaxSize:    50,                  // 每个日志文件的最大大小，单位：MB
-		MaxBackups: 3,                   // 保留旧日志文件的最大个数
-		MaxAge:     28,                  // 保留旧日志文件的最大天数
-		Compress:   true,                // 是否压缩旧的日志文件
+		// 娉ㄦ剰鏈夋病鏈夋潈闄?
+		Filename:   "/var/log/user.log", // 鎸囧畾鏃ュ織鏂囦欢璺緞
+		MaxSize:    50,                  // 姣忎釜鏃ュ織鏂囦欢鐨勬渶澶уぇ灏忥紝鍗曚綅锛歁B
+		MaxBackups: 3,                   // 淇濈暀鏃ф棩蹇楁枃浠剁殑鏈€澶т釜鏁?
+		MaxAge:     28,                  // 淇濈暀鏃ф棩蹇楁枃浠剁殑鏈€澶уぉ鏁?
+		Compress:   true,                // 鏄惁鍘嬬缉鏃х殑鏃ュ織鏂囦欢
 	}
 
-	// 创建zap日志核心
+	// 鍒涘缓zap鏃ュ織鏍稿績
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
 		zapcore.AddSync(lumberjackLogger),
-		zapcore.DebugLevel, // 设置日志级别
+		zapcore.DebugLevel, // 璁剧疆鏃ュ織绾у埆
 	)
 	l := zap.New(core, zap.AddCaller())
 	res := logger.NewZapLogger(l)
 	return res			
 }
+

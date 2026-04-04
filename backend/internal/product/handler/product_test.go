@@ -22,7 +22,7 @@ func TestProductHandler_ListProducts(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name: "成功获取商品列表",
+			name: "鎴愬姛鑾峰彇鍟嗗搧鍒楄〃",
 			req: &v1.ListProductsReq{
 				Page:     1,
 				PageSize: 10,
@@ -31,8 +31,8 @@ func TestProductHandler_ListProducts(t *testing.T) {
 			mock: func(ctrl *gomock.Controller) *svcmocks.MockProductService {
 				svc := svcmocks.NewMockProductService(ctrl)
 				svc.EXPECT().ListProducts(gomock.Any(), int64(1), int64(10), "").Return([]domain.Product{
-					{ID: 1, Name: "商品1", Price: 100},
-					{ID: 2, Name: "商品2", Price: 200},
+					{ID: 1, Name: "鍟嗗搧1", Price: 100},
+					{ID: 2, Name: "鍟嗗搧2", Price: 200},
 				}, nil)
 				return svc
 			},
@@ -40,7 +40,7 @@ func TestProductHandler_ListProducts(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name: "Service返回错误",
+			name: "Service杩斿洖閿欒",
 			req: &v1.ListProductsReq{
 				Page:     1,
 				PageSize: 10,
@@ -86,7 +86,7 @@ func TestProductHandler_GetProducts(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "成功获取商品详情",
+			name: "鎴愬姛鑾峰彇鍟嗗搧璇︽儏",
 			req:  &v1.GetProductsReq{Id: []int64{1}},
 			mock: func(ctrl *gomock.Controller) *svcmocks.MockProductService {
 				svc := svcmocks.NewMockProductService(ctrl)
@@ -94,8 +94,8 @@ func TestProductHandler_GetProducts(t *testing.T) {
 					ID:           1,
 					Name:         "iPhone 15",
 					Price:        599900,
-					InStock:      true, // domain 层使用 InStock (bool)
-					Categories:   []string{"电子产品", "手机"},
+					InStock:      true, // domain 灞備娇鐢?InStock (bool)
+					Categories:   []string{"鐢靛瓙浜у搧", "鎵嬫満"},
 					MerchantID:   1001,
 					MerchantName: "Apple Store",
 				}, nil)
@@ -106,7 +106,7 @@ func TestProductHandler_GetProducts(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name: "商品不存在",
+			name: "鍟嗗搧涓嶅瓨鍦?,
 			req:  &v1.GetProductsReq{Id: []int64{999}},
 			mock: func(ctrl *gomock.Controller) *svcmocks.MockProductService {
 				svc := svcmocks.NewMockProductService(ctrl)
@@ -148,13 +148,13 @@ func TestProductHandler_CreateProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功创建商品",
+			name: "鎴愬姛鍒涘缓鍟嗗搧",
 			req: &v1.CreateProductReq{
 				Product: &v1.Product{
-					Name:       "新商品",
+					Name:       "鏂板晢鍝?,
 					Price:      9900,
-					InStock:    true, // 有货
-					Categories: []string{"服装"},
+					InStock:    true, // 鏈夎揣
+					Categories: []string{"鏈嶈"},
 					MerchantID: 1001,
 				},
 			},
@@ -167,10 +167,10 @@ func TestProductHandler_CreateProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "创建失败",
+			name: "鍒涘缓澶辫触",
 			req: &v1.CreateProductReq{
 				Product: &v1.Product{
-					Name:  "敏感商品",
+					Name:  "鏁忔劅鍟嗗搧",
 					Price: 9900,
 				},
 			},
@@ -183,11 +183,11 @@ func TestProductHandler_CreateProduct(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "空请求体",
+			name: "绌鸿姹備綋",
 			req:  &v1.CreateProductReq{Product: nil},
 			mock: func(ctrl *gomock.Controller) *svcmocks.MockProductService {
 				svc := svcmocks.NewMockProductService(ctrl)
-				// 空 Product 会被转换为空 domain.Product
+				// 绌?Product 浼氳杞崲涓虹┖ domain.Product
 				svc.EXPECT().CreateProduct(gomock.Any(), domain.Product{}).Return(int64(0), errors.New("invalid product"))
 				return svc
 			},
@@ -225,11 +225,11 @@ func TestProductHandler_UpdateProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功更新商品",
+			name: "鎴愬姛鏇存柊鍟嗗搧",
 			req: &v1.UpdateProductReq{
 				Product: &v1.Product{
 					Id:    1,
-					Name:  "更新后的商品",
+					Name:  "鏇存柊鍚庣殑鍟嗗搧",
 					Price: 19900,
 				},
 			},
@@ -242,11 +242,11 @@ func TestProductHandler_UpdateProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "更新失败",
+			name: "鏇存柊澶辫触",
 			req: &v1.UpdateProductReq{
 				Product: &v1.Product{
 					Id:   999,
-					Name: "不存在的商品",
+					Name: "涓嶅瓨鍦ㄧ殑鍟嗗搧",
 				},
 			},
 			mock: func(ctrl *gomock.Controller) *svcmocks.MockProductService {
@@ -287,7 +287,7 @@ func TestProductHandler_DeleteProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功删除商品",
+			name: "鎴愬姛鍒犻櫎鍟嗗搧",
 			req: &v1.DeleteProductReq{
 				Id:     1,
 				UserId: 1001,
@@ -300,7 +300,7 @@ func TestProductHandler_DeleteProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "删除失败-无权限",
+			name: "鍒犻櫎澶辫触-鏃犳潈闄?,
 			req: &v1.DeleteProductReq{
 				Id:     1,
 				UserId: 9999,
@@ -335,19 +335,19 @@ func TestProductHandler_DeleteProduct(t *testing.T) {
 }
 
 // ============================================================================
-// 转换函数测试
+// 杞崲鍑芥暟娴嬭瘯
 // ============================================================================
 
 func TestToProto(t *testing.T) {
 	product := domain.Product{
 		ID:           1,
 		Name:         "iPhone 15",
-		Description:  "最新款 iPhone",
+		Description:  "鏈€鏂版 iPhone",
 		Picture:      "http://example.com/iphone.jpg",
 		SlideImgs:    []string{"http://example.com/1.jpg", "http://example.com/2.jpg"},
 		Price:        599900,
-		Categories:   []string{"电子产品", "手机"},
-		InStock:      true, // domain 层使用 InStock (bool)
+		Categories:   []string{"鐢靛瓙浜у搧", "鎵嬫満"},
+		InStock:      true, // domain 灞備娇鐢?InStock (bool)
 		MerchantID:   1001,
 		MerchantName: "Apple Store",
 	}
@@ -356,12 +356,12 @@ func TestToProto(t *testing.T) {
 
 	assert.Equal(t, int64(1), proto.Id)
 	assert.Equal(t, "iPhone 15", proto.Name)
-	assert.Equal(t, "最新款 iPhone", proto.Description)
+	assert.Equal(t, "鏈€鏂版 iPhone", proto.Description)
 	assert.Equal(t, "http://example.com/iphone.jpg", proto.Picture)
 	assert.Equal(t, []string{"http://example.com/1.jpg", "http://example.com/2.jpg"}, proto.SliderImgs)
 	assert.Equal(t, int64(599900), proto.Price)
-	assert.Equal(t, []string{"电子产品", "手机"}, proto.Categories)
-	assert.Equal(t, true, proto.InStock) // stock=100 > 0，所以 in_stock 应该为 true
+	assert.Equal(t, []string{"鐢靛瓙浜у搧", "鎵嬫満"}, proto.Categories)
+	assert.Equal(t, true, proto.InStock) // stock=100 > 0锛屾墍浠?in_stock 搴旇涓?true
 	assert.Equal(t, int64(1001), proto.MerchantID)
 	assert.Equal(t, "Apple Store", proto.MerchantName)
 }
@@ -370,12 +370,12 @@ func TestToDomain(t *testing.T) {
 	proto := &v1.Product{
 		Id:           1,
 		Name:         "iPhone 15",
-		Description:  "最新款 iPhone",
+		Description:  "鏈€鏂版 iPhone",
 		Picture:      "http://example.com/iphone.jpg",
 		SliderImgs:   []string{"http://example.com/1.jpg"},
 		Price:        599900,
-		Categories:   []string{"电子产品"},
-		InStock:      true, // 有货
+		Categories:   []string{"鐢靛瓙浜у搧"},
+		InStock:      true, // 鏈夎揣
 		MerchantID:   1001,
 		MerchantName: "Apple Store",
 	}
@@ -385,7 +385,7 @@ func TestToDomain(t *testing.T) {
 	assert.Equal(t, int64(1), domain.ID)
 	assert.Equal(t, "iPhone 15", domain.Name)
 	assert.Equal(t, int64(599900), domain.Price)
-	assert.Equal(t, true, domain.InStock) // 直接使用 in_stock
+	assert.Equal(t, true, domain.InStock) // 鐩存帴浣跨敤 in_stock
 }
 
 func TestToDomain_Nil(t *testing.T) {
@@ -395,9 +395,9 @@ func TestToDomain_Nil(t *testing.T) {
 
 func TestToProtoList(t *testing.T) {
 	products := []domain.Product{
-		{ID: 1, Name: "商品1"},
-		{ID: 2, Name: "商品2"},
-		{ID: 3, Name: "商品3"},
+		{ID: 1, Name: "鍟嗗搧1"},
+		{ID: 2, Name: "鍟嗗搧2"},
+		{ID: 3, Name: "鍟嗗搧3"},
 	}
 
 	protos := toProtoList(products)
@@ -407,3 +407,5 @@ func TestToProtoList(t *testing.T) {
 	assert.Equal(t, int64(2), protos[1].Id)
 	assert.Equal(t, int64(3), protos[2].Id)
 }
+
+

@@ -51,9 +51,9 @@ func (repo *outboxRepository) BatchAdd(ctx context.Context, eventType string, pa
 		})
 	}
 
-	// 调用 GORM 的批量插入接口
-	// 批量插入的收益来自：减少 网络RTT / 事务 / 连接开销
-	// 风险来自单次 SQL 太大、锁时间太长，所以控制批量大小 100（经验值，可以压测调参）
+	// 璋冪敤 GORM 鐨勬壒閲忔彃鍏ユ帴鍙?
+	// 鎵归噺鎻掑叆鐨勬敹鐩婃潵鑷細鍑忓皯 缃戠粶RTT / 浜嬪姟 / 杩炴帴寮€閿€
+	// 椋庨櫓鏉ヨ嚜鍗曟 SQL 澶ぇ銆侀攣鏃堕棿澶暱锛屾墍浠ユ帶鍒舵壒閲忓ぇ灏?100锛堢粡楠屽€硷紝鍙互鍘嬫祴璋冨弬锛?
 	if err := conn.CreateInBatches(models, 100).Error; err != nil {
 		return nil, err
 	}
@@ -157,3 +157,5 @@ func (repo *outboxRepository) IncreaseRetry(ctx context.Context, id int64) (int,
 	}
 	return retry, nil
 }
+
+

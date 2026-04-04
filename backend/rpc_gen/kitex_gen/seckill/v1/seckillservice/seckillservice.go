@@ -205,3 +205,5 @@ func (p *kClient) GetSeckillResult(ctx context.Context, req *v1.GetSeckillResult
 	}
 	return result.Success, nil
 }
+
+

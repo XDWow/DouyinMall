@@ -15,7 +15,7 @@ import (
 
 func InitApp() *App {
 	wire.Build(
-		// 基础设施
+		// 鍩虹璁炬柦
 		ioc.InitLogger,
 		ioc.InitES,
 		ioc.InitKafkaClient,
@@ -23,11 +23,11 @@ func InitApp() *App {
 		ioc.InitLLMClient,
 		ioc.InitEmbedder,
 
-		// 仓储
+		// 浠撳偍
 		es.NewProductRepo,
 		es.NewMerchantRepo,
 
-		// 用例
+		// 鐢ㄤ緥
 		usecase.NewSearchProductsUseCase,
 		usecase.NewSearchMerchantsUseCase,
 		usecase.NewSuggestUseCase,
@@ -35,11 +35,11 @@ func InitApp() *App {
 		usecase.NewAISearchUseCase,
 		usecase.NewSyncUseCase,
 
-		// 传输层
+		// 浼犺緭灞?
 		transportgrpc.NewSearchHandler,
 		ioc.InitGRPCServer,
 
-		// Kafka 消费者
+		// Kafka 娑堣垂鑰?
 		events.NewProductConsumer,
 		events.NewMerchantConsumer,
 
@@ -61,3 +61,5 @@ func newApp(
 		},
 	}
 }
+
+

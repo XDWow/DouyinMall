@@ -41,21 +41,21 @@ func (c *llmClient) ChatCompletion(ctx context.Context, req ChatRequest) (*ChatR
 
 	respBody, err := doHTTPRequest(ctx, c.httpClient, c.baseURL+"/chat/completions", c.apiKey, req)
 	if err != nil {
-		return nil, fmt.Errorf("chat completion 失败: %w", err)
+		return nil, fmt.Errorf("chat completion 澶辫触: %w", err)
 	}
 
 	var result ChatResponse
 	if err = json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽鍝嶅簲澶辫触: %w", err)
 	}
 	if len(result.Choices) == 0 {
-		err = errors.New("模型回复内容为空")
+		err = errors.New("妯″瀷鍥炲鍐呭涓虹┖")
 	}
 
 	return &result, err
 }
 
-// 流式对话（SSE）
+// 娴佸紡瀵硅瘽锛圫SE锛?
 func (c *llmClient) ChatCompletionStream(ctx context.Context, req ChatRequest) (<-chan ChatStreamResponse, error) {
 	req = c.buildRequestBody(req)
 
@@ -69,7 +69,7 @@ func (c *llmClient) ChatCompletionStream(ctx context.Context, req ChatRequest) (
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream") // 选择 sse 协议
+	httpReq.Header.Set("Accept", "text/event-stream") // 閫夋嫨 sse 鍗忚
 	if c.apiKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
@@ -119,7 +119,7 @@ func (c *llmClient) ChatCompletionStream(ctx context.Context, req ChatRequest) (
 	return ch, nil
 }
 
-// 请求构建，给默认值
+// 璇锋眰鏋勫缓锛岀粰榛樿鍊?
 func (c *llmClient) buildRequestBody(req ChatRequest) ChatRequest {
 	if req.FrequencyPenalty == nil {
 		f := float32(0.5)
@@ -149,7 +149,7 @@ func (c *llmClient) buildRequestBody(req ChatRequest) ChatRequest {
 	return req
 }
 
-// 本地 ollama 实现
+// 鏈湴 ollama 瀹炵幇
 type EmbeddingClient struct {
 	baseURL    string
 	apiKey     string
@@ -184,22 +184,22 @@ func (c *EmbeddingClient) Embed(ctx context.Context, texts []string) ([][]float3
 
 	respBody, err := doHTTPRequest(ctx, c.httpClient, c.baseURL, c.apiKey, body)
 	if err != nil {
-		return nil, fmt.Errorf("embedding 失败: %w", err)
+		return nil, fmt.Errorf("embedding 澶辫触: %w", err)
 	}
 
 	var result struct {
 		Embeddings [][]float32 `json:"embeddings"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽鍝嶅簲澶辫触: %w", err)
 	}
 	return result.Embeddings, nil
 }
 
-// RerankClient OpenAI 兼容的 Rerank 客户端
-// 兼容 SiliconFlow / Jina / Cohere 的 /rerank API
-// 请求格式：POST /rerank {"model":"...","query":"...","documents":["doc1","doc2",...]}
-// 响应格式：{"results":[{"index":0,"relevance_score":0.95},...]}`
+// RerankClient OpenAI 鍏煎鐨?Rerank 瀹㈡埛绔?
+// 鍏煎 SiliconFlow / Jina / Cohere 鐨?/rerank API
+// 璇锋眰鏍煎紡锛歅OST /rerank {"model":"...","query":"...","documents":["doc1","doc2",...]}
+// 鍝嶅簲鏍煎紡锛歿"results":[{"index":0,"relevance_score":0.95},...]}`
 type RerankClient struct {
 	baseURL    string
 	apiKey     string
@@ -235,7 +235,7 @@ func (c *RerankClient) Rerank(ctx context.Context, query string, docs []string) 
 
 	respBytes, err := doHTTPRequest(ctx, c.httpClient, c.baseURL+"/rerank", c.apiKey, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("rerank 请求失败: %w", err)
+		return nil, fmt.Errorf("rerank 璇锋眰澶辫触: %w", err)
 	}
 
 	var result struct {
@@ -245,7 +245,7 @@ func (c *RerankClient) Rerank(ctx context.Context, query string, docs []string) 
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return nil, fmt.Errorf("解析 rerank 响应失败: %w", err)
+		return nil, fmt.Errorf("瑙ｆ瀽 rerank 鍝嶅簲澶辫触: %w", err)
 	}
 
 	scores := make([]float32, len(docs))
@@ -287,3 +287,5 @@ func doHTTPRequest(ctx context.Context, client *http.Client, url, apiKey string,
 	}
 	return data, nil
 }
+
+

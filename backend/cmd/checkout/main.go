@@ -42,6 +42,8 @@ func initViperWatch() {
 	viper.AddConfigPath("../../internal/checkout/config")
 
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("读取配置文件失败: %w (工作目录: %s)", err, cwd))
+		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w (宸ヤ綔鐩綍: %s)", err, cwd))
 	}
 }
+
+

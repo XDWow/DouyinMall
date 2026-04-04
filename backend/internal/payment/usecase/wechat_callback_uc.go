@@ -78,3 +78,5 @@ type CallbackCmd struct {
 	TransactionId string
 	OutTradeNo    string
 }
+
+

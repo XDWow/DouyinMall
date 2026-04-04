@@ -41,3 +41,5 @@ type App struct {
 func newApp(grpcServer server.Server) *App {
 	return &App{GRPCServer: grpcServer}
 }
+
+

@@ -20,18 +20,18 @@ import (
 )
 
 // =============================================================================
-// ProductRepo 接口测试（可复用于 CacheAside 和 Canal 两种实现）
+// ProductRepo 鎺ュ彛娴嬭瘯锛堝彲澶嶇敤浜?CacheAside 鍜?Canal 涓ょ瀹炵幇锛?
 // =============================================================================
 
-// 创建测试用的 Repo（可切换实现）
+// 鍒涘缓娴嬭瘯鐢ㄧ殑 Repo锛堝彲鍒囨崲瀹炵幇锛?
 func newTestRepo(t *testing.T, dao dao.ProductDao, cache cache.ProductCache) ProductRepo {
-	// 切换实现：CacheAside 或 Canal
+	// 鍒囨崲瀹炵幇锛欳acheAside 鎴?Canal
 	return NewCachedProductRepo(dao, cache, logger.NewNopLogger())
 	// return NewCachedProductRepo(dao, cache, logger.NewNopLogger())
 }
 
 // =============================================================================
-// GetProduct 测试
+// GetProduct 娴嬭瘯
 // =============================================================================
 
 func TestProductRepo_GetProduct(t *testing.T) {
@@ -43,53 +43,53 @@ func TestProductRepo_GetProduct(t *testing.T) {
 		wantPrice int64
 	}{
 		{
-			name: "缓存全部命中",
+			name: "缂撳瓨鍏ㄩ儴鍛戒腑",
 			id:   1,
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
 				c := cachemocks.NewMockProductCache(ctrl)
 
-				// 基本信息缓存命中
+				// 鍩烘湰淇℃伅缂撳瓨鍛戒腑
 				basicProduct := domain.Product{
 					ID:   1,
-					Name: "测试商品",
+					Name: "娴嬭瘯鍟嗗搧",
 				}
 				basicData, _ := json.Marshal(basicProduct)
 				c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(basicData, nil)
 
-				// 价格/库存状态缓存命中
+				// 浠锋牸/搴撳瓨鐘舵€佺紦瀛樺懡涓?
 				ps := PriceInStock{Price: 9900, InStock: true}
 				psData, _ := json.Marshal(ps)
 				c.EXPECT().Get(gomock.Any(), PriceInStockKey(1)).Return(psData, nil)
 
-				// 不应该查数据库
+				// 涓嶅簲璇ユ煡鏁版嵁搴?
 				return d, c
 			},
 			wantErr:   false,
 			wantPrice: 9900,
 		},
 		{
-			name: "基本信息命中_价格未命中_精准查询",
+			name: "鍩烘湰淇℃伅鍛戒腑_浠锋牸鏈懡涓璤绮惧噯鏌ヨ",
 			id:   1,
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
 				c := cachemocks.NewMockProductCache(ctrl)
 
-				// 基本信息缓存命中
+				// 鍩烘湰淇℃伅缂撳瓨鍛戒腑
 				basicProduct := domain.Product{
 					ID:   1,
-					Name: "测试商品",
+					Name: "娴嬭瘯鍟嗗搧",
 				}
 				basicData, _ := json.Marshal(basicProduct)
 				c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(basicData, nil)
 
-				// 价格/库存状态缓存未命中
+				// 浠锋牸/搴撳瓨鐘舵€佺紦瀛樻湭鍛戒腑
 				c.EXPECT().Get(gomock.Any(), PriceInStockKey(1)).Return(nil, errors.New("not found"))
 
-				// 只查价格/库存状态（精准查询优化）
+				// 鍙煡浠锋牸/搴撳瓨鐘舵€侊紙绮惧噯鏌ヨ浼樺寲锛?
 				d.EXPECT().FindPriceInStock(gomock.Any(), int64(1)).Return(int64(8800), true, nil)
 
-				// 回填价格/库存状态缓存
+				// 鍥炲～浠锋牸/搴撳瓨鐘舵€佺紦瀛?
 				c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(1), gomock.Any(), gomock.Any()).Return(nil)
 
 				return d, c
@@ -98,25 +98,25 @@ func TestProductRepo_GetProduct(t *testing.T) {
 			wantPrice: 8800,
 		},
 		{
-			name: "缓存全部未命中_查库回填",
+			name: "缂撳瓨鍏ㄩ儴鏈懡涓璤鏌ュ簱鍥炲～",
 			id:   1,
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
 				c := cachemocks.NewMockProductCache(ctrl)
 
-				// 缓存都未命中
+				// 缂撳瓨閮芥湭鍛戒腑
 				c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(nil, errors.New("not found"))
 				c.EXPECT().Get(gomock.Any(), PriceInStockKey(1)).Return(nil, errors.New("not found"))
 
-				// 查库
+				// 鏌ュ簱
 				d.EXPECT().FindByID(gomock.Any(), int64(1)).Return(dao.Product{
 					ID:      1,
-					Name:    "测试商品",
+					Name:    "娴嬭瘯鍟嗗搧",
 					Price:   7700,
 					InStock: true,
 				}, nil)
 
-				// 回填两个缓存
+				// 鍥炲～涓や釜缂撳瓨
 				c.EXPECT().SetWithTTL(gomock.Any(), DetailBasicKey(1), gomock.Any(), gomock.Any()).Return(nil)
 				c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(1), gomock.Any(), gomock.Any()).Return(nil)
 
@@ -126,7 +126,7 @@ func TestProductRepo_GetProduct(t *testing.T) {
 			wantPrice: 7700,
 		},
 		{
-			name: "数据库查询失败",
+			name: "鏁版嵁搴撴煡璇㈠け璐?,
 			id:   1,
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
@@ -164,7 +164,7 @@ func TestProductRepo_GetProduct(t *testing.T) {
 }
 
 // =============================================================================
-// CreateProduct 测试
+// CreateProduct 娴嬭瘯
 // =============================================================================
 
 func TestProductRepo_CreateProduct(t *testing.T) {
@@ -176,9 +176,9 @@ func TestProductRepo_CreateProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "创建成功_回填缓存",
+			name: "鍒涘缓鎴愬姛_鍥炲～缂撳瓨",
 			product: domain.Product{
-				Name:    "新商品",
+				Name:    "鏂板晢鍝?,
 				Price:   9900,
 				InStock: true,
 			},
@@ -188,7 +188,7 @@ func TestProductRepo_CreateProduct(t *testing.T) {
 
 				d.EXPECT().Insert(gomock.Any(), gomock.Any()).Return(int64(123), nil)
 
-				// 回填缓存
+				// 鍥炲～缂撳瓨
 				c.EXPECT().SetWithTTL(gomock.Any(), DetailBasicKey(123), gomock.Any(), gomock.Any()).Return(nil)
 				c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(123), gomock.Any(), gomock.Any()).Return(nil)
 
@@ -198,9 +198,9 @@ func TestProductRepo_CreateProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "数据库插入失败",
+			name: "鏁版嵁搴撴彃鍏ュけ璐?,
 			product: domain.Product{
-				Name: "新商品",
+				Name: "鏂板晢鍝?,
 			},
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
@@ -235,7 +235,7 @@ func TestProductRepo_CreateProduct(t *testing.T) {
 }
 
 // =============================================================================
-// UpdateProduct 测试（延迟双删）
+// UpdateProduct 娴嬭瘯锛堝欢杩熷弻鍒狅級
 // =============================================================================
 
 func TestProductRepo_UpdateProduct(t *testing.T) {
@@ -246,10 +246,10 @@ func TestProductRepo_UpdateProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "更新成功_延迟双删",
+			name: "鏇存柊鎴愬姛_寤惰繜鍙屽垹",
 			product: domain.Product{
 				ID:    1,
-				Name:  "更新后的商品",
+				Name:  "鏇存柊鍚庣殑鍟嗗搧",
 				Price: 8800,
 			},
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
@@ -258,11 +258,11 @@ func TestProductRepo_UpdateProduct(t *testing.T) {
 
 				d.EXPECT().Update(gomock.Any(), gomock.Any()).Return(nil)
 
-				// 第一次删除（立即）
+				// 绗竴娆″垹闄わ紙绔嬪嵆锛?
 				c.EXPECT().Delete(gomock.Any(), DetailBasicKey(1)).Return(nil)
 				c.EXPECT().Delete(gomock.Any(), PriceInStockKey(1)).Return(nil)
 
-				// 第二次删除（延迟，异步）- 使用 AnyTimes 因为是异步的
+				// 绗簩娆″垹闄わ紙寤惰繜锛屽紓姝ワ級- 浣跨敤 AnyTimes 鍥犱负鏄紓姝ョ殑
 				c.EXPECT().Delete(gomock.Any(), DetailBasicKey(1)).Return(nil).AnyTimes()
 				c.EXPECT().Delete(gomock.Any(), PriceInStockKey(1)).Return(nil).AnyTimes()
 
@@ -271,17 +271,17 @@ func TestProductRepo_UpdateProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "更新失败_不删缓存",
+			name: "鏇存柊澶辫触_涓嶅垹缂撳瓨",
 			product: domain.Product{
 				ID:   1,
-				Name: "更新后的商品",
+				Name: "鏇存柊鍚庣殑鍟嗗搧",
 			},
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
 				c := cachemocks.NewMockProductCache(ctrl)
 
 				d.EXPECT().Update(gomock.Any(), gomock.Any()).Return(errors.New("db error"))
-				// 不应该删缓存
+				// 涓嶅簲璇ュ垹缂撳瓨
 
 				return d, c
 			},
@@ -303,7 +303,7 @@ func TestProductRepo_UpdateProduct(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				// 等待延迟双删完成
+				// 绛夊緟寤惰繜鍙屽垹瀹屾垚
 				time.Sleep(1500 * time.Millisecond)
 			}
 		})
@@ -311,7 +311,7 @@ func TestProductRepo_UpdateProduct(t *testing.T) {
 }
 
 // =============================================================================
-// DeleteProduct 测试
+// DeleteProduct 娴嬭瘯
 // =============================================================================
 
 func TestProductRepo_DeleteProduct(t *testing.T) {
@@ -323,7 +323,7 @@ func TestProductRepo_DeleteProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "删除成功",
+			name:   "鍒犻櫎鎴愬姛",
 			id:     1,
 			userID: 100,
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
@@ -332,11 +332,11 @@ func TestProductRepo_DeleteProduct(t *testing.T) {
 
 				d.EXPECT().Delete(gomock.Any(), int64(1), int64(100)).Return(nil)
 
-				// 删缓存
+				// 鍒犵紦瀛?
 				c.EXPECT().Delete(gomock.Any(), DetailBasicKey(1)).Return(nil)
 				c.EXPECT().Delete(gomock.Any(), PriceInStockKey(1)).Return(nil)
 
-				// 延迟双删
+				// 寤惰繜鍙屽垹
 				c.EXPECT().Delete(gomock.Any(), DetailBasicKey(1)).Return(nil).AnyTimes()
 				c.EXPECT().Delete(gomock.Any(), PriceInStockKey(1)).Return(nil).AnyTimes()
 
@@ -367,7 +367,7 @@ func TestProductRepo_DeleteProduct(t *testing.T) {
 }
 
 // =============================================================================
-// ListProducts 测试（singleflight + 预热）
+// ListProducts 娴嬭瘯锛坰ingleflight + 棰勭儹锛?
 // =============================================================================
 
 func TestProductRepo_ListProducts(t *testing.T) {
@@ -381,23 +381,23 @@ func TestProductRepo_ListProducts(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:     "热点数据_缓存命中",
+			name:     "鐑偣鏁版嵁_缂撳瓨鍛戒腑",
 			page:     1,
 			pageSize: 10,
-			category: "电子产品",
+			category: "鐢靛瓙浜у搧",
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
 				c := cachemocks.NewMockProductCache(ctrl)
 
-				// 缓存命中
+				// 缂撳瓨鍛戒腑
 				products := []domain.Product{
-					{ID: 1, Name: "商品1", Price: 100},
-					{ID: 2, Name: "商品2", Price: 200},
+					{ID: 1, Name: "鍟嗗搧1", Price: 100},
+					{ID: 2, Name: "鍟嗗搧2", Price: 200},
 				}
 				data, _ := json.Marshal(products)
-				c.EXPECT().Get(gomock.Any(), ListKey("电子产品", 1)).Return(data, nil)
+				c.EXPECT().Get(gomock.Any(), ListKey("鐢靛瓙浜у搧", 1)).Return(data, nil)
 
-				// 预热相关调用（异步，使用 AnyTimes）
+				// 棰勭儹鐩稿叧璋冪敤锛堝紓姝ワ紝浣跨敤 AnyTimes锛?
 				c.EXPECT().Get(gomock.Any(), gomock.Any()).Return(nil, errors.New("not found")).AnyTimes()
 				c.EXPECT().GetTTL(gomock.Any(), gomock.Any()).Return(time.Hour, nil).AnyTimes()
 				c.EXPECT().BatchSetWithTTL(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -408,7 +408,7 @@ func TestProductRepo_ListProducts(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:     "热点数据_缓存未命中_查库回填",
+			name:     "鐑偣鏁版嵁_缂撳瓨鏈懡涓璤鏌ュ簱鍥炲～",
 			page:     1,
 			pageSize: 10,
 			category: "",
@@ -416,20 +416,20 @@ func TestProductRepo_ListProducts(t *testing.T) {
 				d := daomocks.NewMockProductDao(ctrl)
 				c := cachemocks.NewMockProductCache(ctrl)
 
-				// 缓存未命中
+				// 缂撳瓨鏈懡涓?
 				c.EXPECT().Get(gomock.Any(), ListKey("", 1)).Return(nil, errors.New("not found"))
 
-				// 查库
+				// 鏌ュ簱
 				d.EXPECT().ListProducts(gomock.Any(), int64(1), int64(10), "").Return([]dao.Product{
-					{ID: 1, Name: "商品1", Price: 100},
-					{ID: 2, Name: "商品2", Price: 200},
-					{ID: 3, Name: "商品3", Price: 300},
+					{ID: 1, Name: "鍟嗗搧1", Price: 100},
+					{ID: 2, Name: "鍟嗗搧2", Price: 200},
+					{ID: 3, Name: "鍟嗗搧3", Price: 300},
 				}, nil)
 
-				// 回填缓存
+				// 鍥炲～缂撳瓨
 				c.EXPECT().SetWithTTL(gomock.Any(), ListKey("", 1), gomock.Any(), gomock.Any()).Return(nil)
 
-				// 预热相关调用
+				// 棰勭儹鐩稿叧璋冪敤
 				c.EXPECT().Get(gomock.Any(), gomock.Any()).Return(nil, errors.New("not found")).AnyTimes()
 				c.EXPECT().GetTTL(gomock.Any(), gomock.Any()).Return(time.Hour, nil).AnyTimes()
 				c.EXPECT().BatchSetWithTTL(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
@@ -440,17 +440,17 @@ func TestProductRepo_ListProducts(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:     "非热点数据_直接查库",
-			page:     5, // 第5页，非热点
+			name:     "闈炵儹鐐规暟鎹甠鐩存帴鏌ュ簱",
+			page:     5, // 绗?椤碉紝闈炵儹鐐?
 			pageSize: 10,
 			category: "",
 			mock: func(ctrl *gomock.Controller) (dao.ProductDao, cache.ProductCache) {
 				d := daomocks.NewMockProductDao(ctrl)
 				c := cachemocks.NewMockProductCache(ctrl)
 
-				// 非热点数据，直接查库，不走缓存
+				// 闈炵儹鐐规暟鎹紝鐩存帴鏌ュ簱锛屼笉璧扮紦瀛?
 				d.EXPECT().ListProducts(gomock.Any(), int64(5), int64(10), "").Return([]dao.Product{
-					{ID: 41, Name: "商品41", Price: 100},
+					{ID: 41, Name: "鍟嗗搧41", Price: 100},
 				}, nil)
 
 				return d, c
@@ -477,8 +477,10 @@ func TestProductRepo_ListProducts(t *testing.T) {
 				assert.Len(t, products, tc.wantCount)
 			}
 
-			// 等待异步预热完成
+			// 绛夊緟寮傛棰勭儹瀹屾垚
 			time.Sleep(100 * time.Millisecond)
 		})
 	}
 }
+
+

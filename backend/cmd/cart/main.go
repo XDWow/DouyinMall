@@ -15,46 +15,46 @@ func main() {
 
 	app := InitApp()
 
-	// 启动 Kafka 消费者（监听订单支付成功事件，清理购物车）
+	// 鍚姩 Kafka 娑堣垂鑰咃紙鐩戝惉璁㈠崟鏀粯鎴愬姛浜嬩欢锛屾竻鐞嗚喘鐗╄溅锛?
 	if err := app.OrderConsumer.Start(); err != nil {
-		fmt.Printf("警告: Kafka消费者启动失败: %v，继续运行\n", err)
+		fmt.Printf("璀﹀憡: Kafka娑堣垂鑰呭惎鍔ㄥけ璐? %v锛岀户缁繍琛孿n", err)
 	} else {
-		fmt.Println("Cart OrderConsumer已启动")
+		fmt.Println("Cart OrderConsumer宸插惎鍔?)
 	}
 
 	go func() {
-		fmt.Printf("Cart gRPC服务启动在: %d\n", viper.GetInt("grpc.server.port"))
+		fmt.Printf("Cart gRPC鏈嶅姟鍚姩鍦? %d\n", viper.GetInt("grpc.server.port"))
 		if err := app.Server.Run(); err != nil {
-			panic(fmt.Errorf("gRPC服务启动失败: %w", err))
+			panic(fmt.Errorf("gRPC鏈嶅姟鍚姩澶辫触: %w", err))
 		}
 	}()
 
-	// 优雅退出
+	// 浼橀泤閫€鍑?
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	fmt.Println("正在关闭Cart服务...")
+	fmt.Println("姝ｅ湪鍏抽棴Cart鏈嶅姟...")
 	if err := app.OrderConsumer.Stop(); err != nil {
-		fmt.Printf("关闭 Kafka 消费者失败: %v\n", err)
+		fmt.Printf("鍏抽棴 Kafka 娑堣垂鑰呭け璐? %v\n", err)
 	}
 	if err := app.Server.Stop(); err != nil {
-		fmt.Printf("关闭 gRPC 服务失败: %v\n", err)
+		fmt.Printf("鍏抽棴 gRPC 鏈嶅姟澶辫触: %v\n", err)
 	}
-	fmt.Println("Cart服务已关闭")
+	fmt.Println("Cart鏈嶅姟宸插叧闂?)
 }
 
 func initViperWatch() {
 	cfile := pflag.String("config",
-		"internal/cart/config/dev.yaml", "配置文件路径")
+		"internal/cart/config/dev.yaml", "閰嶇疆鏂囦欢璺緞")
 	pflag.Parse()
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("读取配置文件失败: %w", err))
+		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w", err))
 	}
 
-	// 支持环境变量覆盖配置文件（环境变量优先）
+	// 鏀寔鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢锛堢幆澧冨彉閲忎紭鍏堬級
 	viper.AutomaticEnv()
 
 	viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
@@ -62,3 +62,5 @@ func initViperWatch() {
 	viper.BindEnv("grpc.server.port", "GRPC_PORT")
 	viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 }
+
+

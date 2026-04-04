@@ -13,27 +13,27 @@ import (
 	"github.com/google/wire"
 )
 
-// InitApp 初始化整个应用
+// InitApp 鍒濆鍖栨暣涓簲鐢?
 func InitApp() server.Server {
 	wire.Build(
-		// 基础设施层（ioc 包提供）
+		// 鍩虹璁炬柦灞傦紙ioc 鍖呮彁渚涳級
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitRedis,
 
-		// DAO 层
+		// DAO 灞?
 		dao.NewGORMUserDAO,
 
-		// Cache 层
+		// Cache 灞?
 		cache.NewRedisUserCache,
 
-		// Repository 层
+		// Repository 灞?
 		repo.NewUserRepository,
 
-		// Service 层
+		// Service 灞?
 		service.NewUserService,
 
-		// Handler 层
+		// Handler 灞?
 		handler.NewUserServiceServer,
 
 		// gRPC Server
@@ -41,3 +41,5 @@ func InitApp() server.Server {
 	)
 	return nil
 }
+
+

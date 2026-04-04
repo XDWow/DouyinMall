@@ -31,3 +31,5 @@ func (uc *CommitStockUseCase) Execute(ctx context.Context, cmd CommitStockComman
 	}
 	return uc.repo.CommitStock(ctx, cmd.OperationID, cmd.Changes)
 }
+
+

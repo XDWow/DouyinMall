@@ -10,50 +10,50 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitAgentClient 初始化 Agent gRPC 客户端。
-// 若配置了 rpc.agent.direct_addr，则直连该地址（适用于宿主机调试）；
-// 否则走 etcd 服务发现（适用于 Docker 部署）。
+// InitAgentClient 鍒濆鍖?Agent gRPC 瀹㈡埛绔€?
+// 鑻ラ厤缃簡 rpc.agent.direct_addr锛屽垯鐩磋繛璇ュ湴鍧€锛堥€傜敤浜庡涓绘満璋冭瘯锛夛紱
+// 鍚﹀垯璧?etcd 鏈嶅姟鍙戠幇锛堥€傜敤浜?Docker 閮ㄧ讲锛夈€?
 func InitAgentClient() agentservice.Client {
 	if addr := viper.GetString("rpc.agent.direct_addr"); addr != "" {
 		c, err := agentservice.NewClient(agentServiceName(), client.WithHostPorts(addr))
 		if err != nil {
-			panic(fmt.Errorf("创建 Agent RPC 客户端失败(direct): %w", err))
+			panic(fmt.Errorf("鍒涘缓 Agent RPC 瀹㈡埛绔け璐?direct): %w", err))
 		}
 		return c
 	}
 
 	r, err := etcd.NewEtcdResolver(etcdEndpoints())
 	if err != nil {
-		panic(fmt.Errorf("创建 etcd resolver 失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓 etcd resolver 澶辫触: %w", err))
 	}
 	c, err := agentservice.NewClient(agentServiceName(), client.WithResolver(r))
 	if err != nil {
-		panic(fmt.Errorf("创建 Agent RPC 客户端失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓 Agent RPC 瀹㈡埛绔け璐? %w", err))
 	}
 	return c
 }
 
-// InitAgentStreamClient 初始化 Agent gRPC 流式客户端
+// InitAgentStreamClient 鍒濆鍖?Agent gRPC 娴佸紡瀹㈡埛绔?
 func InitAgentStreamClient() agentservice.StreamClient {
 	if addr := viper.GetString("rpc.agent.direct_addr"); addr != "" {
 		c, err := agentservice.NewStreamClient(agentServiceName(),
 			streamclient.WithHostPorts(addr),
 		)
 		if err != nil {
-			panic(fmt.Errorf("创建 Agent Stream 客户端失败(direct): %w", err))
+			panic(fmt.Errorf("鍒涘缓 Agent Stream 瀹㈡埛绔け璐?direct): %w", err))
 		}
 		return c
 	}
 
 	r, err := etcd.NewEtcdResolver(etcdEndpoints())
 	if err != nil {
-		panic(fmt.Errorf("创建 etcd resolver 失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓 etcd resolver 澶辫触: %w", err))
 	}
 	c, err := agentservice.NewStreamClient(agentServiceName(),
 		streamclient.WithResolver(r),
 	)
 	if err != nil {
-		panic(fmt.Errorf("创建 Agent Stream 客户端失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓 Agent Stream 瀹㈡埛绔け璐? %w", err))
 	}
 	return c
 }
@@ -78,3 +78,5 @@ func etcdEndpoints() []string {
 	}
 	return endpoints
 }
+
+

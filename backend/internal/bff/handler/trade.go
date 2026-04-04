@@ -437,3 +437,5 @@ func toCheckoutAddress(addr tradeAddress) *checkoutv1.Address {
 		ZipCode:      addr.ZipCode,
 	}
 }
+
+

@@ -14,13 +14,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// 这部分代码做的是全量校验/增量校验+发修复信息:
-// id: 告诉消费者这个 id 的数据有问题
-// direction: 以谁为base(src or dst)
+// 杩欓儴鍒嗕唬鐮佸仛鐨勬槸鍏ㄩ噺鏍￠獙/澧為噺鏍￠獙+鍙戜慨澶嶄俊鎭?
+// id: 鍛婅瘔娑堣垂鑰呰繖涓?id 鐨勬暟鎹湁闂
+// direction: 浠ヨ皝涓篵ase(src or dst)
 
-// Validator T 必须实现了 Entity 接口
+// Validator T 蹇呴』瀹炵幇浜?Entity 鎺ュ彛
 type Validator[T migrator.Entity] struct {
-	// 以 base 为基准
+	// 浠?base 涓哄熀鍑?
 	base   *gorm.DB
 	target *gorm.DB
 
@@ -31,8 +31,8 @@ type Validator[T migrator.Entity] struct {
 	direction string
 
 	utime int64
-	// <=0 说明直接退出校验循环
-	// > 0 真的 sleep
+	// <=0 璇存槑鐩存帴閫€鍑烘牎楠屽惊鐜?
+	// > 0 鐪熺殑 sleep
 	sleepInterval time.Duration
 
 	fromBase   func(ctx context.Context, offset int) (T, error)
@@ -49,9 +49,9 @@ func NeValidator[T migrator.Entity](
 ) *Validator[T] {
 	highLoad := atomicx.NewValueOf[bool](false)
 	go func() {
-		// 在这里，去查询数据库的状态
-		// 你的校验代码不太可能是性能瓶颈，性能瓶颈一般在数据库
-		// 你也可以结合本地的 CPU，内存负载来判定
+		// 鍦ㄨ繖閲岋紝鍘绘煡璇㈡暟鎹簱鐨勭姸鎬?
+		// 浣犵殑鏍￠獙浠ｇ爜涓嶅お鍙兘鏄€ц兘鐡堕锛屾€ц兘鐡堕涓€鑸湪鏁版嵁搴?
+		// 浣犱篃鍙互缁撳悎鏈湴鐨?CPU锛屽唴瀛樿礋杞芥潵鍒ゅ畾
 	}()
 	res := &Validator[T]{
 		base:      base,
@@ -77,14 +77,14 @@ func (v *Validator[T]) Utime(utime int64) *Validator[T] {
 	return v
 }
 
-// 第一个全量校验，是为了同步初始化目标表结构、数据这段时间，base表的插入、删除操作
+// 绗竴涓叏閲忔牎楠岋紝鏄负浜嗗悓姝ュ垵濮嬪寲鐩爣琛ㄧ粨鏋勩€佹暟鎹繖娈垫椂闂达紝base琛ㄧ殑鎻掑叆銆佸垹闄ゆ搷浣?
 func (v *Validator[T]) Validate(ctx context.Context) error {
 	var eg errgroup.Group
 	eg.Go(func() error {
 		v.validateBaseToTarget(ctx)
-		// 即使这个校验出错了，我也不希望另一个校验停下来
-		// 这里用errgroup.Group的目的是方便wait()
-		// 也可以sync.wait()
+		// 鍗充娇杩欎釜鏍￠獙鍑洪敊浜嗭紝鎴戜篃涓嶅笇鏈涘彟涓€涓牎楠屽仠涓嬫潵
+		// 杩欓噷鐢╡rrgroup.Group鐨勭洰鐨勬槸鏂逛究wait()
+		// 涔熷彲浠ync.wait()
 		return nil
 	})
 	eg.Go(func() error {
@@ -98,25 +98,25 @@ func (v *Validator[T]) validateBaseToTarget(ctx context.Context) {
 	offset := 0
 	for {
 		if v.highLoad.Load() {
-			//挂起
+			//鎸傝捣
 		}
-		// 去源库找数据
-		// 全量校验和增量校验的区别在于取数据，所以这个 fromBase 做成了可修改的
+		// 鍘绘簮搴撴壘鏁版嵁
+		// 鍏ㄩ噺鏍￠獙鍜屽閲忔牎楠岀殑鍖哄埆鍦ㄤ簬鍙栨暟鎹紝鎵€浠ヨ繖涓?fromBase 鍋氭垚浜嗗彲淇敼鐨?
 		src, err := v.fromBase(ctx, offset)
 		switch err {
 		case context.Canceled, context.DeadlineExceeded:
 			return
 
 		case gorm.ErrRecordNotFound:
-			// 比完了。没数据了，全量校验结束了
-			// 同时支持全量校验和增量校验，你这里就不能直接返回
-			// 在这里，你要考虑：有些情况下，用户希望退出，有些情况下。用户希望继续
-			// 当用户希望继续的时候，你要 sleep 一下
+			// 姣斿畬浜嗐€傛病鏁版嵁浜嗭紝鍏ㄩ噺鏍￠獙缁撴潫浜?
+			// 鍚屾椂鏀寔鍏ㄩ噺鏍￠獙鍜屽閲忔牎楠岋紝浣犺繖閲屽氨涓嶈兘鐩存帴杩斿洖
+			// 鍦ㄨ繖閲岋紝浣犺鑰冭檻锛氭湁浜涙儏鍐典笅锛岀敤鎴峰笇鏈涢€€鍑猴紝鏈変簺鎯呭喌涓嬨€傜敤鎴峰笇鏈涚户缁?
+			// 褰撶敤鎴峰笇鏈涚户缁殑鏃跺€欙紝浣犺 sleep 涓€涓?
 			if v.sleepInterval <= 0 {
 				return
 			}
 			time.Sleep(v.sleepInterval)
-			// continue 就是不走 offset++，不挪
+			// continue 灏辨槸涓嶈蛋 offset++锛屼笉鎸?
 			continue
 
 		case nil:
@@ -124,71 +124,71 @@ func (v *Validator[T]) validateBaseToTarget(ctx context.Context) {
 			err = v.target.Where("id = ?", src.ID()).First(&dst).Error
 			switch err {
 			case nil:
-				// 比较
-				// 1. src == dst 错
-				// 2.原则上是可以利用反射来比
+				// 姣旇緝
+				// 1. src == dst 閿?
+				// 2.鍘熷垯涓婃槸鍙互鍒╃敤鍙嶅皠鏉ユ瘮
 				//if reflect.DeepEqual(src, dst) {
 				//}
-				// 3.用它自定义的比较逻辑
-				// 4. 动态选择
-				// 这个写法比较有意思，断言其是否实现了CompareTo（）方法，不过要any类型才能这样断言
+				// 3.鐢ㄥ畠鑷畾涔夌殑姣旇緝閫昏緫
+				// 4. 鍔ㄦ€侀€夋嫨
+				// 杩欎釜鍐欐硶姣旇緝鏈夋剰鎬濓紝鏂█鍏舵槸鍚﹀疄鐜颁簡CompareTo锛堬級鏂规硶锛屼笉杩囪any绫诲瀷鎵嶈兘杩欐牱鏂█
 				var srcAny any = src
 				if c1, ok := srcAny.(interface {
-					// 有没有自定义的比较逻辑
+					// 鏈夋病鏈夎嚜瀹氫箟鐨勬瘮杈冮€昏緫
 					CompareTo(c2 migrator.Entity) bool
 				}); ok {
-					// 有，我就用它的
+					// 鏈夛紝鎴戝氨鐢ㄥ畠鐨?
 					if !c1.CompareTo(dst) {
-						// 不相等，上报Kafka：数据不一致
-						// 信息是什么？看消费者需要什么->定义相关事件event
+						// 涓嶇浉绛夛紝涓婃姤Kafka锛氭暟鎹笉涓€鑷?
+						// 淇℃伅鏄粈涔堬紵鐪嬫秷璐硅€呴渶瑕佷粈涔?>瀹氫箟鐩稿叧浜嬩欢event
 						v.notify(ctx, src.ID(), events.InconsistentEventTypeNEQ)
 					}
 				} else {
-					// 没有，我就用反射
+					// 娌℃湁锛屾垜灏辩敤鍙嶅皠
 					if !reflect.DeepEqual(src, dst) {
 						v.notify(ctx, src.ID(), events.InconsistentEventTypeNEQ)
 					}
 				}
 			case gorm.ErrRecordNotFound:
-				// target 中少了数据
+				// target 涓皯浜嗘暟鎹?
 				v.notify(ctx, src.ID(), events.InconsistentEventTypeTargetMissing)
 			case context.Canceled, context.DeadlineExceeded:
-				// 超时或被取消,结束
+				// 瓒呮椂鎴栬鍙栨秷,缁撴潫
 				return
 			default:
-				v.l.Error("查询 target 数据失败", logger.Error(err))
+				v.l.Error("鏌ヨ target 鏁版嵁澶辫触", logger.Error(err))
 			}
 
 		default:
-			v.l.Error("校验数据，查询 base 出错",
+			v.l.Error("鏍￠獙鏁版嵁锛屾煡璇?base 鍑洪敊",
 				logger.Error(err))
-			// default 是出错了，offset 动不动？
-			// 如果动了，漏一条数据
-			// 如果不动，万一这条数据一直出错误，永远卡在这，影响更大
+			// default 鏄嚭閿欎簡锛宱ffset 鍔ㄤ笉鍔紵
+			// 濡傛灉鍔ㄤ簡锛屾紡涓€鏉℃暟鎹?
+			// 濡傛灉涓嶅姩锛屼竾涓€杩欐潯鏁版嵁涓€鐩村嚭閿欒锛屾案杩滃崱鍦ㄨ繖锛屽奖鍝嶆洿澶?
 		}
 		offset++
 	}
 }
 
-// 调用这个方法切换增量校验
+// 璋冪敤杩欎釜鏂规硶鍒囨崲澧為噺鏍￠獙
 func (v *Validator[T]) Incr() *Validator[T] {
 	v.fromBase = v.IncrFromBase
 	v.fromTarget = v.IncrFromTarget
 	return v
 }
 
-// 这一遍是为了找出 base 中删掉的数据，消费者拿到消息去删除target中的数据
+// 杩欎竴閬嶆槸涓轰簡鎵惧嚭 base 涓垹鎺夌殑鏁版嵁锛屾秷璐硅€呮嬁鍒版秷鎭幓鍒犻櫎target涓殑鏁版嵁
 func (v *Validator[T]) validateTargetToBase(ctx context.Context) {
-	// 先找 target，再找 base，找出 base 中已经被删除的
-	// 理论上来说，就是 target 里面一条条找，不过这里可以优化
+	// 鍏堟壘 target锛屽啀鎵?base锛屾壘鍑?base 涓凡缁忚鍒犻櫎鐨?
+	// 鐞嗚涓婃潵璇达紝灏辨槸 target 閲岄潰涓€鏉℃潯鎵撅紝涓嶈繃杩欓噷鍙互浼樺寲
 	offset := 0
 	for {
 		dbCtx, cancel := context.WithTimeout(ctx, time.Second)
 		dstIds, err := v.fromTarget(dbCtx, offset)
 		cancel()
-		// gorm 在 Find 方法接收的是切片的时候，不会返回 gorm.ErrRecordNotFound,所以通过这样判断
+		// gorm 鍦?Find 鏂规硶鎺ユ敹鐨勬槸鍒囩墖鐨勬椂鍊欙紝涓嶄細杩斿洖 gorm.ErrRecordNotFound,鎵€浠ラ€氳繃杩欐牱鍒ゆ柇
 		if len(dstIds) == 0 {
-			// 没数据了，返回
+			// 娌℃暟鎹簡锛岃繑鍥?
 			if v.sleepInterval <= 0 {
 				return
 			}
@@ -212,14 +212,14 @@ func (v *Validator[T]) validateTargetToBase(ctx context.Context) {
 				diff := slice.DiffSet(dstIds, srcIds)
 				v.notifyBaseMissing(ctx, diff)
 			default:
-				v.l.Error("查询base:target中有的数据失败")
+				v.l.Error("鏌ヨbase:target涓湁鐨勬暟鎹け璐?)
 			}
 		default:
-			v.l.Error("查询target 失败", logger.Error(err))
+			v.l.Error("鏌ヨtarget 澶辫触", logger.Error(err))
 		}
-		// 注意这里不是 + limit，limit是最大值，实际上len(dstTs)条
+		// 娉ㄦ剰杩欓噷涓嶆槸 + limit锛宭imit鏄渶澶у€硷紝瀹為檯涓妉en(dstTs)鏉?
 		offset += len(dstIds)
-		// 没有下一批了
+		// 娌℃湁涓嬩竴鎵逛簡
 		if len(dstIds) < v.batchSize {
 			if v.sleepInterval <= 0 {
 				return
@@ -233,10 +233,10 @@ func (v *Validator[T]) fullFromBase(ctx context.Context, offset int) (T, error) 
 	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	var src T
-	// 要按照 id 升序来找
-	// 如果降序，新插入的数据遍历不到
-	// 如果没有 id 这个列，找一个类似的列，如 ctime, utime不行，因为会不停变，会漏数据
-	// 作业：改成批量，性能会好很多
+	// 瑕佹寜鐓?id 鍗囧簭鏉ユ壘
+	// 濡傛灉闄嶅簭锛屾柊鎻掑叆鐨勬暟鎹亶鍘嗕笉鍒?
+	// 濡傛灉娌℃湁 id 杩欎釜鍒楋紝鎵句竴涓被浼肩殑鍒楋紝濡?ctime, utime涓嶈锛屽洜涓轰細涓嶅仠鍙橈紝浼氭紡鏁版嵁
+	// 浣滀笟锛氭敼鎴愭壒閲忥紝鎬ц兘浼氬ソ寰堝
 	err := v.base.WithContext(dbCtx).Order("id").
 		Offset(offset).
 		First(&src).Error
@@ -247,8 +247,8 @@ func (v *Validator[T]) IncrFromBase(ctx context.Context, offset int) (T, error) 
 	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	var src T
-	// 增量校验只能按 utime 来取
-	// 这里还是有问题, utime的问题
+	// 澧為噺鏍￠獙鍙兘鎸?utime 鏉ュ彇
+	// 杩欓噷杩樻槸鏈夐棶棰? utime鐨勯棶棰?
 	err := v.base.WithContext(dbCtx).
 		Where("utime > ?", v.utime).
 		Order("utime").
@@ -274,8 +274,8 @@ func (v *Validator[T]) IncrFromTarget(ctx context.Context, offset int) ([]int64,
 	dbCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	var ids []int64
-	// 增量校验只能按 utime 来取
-	// 这里还是有问题, utime的问题
+	// 澧為噺鏍￠獙鍙兘鎸?utime 鏉ュ彇
+	// 杩欓噷杩樻槸鏈夐棶棰? utime鐨勯棶棰?
 	err := v.target.WithContext(dbCtx).
 		Where("utime > ?", v.utime).
 		Order("utime").
@@ -302,6 +302,8 @@ func (v *Validator[T]) notify(ctx context.Context, id int64, typ string) {
 			Type:      typ,
 		})
 	if err != nil {
-		v.l.Error("发送数据不一致的消息失败", logger.Error(err))
+		v.l.Error("鍙戦€佹暟鎹笉涓€鑷寸殑娑堟伅澶辫触", logger.Error(err))
 	}
 }
+
+

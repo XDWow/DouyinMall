@@ -30,7 +30,7 @@ func (repo *paymentRepository) AddPayment(ctx context.Context, pmt domain.Paymen
 }
 
 func (repo *paymentRepository) UpdatePayment(ctx context.Context, pmt domain.Payment) error {
-	// Updates(&struct) 会自动忽略零值，只更新有值的字段
+	// Updates(&struct) 浼氳嚜鍔ㄥ拷鐣ラ浂鍊硷紝鍙洿鏂版湁鍊肩殑瀛楁
 	dbPmt := toDBPayment(pmt)
 	return repo.db.WithContext(ctx).
 		Model(&db.Payment{}).
@@ -82,7 +82,7 @@ func toDomainPayment(pmt db.Payment) domain.Payment {
 			Total:    pmt.Amt,
 		},
 		Status: domain.PaymentStatus(pmt.Status),
-		TxnID:  pmt.TxnID.String, // sql.NullString → string
+		TxnID:  pmt.TxnID.String, // sql.NullString 鈫?string
 	}
 }
 
@@ -99,3 +99,5 @@ func toDBPayment(pmt domain.Payment) db.Payment {
 	}
 	return dbPmt
 }
+
+

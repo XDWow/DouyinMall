@@ -114,3 +114,5 @@ func (mr *MockProductServiceMockRecorder) UpdateProduct(ctx, product any) *gomoc
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateProduct", reflect.TypeOf((*MockProductService)(nil).UpdateProduct), ctx, product)
 }
+
+

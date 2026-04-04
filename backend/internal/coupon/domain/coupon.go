@@ -8,24 +8,18 @@ type CouponScope uint8
 
 const (
 	CouponScopeUnknown  CouponScope = iota
-	CouponScopeAll                  // 全场券（不限制）
-	CouponScopeMerchant             // 商家券
-	CouponScopeCategory             // 品类券
-	CouponScopeProduct              // 商品券
-)
+	CouponScopeAll                  // 鍏ㄥ満鍒革紙涓嶉檺鍒讹級
+	CouponScopeMerchant             // 鍟嗗鍒?	CouponScopeCategory             // 鍝佺被鍒?	CouponScopeProduct              // 鍟嗗搧鍒?)
 
-// 优惠券类型
-type CouponType uint8
+// 浼樻儬鍒哥被鍨?type CouponType uint8
 
 const (
 	CouponTypeUnspecified CouponType = iota
-	CouponTypeAmount                 // 满减券（满100减20）
-	CouponTypePercent                // 折扣券（8折）
-	CouponTypeFixed                  // 立减券（无门槛减10元）
+	CouponTypeAmount                 // 婊″噺鍒革紙婊?00鍑?0锛?	CouponTypePercent                // 鎶樻墸鍒革紙8鎶橈級
+	CouponTypeFixed                  // 绔嬪噺鍒革紙鏃犻棬妲涘噺10鍏冿級
 )
 
-// 优惠券状态
-type CouponStatus uint8
+// 浼樻儬鍒哥姸鎬?type CouponStatus uint8
 
 func (c CouponStatus) AsUint8() uint8 {
 	return uint8(c)
@@ -33,44 +27,36 @@ func (c CouponStatus) AsUint8() uint8 {
 
 const (
 	UserCouponStatusUnspecified CouponStatus = iota
-	UserCouponStatusUnused                   // 未使用
-	UserCouponStatusLocked                   // 已锁定（预扣中）
-	UserCouponStatusUsed                     // 已使用
-	UserCouponStatusExpired                  // 已过期
-)
+	UserCouponStatusUnused                   // 鏈娇鐢?	UserCouponStatusLocked                   // 宸查攣瀹氾紙棰勬墸涓級
+	UserCouponStatusUsed                     // 宸蹭娇鐢?	UserCouponStatusExpired                  // 宸茶繃鏈?)
 
-// 优惠券模板（领域实体）
-// 管理员创建的优惠规则定义
+// 浼樻儬鍒告ā鏉匡紙棰嗗煙瀹炰綋锛?// 绠＄悊鍛樺垱寤虹殑浼樻儬瑙勫垯瀹氫箟
 type CouponTemplate struct {
 	ID   int64
 	Name string
 	Type CouponType
 
-	Threshold     int64 // 使用门槛（分），0 表示无门槛
-	DiscountValue int64 // 金额（分）或折扣（80=8折）
-	MaxDiscount   int64 // 折扣券最大优惠（分），0 表示不限制
-
-	// 使用范围（互斥）
+	Threshold     int64 // 浣跨敤闂ㄦ锛堝垎锛夛紝0 琛ㄧず鏃犻棬妲?	DiscountValue int64 // 閲戦锛堝垎锛夋垨鎶樻墸锛?0=8鎶橈級
+	MaxDiscount   int64 // 鎶樻墸鍒告渶澶т紭鎯狅紙鍒嗭級锛? 琛ㄧず涓嶉檺鍒?
+	// 浣跨敤鑼冨洿锛堜簰鏂ワ級
 	Scope       CouponScope
 	MerchantIDs []int64
 	CategoryIDs []int64
 	ProductIDs  []int64
 
-	// 有效期（两种模式互斥）
-	ValidDays      int64 // 相对有效期（天）
-	ValidStartTime int64 // 固定开始时间（Unix 秒）
-	ValidEndTime   int64 // 固定结束时间（Unix 秒）
+	// 鏈夋晥鏈燂紙涓ょ妯″紡浜掓枼锛?	ValidDays      int64 // 鐩稿鏈夋晥鏈燂紙澶╋級
+	ValidStartTime int64 // 鍥哄畾寮€濮嬫椂闂达紙Unix 绉掞級
+	ValidEndTime   int64 // 鍥哄畾缁撴潫鏃堕棿锛圲nix 绉掞級
 
-	// 发放限制
-	TotalCount   int32 // 发行总量，-1 表示不限
-	IssuedCount  int32 // 已发放数量（运行态）
-	PerUserLimit int32 // 每人限领
+	// 鍙戞斁闄愬埗
+	TotalCount   int32 // 鍙戣鎬婚噺锛?1 琛ㄧず涓嶉檺
+	IssuedCount  int32 // 宸插彂鏀炬暟閲忥紙杩愯鎬侊級
+	PerUserLimit int32 // 姣忎汉闄愰
 
 	Enabled bool
 }
 
-// CanIssue 检查是否可以发放，这是优惠券层面的是否能发放
-func (t *CouponTemplate) CanIssue() bool {
+// CanIssue 妫€鏌ユ槸鍚﹀彲浠ュ彂鏀撅紝杩欐槸浼樻儬鍒稿眰闈㈢殑鏄惁鑳藉彂鏀?func (t *CouponTemplate) CanIssue() bool {
 	if !t.Enabled {
 		return false
 	}
@@ -80,16 +66,13 @@ func (t *CouponTemplate) CanIssue() bool {
 	return true
 }
 
-// 计算用户券的有效期
-func (t *CouponTemplate) CalculateValidTime() (start, end int64) {
+// 璁＄畻鐢ㄦ埛鍒哥殑鏈夋晥鏈?func (t *CouponTemplate) CalculateValidTime() (start, end int64) {
 	now := time.Now().Unix()
 	if t.ValidDays > 0 {
-		// 领取后N天有效
-		start = now
+		// 棰嗗彇鍚嶯澶╂湁鏁?		start = now
 		end = now + t.ValidDays*86400
 	} else {
-		// 固定时间段
-		start = t.ValidStartTime
+		// 鍥哄畾鏃堕棿娈?		start = t.ValidStartTime
 		end = t.ValidEndTime
 	}
 	return
@@ -99,8 +82,7 @@ type Coupon struct {
 	ID             int64
 	UserID         int64
 	TemplateID     int64
-	Template       *CouponTemplate // 关联的模板
-	Status         CouponStatus
+	Template       *CouponTemplate // 鍏宠仈鐨勬ā鏉?	Status         CouponStatus
 	OrderID        int64
 	ValidStartTime time.Time
 	ValidEndTime   time.Time
@@ -108,10 +90,8 @@ type Coupon struct {
 	UsedAt         time.Time
 }
 
-// DDD:Tell, Don't Ask，告诉我你要做什么，我来规约，我觉得哪些状态可以转移，你告诉我你要做什么
-
-// Reserve 预扣优惠券（状态转移：Unused → Locked）
-func (c *Coupon) Reserve(orderID int64) error {
+// DDD:Tell, Don't Ask锛屽憡璇夋垜浣犺鍋氫粈涔堬紝鎴戞潵瑙勭害锛屾垜瑙夊緱鍝簺鐘舵€佸彲浠ヨ浆绉伙紝浣犲憡璇夋垜浣犺鍋氫粈涔?
+// Reserve 棰勬墸浼樻儬鍒革紙鐘舵€佽浆绉伙細Unused 鈫?Locked锛?func (c *Coupon) Reserve(orderID int64) error {
 	if c.Status != UserCouponStatusUnused {
 		return ErrCouponNotAvailable
 	}
@@ -120,8 +100,7 @@ func (c *Coupon) Reserve(orderID int64) error {
 	return nil
 }
 
-// Commit 确认使用（状态转移：Locked → Used）
-func (c *Coupon) Commit() error {
+// Commit 纭浣跨敤锛堢姸鎬佽浆绉伙細Locked 鈫?Used锛?func (c *Coupon) Commit() error {
 	if c.Status != UserCouponStatusLocked {
 		return ErrCouponNotLocked
 	}
@@ -129,8 +108,7 @@ func (c *Coupon) Commit() error {
 	return nil
 }
 
-// Release 释放优惠券（状态转移：Locked → Unused）
-func (c *Coupon) Release() error {
+// Release 閲婃斁浼樻儬鍒革紙鐘舵€佽浆绉伙細Locked 鈫?Unused锛?func (c *Coupon) Release() error {
 	if c.Status != UserCouponStatusLocked {
 		return ErrCouponNotLocked
 	}
@@ -139,34 +117,31 @@ func (c *Coupon) Release() error {
 	return nil
 }
 
-// OrderItem 订单商品（用于计算优惠券适用金额）
-type OrderItem struct {
+// OrderItem 璁㈠崟鍟嗗搧锛堢敤浜庤绠椾紭鎯犲埜閫傜敤閲戦锛?type OrderItem struct {
 	ProductID  int64
 	MerchantID int64
 	CategoryID int64
-	Subtotal   int64 // 该商品的小计金额（分）
-}
+	Subtotal   int64 // 璇ュ晢鍝佺殑灏忚閲戦锛堝垎锛?}
 
-// 检查优惠券是否适用于某个订单（计算适用金额 + 检查门槛）
+// 妫€鏌ヤ紭鎯犲埜鏄惁閫傜敤浜庢煇涓鍗曪紙璁＄畻閫傜敤閲戦 + 妫€鏌ラ棬妲涳級
 func (t *CouponTemplate) IsApplicableToOrder(items []OrderItem) (bool, string) {
-	// 计算适用金额，按照scope汇总金额
-	applicableAmount := t.CalculateApplicableAmount(items)
+	// 璁＄畻閫傜敤閲戦锛屾寜鐓cope姹囨€婚噾棰?	applicableAmount := t.CalculateApplicableAmount(items)
 
 	if applicableAmount == 0 {
-		return false, "订单中无适用商品"
+		return false, "璁㈠崟涓棤閫傜敤鍟嗗搧"
 	}
 	if applicableAmount < t.Threshold {
-		return false, "未达到使用门槛"
+		return false, "鏈揪鍒颁娇鐢ㄩ棬妲?
 	}
 
 	return true, ""
 }
 
-// 计算优惠券在本订单中的适用金额
+// 璁＄畻浼樻儬鍒稿湪鏈鍗曚腑鐨勯€傜敤閲戦
 func (t *CouponTemplate) CalculateApplicableAmount(items []OrderItem) int64 {
 	switch t.Scope {
 	case CouponScopeAll:
-		// 全场券：所有商品原价总和
+		// 鍏ㄥ満鍒革細鎵€鏈夊晢鍝佸師浠锋€诲拰
 		var total int64
 		for _, item := range items {
 			total += item.Subtotal
@@ -174,29 +149,27 @@ func (t *CouponTemplate) CalculateApplicableAmount(items []OrderItem) int64 {
 		return total
 
 	case CouponScopeMerchant:
-		// 商家券：筛选指定商家的商品
+		// 鍟嗗鍒革細绛涢€夋寚瀹氬晢瀹剁殑鍟嗗搧
 		return sumByIDs(items, t.MerchantIDs, func(item OrderItem) int64 { return item.MerchantID })
 
 	case CouponScopeCategory:
-		// 品类券：筛选指定品类的商品
+		// 鍝佺被鍒革細绛涢€夋寚瀹氬搧绫荤殑鍟嗗搧
 		return sumByIDs(items, t.CategoryIDs, func(item OrderItem) int64 { return item.CategoryID })
 
 	case CouponScopeProduct:
-		// 商品券：筛选指定商品
-		return sumByIDs(items, t.ProductIDs, func(item OrderItem) int64 { return item.ProductID })
+		// 鍟嗗搧鍒革細绛涢€夋寚瀹氬晢鍝?		return sumByIDs(items, t.ProductIDs, func(item OrderItem) int64 { return item.ProductID })
 
 	default:
 		return 0
 	}
 }
 
-// 自定义 getID 的通用求和方法
+// 鑷畾涔?getID 鐨勯€氱敤姹傚拰鏂规硶
 func sumByIDs(items []OrderItem, ids []int64, getID func(OrderItem) int64) int64 {
 	if len(ids) == 0 {
 		return 0
 	}
-	// 空间换时间，快速判断订单项是否在ids中
-	idSet := make(map[int64]struct{}, len(ids))
+	// 绌洪棿鎹㈡椂闂达紝蹇€熷垽鏂鍗曢」鏄惁鍦╥ds涓?	idSet := make(map[int64]struct{}, len(ids))
 	for _, id := range ids {
 		idSet[id] = struct{}{}
 	}
@@ -210,12 +183,12 @@ func sumByIDs(items []OrderItem, ids []int64, getID func(OrderItem) int64) int64
 	return total
 }
 
-// 优惠券操作记录，用于幂等和审计
-type CouponOperation struct {
+// 浼樻儬鍒告搷浣滆褰曪紝鐢ㄤ簬骞傜瓑鍜屽璁?type CouponOperation struct {
 	ID           int64
-	OperationID  string // 业务幂等键
-	UserCouponID int64
+	OperationID  string // 涓氬姟骞傜瓑閿?	UserCouponID int64
 	OrderID      int64
 	Type         string // reserve/commit/release/refund
 	CreatedAt    int64
 }
+
+

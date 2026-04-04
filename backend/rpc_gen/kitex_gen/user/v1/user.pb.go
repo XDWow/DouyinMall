@@ -161,7 +161,7 @@ func (x *ChangePasswordReq) GetNewPassword() string {
 
 type ChangeEmailReq struct {
 	UserId   int64  `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	Password string `protobuf:"bytes,2,opt,name=password" json:"password,omitempty"` // 验证密码
+	Password string `protobuf:"bytes,2,opt,name=password" json:"password,omitempty"` // 楠岃瘉瀵嗙爜
 	NewEmail string `protobuf:"bytes,3,opt,name=new_email" json:"new_email,omitempty"`
 }
 
@@ -227,7 +227,7 @@ func (x *ChangePhoneReq) GetNewPhone() string {
 
 type DeleteUserReq struct {
 	UserId   int64  `protobuf:"varint,1,opt,name=user_id" json:"user_id,omitempty"`
-	Password string `protobuf:"bytes,2,opt,name=password" json:"password,omitempty"` // 注销账号需要验证密码
+	Password string `protobuf:"bytes,2,opt,name=password" json:"password,omitempty"` // 娉ㄩ攢璐﹀彿闇€瑕侀獙璇佸瘑鐮?
 }
 
 func (x *DeleteUserReq) Reset() { *x = DeleteUserReq{} }
@@ -335,3 +335,5 @@ type UserService interface {
 	Delete(ctx context.Context, req *DeleteUserReq) (res *emptypb.Empty, err error)
 	Query(ctx context.Context, req *QueryUserReq) (res *QueryUserResp, err error)
 }
+
+

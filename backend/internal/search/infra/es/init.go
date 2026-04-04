@@ -5,14 +5,14 @@ import (
 	"fmt"
 )
 
-// InitIndices 幂等初始化所有 ES 索引
+// InitIndices 骞傜瓑鍒濆鍖栨墍鏈?ES 绱㈠紩
 func InitIndices(client *ESClient) error {
 	ctx := context.Background()
 	if err := initIndex(ctx, client, ProductIndex, getProductIndexMapping()); err != nil {
-		return fmt.Errorf("初始化商品索引失败: %w", err)
+		return fmt.Errorf("鍒濆鍖栧晢鍝佺储寮曞け璐? %w", err)
 	}
 	if err := initIndex(ctx, client, MerchantIndex, getMerchantIndexMapping()); err != nil {
-		return fmt.Errorf("初始化商家索引失败: %w", err)
+		return fmt.Errorf("鍒濆鍖栧晢瀹剁储寮曞け璐? %w", err)
 	}
 	return nil
 }
@@ -28,7 +28,7 @@ func initIndex(ctx context.Context, client *ESClient, name, mapping string) erro
 	return client.CreateIndex(ctx, name, mapping)
 }
 
-// ES8 商品索引 mapping，包含 dense_vector 用于向量搜索
+// ES8 鍟嗗搧绱㈠紩 mapping锛屽寘鍚?dense_vector 鐢ㄤ簬鍚戦噺鎼滅储
 func getProductIndexMapping() string {
 	return fmt.Sprintf(`{
   "settings": {
@@ -91,7 +91,7 @@ func getProductIndexMapping() string {
 }`, VectorDims)
 }
 
-// 商家索引 mapping
+// 鍟嗗绱㈠紩 mapping
 func getMerchantIndexMapping() string {
 	return `{
   "settings": {
@@ -130,3 +130,5 @@ func getMerchantIndexMapping() string {
   }
 }`
 }
+
+

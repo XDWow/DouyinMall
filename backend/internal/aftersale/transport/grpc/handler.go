@@ -108,3 +108,5 @@ func stringToStatus(value string) aftersalev1.AfterSaleRequestStatus {
 		return aftersalev1.AfterSaleRequestStatus_AFTER_SALE_REQUEST_STATUS_UNKNOWN
 	}
 }
+
+

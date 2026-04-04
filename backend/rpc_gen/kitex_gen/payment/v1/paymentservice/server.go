@@ -22,3 +22,5 @@ func NewServer(handler paymentv1.PaymentService, opts ...server.Option) server.S
 func RegisterService(svr server.Server, handler paymentv1.PaymentService, opts ...server.RegisterOption) error {
 	return svr.RegisterService(serviceInfo(), handler, opts...)
 }
+
+

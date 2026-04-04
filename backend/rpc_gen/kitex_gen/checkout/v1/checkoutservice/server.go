@@ -22,3 +22,5 @@ func NewServer(handler checkoutv1.CheckoutService, opts ...server.Option) server
 func RegisterService(svr server.Server, handler checkoutv1.CheckoutService, opts ...server.RegisterOption) error {
 	return svr.RegisterService(serviceInfo(), handler, opts...)
 }
+
+

@@ -39,7 +39,7 @@ type CartIntegrationSuite struct {
 
 func TestCartIntegration(t *testing.T) {
 	if testing.Short() {
-		t.Skip("跳过集成测试（短模式）")
+		t.Skip("璺宠繃闆嗘垚娴嬭瘯锛堢煭妯″紡锛?)
 	}
 	suite.Run(t, new(CartIntegrationSuite))
 }
@@ -47,7 +47,7 @@ func TestCartIntegration(t *testing.T) {
 func (s *CartIntegrationSuite) SetupSuite() {
 	ctx := context.Background()
 
-	// 启动 MySQL 容器
+	// 鍚姩 MySQL 瀹瑰櫒
 	mysqlReq := testcontainers.ContainerRequest{
 		Image:        "mysql:8.0",
 		ExposedPorts: []string{"3306/tcp"},
@@ -74,12 +74,12 @@ func (s *CartIntegrationSuite) SetupSuite() {
 
 	dsn := "root:root@tcp(" + mysqlHost + ":" + mysqlPort.Port() + ")/douyinmall_test?charset=utf8mb4&parseTime=True&loc=Local"
 
-	// 添加重试逻辑，确保连接成功
+	// 娣诲姞閲嶈瘯閫昏緫锛岀‘淇濊繛鎺ユ垚鍔?
 	var db *gorm.DB
 	for i := 0; i < 5; i++ {
 		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
 		if err == nil {
-			// 测试连接
+			// 娴嬭瘯杩炴帴
 			sqlDB, err := db.DB()
 			if err == nil {
 				err = sqlDB.Ping()
@@ -98,7 +98,7 @@ func (s *CartIntegrationSuite) SetupSuite() {
 	err = db.AutoMigrate(&dao.CartItem{})
 	require.NoError(s.T(), err)
 
-	// 启动 Redis 容器
+	// 鍚姩 Redis 瀹瑰櫒
 	redisReq := testcontainers.ContainerRequest{
 		Image:        "redis:7-alpine",
 		ExposedPorts: []string{"6379/tcp"},
@@ -122,7 +122,7 @@ func (s *CartIntegrationSuite) SetupSuite() {
 	})
 	s.redis = redisClient
 
-	// 初始化服务组件
+	// 鍒濆鍖栨湇鍔＄粍浠?
 	cartDAO := dao.NewGORMCartDAO(db)
 	cartCache := cache.NewRedisCache(redisClient)
 	testLogger := logger.NewNopLogger()
@@ -159,16 +159,16 @@ func (s *CartIntegrationSuite) TestAddItem() {
 	require.NoError(s.T(), err)
 	assert.NotNil(s.T(), resp)
 
-	// 验证 Redis
+	// 楠岃瘉 Redis
 	key := "cart:1001"
 	result, err := s.redis.HGetAll(ctx, key).Result()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), "1", result["2001"])
 
-	// 等待异步写 MySQL 完成
+	// 绛夊緟寮傛鍐?MySQL 瀹屾垚
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证 MySQL
+	// 楠岃瘉 MySQL
 	var item dao.CartItem
 	err = s.db.Where("user_id = ? AND product_id = ?", 1001, 2001).First(&item).Error
 	require.NoError(s.T(), err)
@@ -183,18 +183,18 @@ func (s *CartIntegrationSuite) TestAddItem_Duplicate() {
 		ProductIds: []int64{2001},
 	}
 
-	// 第一次添加
+	// 绗竴娆℃坊鍔?
 	_, err := s.cartHandler.AddItem(ctx, req)
 	require.NoError(s.T(), err)
 
-	// 第二次添加（应该累加）
+	// 绗簩娆℃坊鍔狅紙搴旇绱姞锛?
 	_, err = s.cartHandler.AddItem(ctx, req)
 	require.NoError(s.T(), err)
 
-	// 等待异步写 MySQL
+	// 绛夊緟寮傛鍐?MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证数量是 2
+	// 楠岃瘉鏁伴噺鏄?2
 	key := "cart:1001"
 	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
 	require.NoError(s.T(), err)
@@ -209,7 +209,7 @@ func (s *CartIntegrationSuite) TestAddItem_Duplicate() {
 func (s *CartIntegrationSuite) TestGetCart() {
 	ctx := context.Background()
 
-	// 先添加几个商品
+	// 鍏堟坊鍔犲嚑涓晢鍝?
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2002}})
 	time.Sleep(100 * time.Millisecond)
@@ -249,11 +249,11 @@ func (s *CartIntegrationSuite) TestGetCart_Empty() {
 func (s *CartIntegrationSuite) TestDeleteItem() {
 	ctx := context.Background()
 
-	// 先添加商品
+	// 鍏堟坊鍔犲晢鍝?
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
-	// 删除商品
+	// 鍒犻櫎鍟嗗搧
 	req := &cartv1.DeleteItemReq{
 		UserId:     1001,
 		ProductIds: []int64{2001},
@@ -263,16 +263,16 @@ func (s *CartIntegrationSuite) TestDeleteItem() {
 	require.NoError(s.T(), err)
 	assert.NotNil(s.T(), resp)
 
-	// 等待异步删除 MySQL
+	// 绛夊緟寮傛鍒犻櫎 MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证 Redis 中已删除
+	// 楠岃瘉 Redis 涓凡鍒犻櫎
 	key := "cart:1001"
 	exists, err := s.redis.HExists(ctx, key, "2001").Result()
 	require.NoError(s.T(), err)
 	assert.False(s.T(), exists)
 
-	// 验证 MySQL 中已删除
+	// 楠岃瘉 MySQL 涓凡鍒犻櫎
 	var count int64
 	s.db.Model(&dao.CartItem{}).Where("user_id = ? AND product_id = ?", 1001, 2001).Count(&count)
 	assert.Equal(s.T(), int64(0), count)
@@ -281,11 +281,11 @@ func (s *CartIntegrationSuite) TestDeleteItem() {
 func (s *CartIntegrationSuite) TestChangeQty() {
 	ctx := context.Background()
 
-	// 先添加商品
+	// 鍏堟坊鍔犲晢鍝?
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
-	// 修改数量为 5
+	// 淇敼鏁伴噺涓?5
 	req := &cartv1.ChangeQtyReq{
 		UserId: 1001,
 		Item: &cartv1.CartItem{
@@ -298,10 +298,10 @@ func (s *CartIntegrationSuite) TestChangeQty() {
 	require.NoError(s.T(), err)
 	assert.NotNil(s.T(), resp)
 
-	// 等待异步写 MySQL
+	// 绛夊緟寮傛鍐?MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证数量是 5
+	// 楠岃瘉鏁伴噺鏄?5
 	key := "cart:1001"
 	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
 	require.NoError(s.T(), err)
@@ -316,11 +316,11 @@ func (s *CartIntegrationSuite) TestChangeQty() {
 func (s *CartIntegrationSuite) TestIncrementQty() {
 	ctx := context.Background()
 
-	// 先添加商品
+	// 鍏堟坊鍔犲晢鍝?
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
-	// 增加数量
+	// 澧炲姞鏁伴噺
 	req := &cartv1.IncrementQtyReq{
 		UserId:    1001,
 		ProductId: 2001,
@@ -331,10 +331,10 @@ func (s *CartIntegrationSuite) TestIncrementQty() {
 	assert.NotNil(s.T(), resp)
 	assert.Equal(s.T(), int64(2), resp.NewQuantity)
 
-	// 等待异步写 MySQL
+	// 绛夊緟寮傛鍐?MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证数量是 2
+	// 楠岃瘉鏁伴噺鏄?2
 	key := "cart:1001"
 	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
 	require.NoError(s.T(), err)
@@ -344,13 +344,13 @@ func (s *CartIntegrationSuite) TestIncrementQty() {
 func (s *CartIntegrationSuite) TestDecrementQty() {
 	ctx := context.Background()
 
-	// 先添加商品，数量设为 3
+	// 鍏堟坊鍔犲晢鍝侊紝鏁伴噺璁句负 3
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
-	// 减少数量
+	// 鍑忓皯鏁伴噺
 	req := &cartv1.DecrementQtyReq{
 		UserId:    1001,
 		ProductId: 2001,
@@ -361,10 +361,10 @@ func (s *CartIntegrationSuite) TestDecrementQty() {
 	assert.NotNil(s.T(), resp)
 	assert.Equal(s.T(), int64(2), resp.NewQuantity)
 
-	// 等待异步写 MySQL
+	// 绛夊緟寮傛鍐?MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证数量是 2
+	// 楠岃瘉鏁伴噺鏄?2
 	key := "cart:1001"
 	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
 	require.NoError(s.T(), err)
@@ -374,11 +374,11 @@ func (s *CartIntegrationSuite) TestDecrementQty() {
 func (s *CartIntegrationSuite) TestDecrementQty_MinQuantity() {
 	ctx := context.Background()
 
-	// 先添加商品（数量为 1）
+	// 鍏堟坊鍔犲晢鍝侊紙鏁伴噺涓?1锛?
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	time.Sleep(100 * time.Millisecond)
 
-	// 尝试减少数量（应该失败）
+	// 灏濊瘯鍑忓皯鏁伴噺锛堝簲璇ュけ璐ワ級
 	req := &cartv1.DecrementQtyReq{
 		UserId:    1001,
 		ProductId: 2001,
@@ -387,18 +387,18 @@ func (s *CartIntegrationSuite) TestDecrementQty_MinQuantity() {
 	resp, err := s.cartHandler.DecrementQty(ctx, req)
 	assert.Error(s.T(), err)
 	assert.Nil(s.T(), resp)
-	assert.Contains(s.T(), err.Error(), "不能再减少")
+	assert.Contains(s.T(), err.Error(), "涓嶈兘鍐嶅噺灏?)
 }
 
 func (s *CartIntegrationSuite) TestEmptyCart() {
 	ctx := context.Background()
 
-	// 先添加几个商品
+	// 鍏堟坊鍔犲嚑涓晢鍝?
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
 	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2002}})
 	time.Sleep(100 * time.Millisecond)
 
-	// 清空购物车
+	// 娓呯┖璐墿杞?
 	req := &cartv1.EmptyCartReq{
 		UserId: 1001,
 	}
@@ -407,16 +407,16 @@ func (s *CartIntegrationSuite) TestEmptyCart() {
 	require.NoError(s.T(), err)
 	assert.NotNil(s.T(), resp)
 
-	// 等待异步删除 MySQL
+	// 绛夊緟寮傛鍒犻櫎 MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证 Redis 已清空
+	// 楠岃瘉 Redis 宸叉竻绌?
 	key := "cart:1001"
 	exists, err := s.redis.Exists(ctx, key).Result()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(0), exists)
 
-	// 验证 MySQL 已清空
+	// 楠岃瘉 MySQL 宸叉竻绌?
 	var count int64
 	s.db.Model(&dao.CartItem{}).Where("user_id = ?", 1001).Count(&count)
 	assert.Equal(s.T(), int64(0), count)
@@ -425,7 +425,7 @@ func (s *CartIntegrationSuite) TestEmptyCart() {
 func (s *CartIntegrationSuite) TestGetCart_RedisMiss_LoadFromMySQL() {
 	ctx := context.Background()
 
-	// 直接在 MySQL 插入数据（模拟 Redis miss）
+	// 鐩存帴鍦?MySQL 鎻掑叆鏁版嵁锛堟ā鎷?Redis miss锛?
 	item := dao.CartItem{
 		UserID:    1001,
 		ProductID: 2001,
@@ -433,10 +433,10 @@ func (s *CartIntegrationSuite) TestGetCart_RedisMiss_LoadFromMySQL() {
 	}
 	s.db.Create(&item)
 
-	// 清空 Redis（模拟 miss）
+	// 娓呯┖ Redis锛堟ā鎷?miss锛?
 	s.redis.Del(ctx, "cart:1001")
 
-	// 获取购物车（应该从 MySQL 加载并回写 Redis）
+	// 鑾峰彇璐墿杞︼紙搴旇浠?MySQL 鍔犺浇骞跺洖鍐?Redis锛?
 	req := &cartv1.GetCartReq{
 		UserId: 1001,
 	}
@@ -447,12 +447,14 @@ func (s *CartIntegrationSuite) TestGetCart_RedisMiss_LoadFromMySQL() {
 	assert.Len(s.T(), resp.Cart.Items, 1)
 	assert.Equal(s.T(), int64(3), resp.Cart.Items[0].Quantity)
 
-	// 等待异步回写 Redis
+	// 绛夊緟寮傛鍥炲啓 Redis
 	time.Sleep(100 * time.Millisecond)
 
-	// 验证 Redis 已回写
+	// 楠岃瘉 Redis 宸插洖鍐?
 	key := "cart:1001"
 	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(3), qty)
 }
+
+

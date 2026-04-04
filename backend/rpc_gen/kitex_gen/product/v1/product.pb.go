@@ -9,18 +9,15 @@ import (
 )
 
 type Product struct {
-	Id           int64    `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`                     // 商品ID
-	Name         string   `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`                  // 商品名称
-	Description  string   `protobuf:"bytes,3,opt,name=description" json:"description,omitempty"`    // 商品描述
-	Picture      string   `protobuf:"bytes,4,opt,name=picture" json:"picture,omitempty"`            // 商品图片地址
-	SliderImgs   []string `protobuf:"bytes,5,rep,name=sliderImgs" json:"sliderImgs,omitempty"`      // 商品轮播图地址
-	Price        int64    `protobuf:"varint,6,opt,name=price" json:"price,omitempty"`               // 商品价格（单位：分）
-	Currency     string   `protobuf:"bytes,11,opt,name=currency" json:"currency,omitempty"`         // 商品货币（如 "CNY", "USD"）
-	Categories   []string `protobuf:"bytes,7,rep,name=categories" json:"categories,omitempty"`      // 商品分类
-	InStock      bool     `protobuf:"varint,8,opt,name=in_stock" json:"in_stock,omitempty"`         // 是否有货（用于搜索等场景，不显示具体库存数量）
-	MerchantID   int64    `protobuf:"varint,9,opt,name=merchantID" json:"merchantID,omitempty"`     // 商品所属商家ID
-	MerchantName string   `protobuf:"bytes,10,opt,name=merchantName" json:"merchantName,omitempty"` // 商品所属商家名称
-}
+	Id           int64    `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`                     // 鍟嗗搧ID
+	Name         string   `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`                  // 鍟嗗搧鍚嶇О
+	Description  string   `protobuf:"bytes,3,opt,name=description" json:"description,omitempty"`    // 鍟嗗搧鎻忚堪
+	Picture      string   `protobuf:"bytes,4,opt,name=picture" json:"picture,omitempty"`            // 鍟嗗搧鍥剧墖鍦板潃
+	SliderImgs   []string `protobuf:"bytes,5,rep,name=sliderImgs" json:"sliderImgs,omitempty"`      // 鍟嗗搧杞挱鍥惧湴鍧€
+	Price        int64    `protobuf:"varint,6,opt,name=price" json:"price,omitempty"`               // 鍟嗗搧浠锋牸锛堝崟浣嶏細鍒嗭級
+	Currency     string   `protobuf:"bytes,11,opt,name=currency" json:"currency,omitempty"`         // 鍟嗗搧璐у竵锛堝 "CNY", "USD"锛?	Categories   []string `protobuf:"bytes,7,rep,name=categories" json:"categories,omitempty"`      // 鍟嗗搧鍒嗙被
+	InStock      bool     `protobuf:"varint,8,opt,name=in_stock" json:"in_stock,omitempty"`         // 鏄惁鏈夎揣锛堢敤浜庢悳绱㈢瓑鍦烘櫙锛屼笉鏄剧ず鍏蜂綋搴撳瓨鏁伴噺锛?	MerchantID   int64    `protobuf:"varint,9,opt,name=merchantID" json:"merchantID,omitempty"`     // 鍟嗗搧鎵€灞炲晢瀹禝D
+	MerchantName string   `protobuf:"bytes,10,opt,name=merchantName" json:"merchantName,omitempty"` // 鍟嗗搧鎵€灞炲晢瀹跺悕绉?}
 
 func (x *Product) Reset() { *x = Product{} }
 
@@ -298,3 +295,5 @@ type ProductService interface {
 	UpdateProduct(ctx context.Context, req *UpdateProductReq) (res *UpdateProductResp, err error)
 	DeleteProduct(ctx context.Context, req *DeleteProductReq) (res *DeleteProductResp, err error)
 }
+
+

@@ -21,7 +21,7 @@ func NewCouponOperationRepository(database *gorm.DB, l logger.LoggerV1) domain.C
 	}
 }
 
-// Create 创建操作记录（唯一索引保证幂等）
+// Create 鍒涘缓鎿嶄綔璁板綍锛堝敮涓€绱㈠紩淇濊瘉骞傜瓑锛?
 func (repo *couponOperationRepository) Create(ctx context.Context, op *domain.CouponOperation) error {
 	model := &db.CouponOperation{
 		OperationID:   op.OperationID,
@@ -35,16 +35,16 @@ func (repo *couponOperationRepository) Create(ctx context.Context, op *domain.Co
 
 	err := repo.db.WithContext(ctx).Create(model).Error
 	if err != nil {
-		// 如果违反唯一索引约束，说明已经存在（幂等）
+		// 濡傛灉杩濆弽鍞竴绱㈠紩绾︽潫锛岃鏄庡凡缁忓瓨鍦紙骞傜瓑锛?
 		// MySQL: "Error 1062: Duplicate entry"
-		// 这里简单返回错误，上层处理幂等逻辑
+		// 杩欓噷绠€鍗曡繑鍥為敊璇紝涓婂眰澶勭悊骞傜瓑閫昏緫
 		return err
 	}
 
 	return nil
 }
 
-// GetByOperationID 根据幂等键查询操作记录
+// GetByOperationID 鏍规嵁骞傜瓑閿煡璇㈡搷浣滆褰?
 func (repo *couponOperationRepository) GetByOperationID(ctx context.Context, operationID string) (*domain.CouponOperation, error) {
 	var model db.CouponOperation
 	err := repo.db.WithContext(ctx).
@@ -72,3 +72,5 @@ func (repo *couponOperationRepository) GetByOperationID(ctx context.Context, ope
 
 	return op, nil
 }
+
+

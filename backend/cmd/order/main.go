@@ -17,14 +17,14 @@ func main() {
 	log.Printf("Order service starting on port %d...", port)
 
 	app.Cron.Start()
-	log.Printf("定时任务已启动")
+	log.Printf("瀹氭椂浠诲姟宸插惎鍔?)
 
 	for _, consumer := range app.Consumers {
 		if err := consumer.Start(); err != nil {
 			log.Fatalf("consumer start failed: %v", err)
 		}
 	}
-	log.Printf("异步消费者已启动")
+	log.Printf("寮傛娑堣垂鑰呭凡鍚姩")
 
 	if err := app.Server.Run(); err != nil {
 		log.Fatalf("server run error: %v", err)
@@ -33,12 +33,12 @@ func main() {
 
 func initViperWatch() {
 	cfile := pflag.String("config",
-		"internal/order/config/dev.yaml", "配置文件路径")
+		"internal/order/config/dev.yaml", "閰嶇疆鏂囦欢璺緞")
 	pflag.Parse()
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("读取配置文件失败: %w", err))
+		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w", err))
 	}
 
 	viper.AutomaticEnv()
@@ -50,3 +50,5 @@ func initViperWatch() {
 	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")
 	_ = viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 }
+
+

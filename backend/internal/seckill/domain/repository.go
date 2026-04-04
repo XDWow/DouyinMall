@@ -33,3 +33,5 @@ type Cache interface {
 type Producer interface {
 	Publish(ctx context.Context, evt Event) error
 }
+
+

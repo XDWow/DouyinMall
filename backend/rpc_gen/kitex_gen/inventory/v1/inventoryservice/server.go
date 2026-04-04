@@ -22,3 +22,5 @@ func NewServer(handler inventoryv1.InventoryService, opts ...server.Option) serv
 func RegisterService(svr server.Server, handler inventoryv1.InventoryService, opts ...server.RegisterOption) error {
 	return svr.RegisterService(serviceInfo(), handler, opts...)
 }
+
+

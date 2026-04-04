@@ -67,3 +67,5 @@ func TestCreateRequestIsIdempotentForOpenOrder(t *testing.T) {
 		t.Fatalf("expected idempotent request number, got %s and %s", first.RequestNo, second.RequestNo)
 	}
 }
+
+

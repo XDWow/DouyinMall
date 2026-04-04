@@ -60,3 +60,5 @@ func main() {
 		log.Fatalf("inventory MCP server failed: %v", err)
 	}
 }
+
+

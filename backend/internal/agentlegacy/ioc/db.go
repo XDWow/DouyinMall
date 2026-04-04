@@ -1,4 +1,4 @@
-﻿//go:build legacy_agent
+//go:build legacy_agent
 
 package ioc
 
@@ -28,4 +28,6 @@ func InitDB() *gorm.DB {
 	}
 	return gormDB
 }
+
+
 

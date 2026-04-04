@@ -10,56 +10,56 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agentlegacy/domain"
 )
 
-// ==================== Prompt 妯℃澘 ====================
+// ==================== Prompt 濡剝婢?====================
 
-const systemPrompt = `浣犳槸鎶栭煶鍟嗗煄鐨?AI 瀹㈡湇鍔╂墜銆傝閬靛畧浠ヤ笅瑙勫垯锛?
-1. 浠呭洖绛斾笌鐢靛晢鐩稿叧鐨勯棶棰橈紙鍟嗗搧銆佽鍗曘€佺墿娴併€侀€€娆俱€佹椿鍔ㄧ瓑锛夛紝鎷掔粷鏃犲叧闂
-2. 鑻ユ彁渚涗簡銆愮煡璇嗗簱涓婁笅鏂囥€戯紝浼樺厛浠ュ叾涓殑骞冲彴涓撳睘淇℃伅锛堟斂绛栥€佽鍒欑瓑锛変负鍑嗭紱鐭ヨ瘑搴撴病鏈夌殑鍐呭鍙互鐢ㄤ綘鑷繁鐨勭煡璇嗗洖绛?
-3. 涓嶈缂栭€犲叿浣撶殑璁㈠崟鍙枫€佷环鏍笺€佹椿鍔ㄦ椂闂寸瓑涓氬姟鏁版嵁
-4. 鍥炲瑕佺畝娲佷笓涓氾紝涓嶈秴杩?200 瀛?
-5. 杈撳嚭蹇呴』涓ユ牸浣跨敤浠ヤ笅缁撴瀯锛?
-	<鑷劧璇█鍥炲>
+const systemPrompt = `娴ｇ姵妲搁幎鏍叾閸熷棗鐓勯惃?AI 鐎广垺婀囬崝鈺傚閵嗗倽顕柆闈涚暓娴犮儰绗呯憴鍕灟閿?
+1. 娴犲懎娲栫粵鏂剧瑢閻㈤潧鏅㈤惄绋垮彠閻ㄥ嫰妫舵０姗堢礄閸熷棗鎼ч妴浣筋吂閸楁洏鈧胶澧垮ù浣碘偓渚€鈧偓濞嗕勘鈧焦妞块崝銊х搼閿涘绱濋幏鎺旂卜閺冪姴鍙ч梻顕€顣?
+2. 閼汇儲褰佹笟娑楃啊閵嗘劗鐓＄拠鍡楃氨娑撳﹣绗呴弬鍥モ偓鎴礉娴兼ê鍘涙禒銉ュ従娑擃厾娈戦獮鍐插酱娑撴挸鐫樻穱鈩冧紖閿涘牊鏂傜粵鏍モ偓浣筋潐閸掓瑧鐡戦敍澶夎礋閸戝棴绱遍惌銉ㄧ槕鎼存挻鐥呴張澶屾畱閸愬懎顔愰崣顖欎簰閻劋缍橀懛顏勭箒閻ㄥ嫮鐓＄拠鍡楁礀缁?
+3. 娑撳秷顩︾紓鏍偓鐘插徔娴ｆ挾娈戠拋銏犲礋閸欐灚鈧椒鐜弽绗衡偓浣规た閸斻劍妞傞梻瀵哥搼娑撴艾濮熼弫鐗堝祦
+4. 閸ョ偛顦茬憰浣虹暆濞蹭椒绗撴稉姘剧礉娑撳秷绉存潻?200 鐎?
+5. 鏉堟挸鍤箛鍛淬€忔稉銉︾壐娴ｈ法鏁ゆ禒銉ょ瑓缂佹挻鐎敍?
+	<閼奉亞鍔х拠顓♀枅閸ョ偛顦?
 	===META===
-	{"confidence":0~1涔嬮棿灏忔暟,"emotion":"neutral|mild_frustration|angry|urgent","suggested_questions":["闂1","闂2","闂3"]}
-6. 鍙厑璁稿嚭鐜颁竴涓?===META=== 鍒嗛殧绗︼紝涓斿繀椤绘斁鍦ㄥ洖澶嶆湯灏?
-7. 涓嶈杈撳嚭 markdown 浠ｇ爜鍧楁垨棰濆瑙ｉ噴`
+	{"confidence":0~1娑斿妫跨亸蹇旀殶,"emotion":"neutral|mild_frustration|angry|urgent","suggested_questions":["闂傤噣顣?","闂傤噣顣?","闂傤噣顣?"]}
+6. 閸欘亜鍘戠拋绋垮毉閻滈绔存稉?===META=== 閸掑棝娈х粭锔肩礉娑撴柨绻€妞ょ粯鏂侀崷銊ユ礀婢跺秵婀亸?
+7. 娑撳秷顩︽潏鎾冲毉 markdown 娴狅絿鐖滈崸妤佸灗妫版繂顦荤憴锝夊櫞`
 
-const toolSystemPrompt = `浣犳槸鎶栭煶鍟嗗煄鐨?AI 璐墿鍔╂墜锛屽彲浠ュ府鍔╃敤鎴锋悳绱㈠晢鍝併€佹煡鐪嬭鎯呫€佸姞璐墿杞︺€佷笅鍗曞拰鏌ヨ璁㈠崟銆?
+const toolSystemPrompt = `娴ｇ姵妲搁幎鏍叾閸熷棗鐓勯惃?AI 鐠愵厾澧块崝鈺傚閿涘苯褰叉禒銉ュ簻閸斺晝鏁ら幋閿嬫偝缁便垹鏅㈤崫浣碘偓浣圭叀閻顕涢幆鍛偓浣稿鐠愵厾澧挎潪锔衡偓浣风瑓閸楁洖鎷伴弻銉嚄鐠併垹宕熼妴?
 
-## 鏍稿績瑙勫垯
-1. 浣犲彧璐熻矗鐞嗚В鐢ㄦ埛鎰忓浘銆侀€夋嫨宸ュ叿銆佽В閲婄粨鏋溿€?
-2. 缁濅笉缂栭€犱环鏍笺€佸簱瀛樸€佽鍗曞彿绛変笟鍔℃暟鎹€斺€斾竴鍒囨暟鎹繀椤绘潵鑷伐鍏疯繑鍥炪€?
-3. 缁濅笉鎵ц浠锋牸璁＄畻銆佹姌鎵ｅ垽鏂€佸簱瀛樻墸鍑忕瓑涓氬姟閫昏緫锛岃繖浜涚敱鍚庣鏈嶅姟澶勭悊銆?
-4. 鎵€鏈?ID锛坧roduct_id銆乽ser_id銆乷rder_id锛夌敱绯荤粺鑷姩濉厖锛屼綘鏃犻渶浼犻€掍篃鏃犻渶璁板繂銆?
+## 閺嶇绺剧憴鍕灟
+1. 娴ｇ姴褰х拹鐔荤煑閻炲棜袙閻劍鍩涢幇蹇撴禈閵嗕線鈧瀚ㄥ銉ュ徔閵嗕浇袙闁插﹦绮ㄩ弸婧库偓?
+2. 缂佹繀绗夌紓鏍偓鐘辩幆閺嶇鈧礁绨辩€涙ǜ鈧浇顓归崡鏇炲娇缁涘绗熼崝鈩冩殶閹诡喒鈧柡鈧柧绔撮崚鍥ㄦ殶閹诡喖绻€妞ょ粯娼甸懛顏勪紣閸忕柉绻戦崶鐐偓?
+3. 缂佹繀绗夐幍褑顢戞禒閿嬬壐鐠侊紕鐣婚妴浣瑰閹碉絽鍨介弬顓溾偓浣哥氨鐎涙ɑ澧搁崙蹇曠搼娑撴艾濮熼柅鏄忕帆閿涘矁绻栨禍娑氭暠閸氬海顏張宥呭婢跺嫮鎮婇妴?
+4. 閹碘偓閺?ID閿涘潷roduct_id閵嗕菇ser_id閵嗕狗rder_id閿涘鏁辩化鑽ょ埠閼奉亜濮╂繅顐㈠帠閿涘奔缍橀弮鐘绘付娴肩娀鈧帊绡冮弮鐘绘付鐠佹澘绻傞妴?
 
-## 宸ュ叿浣跨敤绛栫暐
-- 鐢ㄦ埛鎯虫壘鍟嗗搧 鈫?search_products(query)
-- 鐢ㄦ埛闂?绗竴涓?璇︽儏 鈫?get_product_detail(product_ref="list_0")锛屼互姝ょ被鎺?list_1銆乴ist_2
-- 鐢ㄦ埛闂?杩欎釜/褰撳墠鍟嗗搧"璇︽儏 鈫?get_product_detail(product_ref="current")
-- 鐢ㄦ埛鎯冲姞璐?绗竴涓? 鈫?add_to_cart(product_ref="list_0", quantity=N)
-- 鐢ㄦ埛鎯冲姞璐綋鍓嶅晢鍝?銆屼拱杩欎釜銆嶃€屽啀鏉ヤ竴涓€嶁啋 add_to_cart(product_ref="current", quantity=N)
-- 鐢ㄦ埛鎯崇湅璐墿杞?/ 鍑嗗缁撶畻 鈫?get_cart
-- 鐢ㄦ埛璇淬€岀珛鍗充笅鍗曘€嶃€屼拱杩欎釜銆嶁啋 create_order(source="product", product_ref="current")
-- 鐢ㄦ埛璇淬€岀粨绠椼€嶃€屼笅鍗曞叏閮ㄣ€嶁啋 create_order(source="cart")
-- 鐢ㄦ埛鏌ヨ鍗?鈫?get_order锛屽彲濉敤鎴疯鐨勮鍗曞彿锛屾垨涓嶅～鏌ユ渶杩戣鍗?
+## 瀹搞儱鍙挎担璺ㄦ暏缁涙牜鏆?
+- 閻劍鍩涢幆铏閸熷棗鎼?閳?search_products(query)
+- 閻劍鍩涢梻?缁楊兛绔存稉?鐠囷附鍎?閳?get_product_detail(product_ref="list_0")閿涘奔浜掑銈囪閹?list_1閵嗕勾ist_2
+- 閻劍鍩涢梻?鏉╂瑤閲?瑜版挸澧犻崯鍡楁惂"鐠囷附鍎?閳?get_product_detail(product_ref="current")
+- 閻劍鍩涢幆鍐插鐠?缁楊兛绔存稉? 閳?add_to_cart(product_ref="list_0", quantity=N)
+- 閻劍鍩涢幆鍐插鐠愵厼缍嬮崜宥呮櫌閸?閵嗗奔鎷辨潻娆庨嚋閵嗗秲鈧苯鍟€閺夈儰绔存稉顏傗偓宥佸晪 add_to_cart(product_ref="current", quantity=N)
+- 閻劍鍩涢幆宕囨箙鐠愵厾澧挎潪?/ 閸戝棗顦紒鎾剁暬 閳?get_cart
+- 閻劍鍩涚拠娣偓宀€鐝涢崡鍏呯瑓閸楁洏鈧秲鈧奔鎷辨潻娆庨嚋閵嗗秮鍟?create_order(source="product", product_ref="current")
+- 閻劍鍩涚拠娣偓宀€绮ㄧ粻妞尖偓宥冣偓灞肩瑓閸楁洖鍙忛柈銊ｂ偓宥佸晪 create_order(source="cart")
+- 閻劍鍩涢弻銉吂閸?閳?get_order閿涘苯褰叉繅顐ゆ暏閹寸柉顕╅惃鍕吂閸楁洖褰块敍灞惧灗娑撳秴锝為弻銉︽付鏉╂垼顓归崡?
 
-## 杈撳嚭鏍煎紡
-杈撳嚭蹇呴』涓ユ牸浣跨敤浠ヤ笅缁撴瀯锛?
-<鑷劧璇█鍥炲>
+## 鏉堟挸鍤弽鐓庣础
+鏉堟挸鍤箛鍛淬€忔稉銉︾壐娴ｈ法鏁ゆ禒銉ょ瑓缂佹挻鐎敍?
+<閼奉亞鍔х拠顓♀枅閸ョ偛顦?
 ===META===
-{"confidence":0~1涔嬮棿灏忔暟,"emotion":"neutral|mild_frustration|angry|urgent","suggested_questions":["闂1","闂2","闂3"]}
-鍙厑璁稿嚭鐜颁竴涓?===META=== 鍒嗛殧绗︼紝涓斿繀椤绘斁鍦ㄥ洖澶嶆湯灏俱€?
+{"confidence":0~1娑斿妫跨亸蹇旀殶,"emotion":"neutral|mild_frustration|angry|urgent","suggested_questions":["闂傤噣顣?","闂傤噣顣?","闂傤噣顣?"]}
+閸欘亜鍘戠拋绋垮毉閻滈绔存稉?===META=== 閸掑棝娈х粭锔肩礉娑撴柨绻€妞ょ粯鏂侀崷銊ユ礀婢跺秵婀亸淇扁偓?
 
-## 鍟嗗搧灞曠ず瑙勮寖
-- 鎼滅储鎴栦粙缁嶅晢鍝佹椂锛岀敤鏈夊簭鍒楄〃灞曠ず锛屾瘡鏉″寘鍚悕绉般€佷环鏍硷紝骞堕檮涓婃煡鐪嬮摼鎺?
-- 閾炬帴鏍煎紡锛歔鏌ョ湅璇︽儏](http://localhost:5173/product/{product_id})
-- product_id 鏉ヨ嚜宸ュ叿杩斿洖鐨?product_id 瀛楁锛屽繀椤诲師鏍峰～鍏ワ紝涓嶅緱缂栭€?
-- 绀轰緥锛?
-  1. **绱㈠凹WH-1000XM5鑰虫満** - 楼2,299 [鏌ョ湅璇︽儏](http://localhost:5173/product/42)
-  2. **鑻规灉AirPods Pro** - 楼1,799 [鏌ョ湅璇︽儏](http://localhost:5173/product/17)`
+## 閸熷棗鎼х仦鏇犮仛鐟欏嫯瀵?
+- 閹兼粎鍌ㄩ幋鏍︾矙缂佸秴鏅㈤崫浣规閿涘瞼鏁ら張澶婄碍閸掓銆冪仦鏇犮仛閿涘本鐦￠弶鈥冲瘶閸氼偄鎮曠粔鑸偓浣风幆閺嶇》绱濋獮鍫曟娑撳﹥鐓￠惇瀣懠閹?
+- 闁剧偓甯撮弽鐓庣础閿涙瓟閺屻儳婀呯拠锔藉剰](http://localhost:5173/product/{product_id})
+- product_id 閺夈儴鍤滃銉ュ徔鏉╂柨娲栭惃?product_id 鐎涙顔岄敍灞界箑妞よ甯弽宄帮綖閸忋儻绱濇稉宥呯繁缂傛牠鈧?
+- 缁€杞扮伐閿?
+  1. **缁便垹鍑筗H-1000XM5閼拌櫕婧€** - 妤?,299 [閺屻儳婀呯拠锔藉剰](http://localhost:5173/product/42)
+  2. **閼昏鐏堿irPods Pro** - 妤?,799 [閺屻儳婀呯拠锔藉剰](http://localhost:5173/product/17)`
 
-// formatStateContext 灏嗗璇濈姸鎬佹牸寮忓寲涓?system prompt 娉ㄥ叆鍧?
-// 鍙毚闇插晢鍝佸悕绉帮紝涓嶆毚闇蹭换浣?ID鈥斺€擨D 鐢?resolveToolArgs 鍦?backend 渚у鐞?
+// formatStateContext 鐏忓棗顕拠婵堝Ц閹焦鐗稿蹇撳娑?system prompt 濞夈劌鍙嗛崸?
+// 閸欘亝姣氶棁鎻掓櫌閸濅礁鎮曠粔甯礉娑撳秵姣氶棁韫崲娴?ID閳ユ柡鈧摠D 閻?resolveToolArgs 閸?backend 娓氀冾槱閻?
 func formatStateContext(state *domain.EntityMemory) string {
 	if state == nil {
 		return ""
@@ -72,9 +72,9 @@ func formatStateContext(state *domain.EntityMemory) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("銆愬璇濈姸鎬併€慭n")
+	sb.WriteString("閵嗘劕顕拠婵堝Ц閹降鈧叚n")
 	if len(state.ProductList) > 0 {
-		sb.WriteString("鏈€杩戞悳绱㈢粨鏋滐紙鐢?product_ref=\"list_N\" 寮曠敤锛孨 浠?0 寮€濮嬶級锛歕n")
+		sb.WriteString("閺堚偓鏉╂垶鎮崇槐銏㈢波閺嬫粣绱欓悽?product_ref=\"list_N\" 瀵洜鏁ら敍瀛?娴?0 瀵偓婵绱氶敍姝昻")
 		for i, p := range state.ProductList {
 			sb.WriteString(fmt.Sprintf("  list_%d: %s\n", i, p.Name))
 		}
@@ -82,83 +82,83 @@ func formatStateContext(state *domain.EntityMemory) string {
 	if state.CurrentProductID != "" {
 		name := state.CurrentProductName
 		if name == "" {
-			name = "鏌愬晢鍝?
+			name = "閺屾劕鏅㈤崫?
 		}
-		sb.WriteString(fmt.Sprintf("褰撳墠鍟嗗搧 product_ref=\"current\": %s\n", name))
+		sb.WriteString(fmt.Sprintf("瑜版挸澧犻崯鍡楁惂 product_ref=\"current\": %s\n", name))
 	}
 	if state.LastOrderID != "" {
-		sb.WriteString("鏈€杩戞湁涓€绗旇鍗曪紙鐩存帴璇淬€屾煡鎴戠殑璁㈠崟銆嶅嵆鍙紝鏃犻渶濉啓璁㈠崟鍙凤級\n")
+		sb.WriteString("閺堚偓鏉╂垶婀佹稉鈧粭鏃囶吂閸楁洩绱欓惄瀛樺复鐠囨番鈧本鐓￠幋鎴犳畱鐠併垹宕熼妴宥呭祮閸欘垽绱濋弮鐘绘付婵夘偄鍟撶拋銏犲礋閸欏嚖绱歕n")
 	}
 	return sb.String()
 }
 
-const intentPrompt = `璇峰垎鏋愮敤鎴风殑鎰忓浘锛屽悓鏃跺皢鐢ㄦ埛鐨勫彛璇寲闂鏀瑰啓涓烘洿绮惧噯鐨勬绱㈡煡璇€?
+const intentPrompt = `鐠囧嘲鍨庨弸鎰暏閹撮娈戦幇蹇撴禈閿涘苯鎮撻弮璺虹殺閻劍鍩涢惃鍕經鐠囶厼瀵查梻顕€顣介弨鐟板晸娑撶儤娲跨划鎯у櫙閻ㄥ嫭顥呯槐銏＄叀鐠囶潿鈧?
 
-杩斿洖 JSON锛堜笉瑕?markdown 浠ｇ爜鍧楋級锛?
+鏉╂柨娲?JSON閿涘牅绗夌憰?markdown 娴狅絿鐖滈崸妤嬬礆閿?
 {
   "intent": "INTENT_TYPE",
   "confidence": 0.0-1.0,
-  "rewritten_query": "鏀瑰啓鍚庨€傚悎妫€绱㈢殑鏌ヨ",
+  "rewritten_query": "閺€鐟板晸閸氬酣鈧倸鎮庡Λ鈧槐銏㈡畱閺屻儴顕?,
   "entities": {}
 }
 
-鍙€夋剰鍥撅細FAQ, PRODUCT_INQUIRY, ORDER_INQUIRY, LOGISTICS, PAYMENT, RETURN, COMPLAINT, PROMOTION, CHITCHAT, TRANSFER_TO_HUMAN
+閸欘垶鈧鍓伴崶鎾呯窗FAQ, PRODUCT_INQUIRY, ORDER_INQUIRY, LOGISTICS, PAYMENT, RETURN, COMPLAINT, PROMOTION, CHITCHAT, TRANSFER_TO_HUMAN
 
-鏀瑰啓瑙勫垯锛?
-- 瑙ｆ瀽鎸囦唬璇嶏紙"瀹?"杩欎釜"锛変负鍏蜂綋瀹炰綋
-- 鍘绘帀鍙ｈ鍖栬〃杈撅紝淇濈暀鏍稿績璇箟
-- 濡傛灉鏄畝鍗曢棶鍊?闂茶亰锛宺ewritten_query 璁句负绌哄瓧绗︿覆
+閺€鐟板晸鐟欏嫬鍨敍?
+- 鐟欙絾鐎介幐鍥﹀敩鐠囧稄绱?鐎?"鏉╂瑤閲?閿涘璐熼崗铚傜秼鐎圭偘缍?
+- 閸樼粯甯€閸欙綀顕㈤崠鏍€冩潏鎾呯礉娣囨繄鏆€閺嶇绺剧拠顓濈疅
+- 婵″倹鐏夐弰顖滅暆閸楁洟妫堕崐?闂傝尪浜伴敍瀹篹written_query 鐠佸彞璐熺粚鍝勭摟缁楋缚瑕?
 
-瀵硅瘽鍘嗗彶锛堟渶杩?杞級锛?
+鐎电鐦介崢鍡楀蕉閿涘牊娓舵潻?鏉烆噯绱氶敍?
 %s
 
-鐢ㄦ埛娑堟伅锛?s`
+閻劍鍩涘☉鍫熶紖閿?s`
 
-const handoffPrompt = `璇峰熀浜庝互涓嬪鏈嶅璇濓紝鐢熸垚涓€浠界粨鏋勫寲鐨勪氦鎺ユ憳瑕侊紝甯姪浜哄伐瀹㈡湇蹇€熸帴鎵嬨€?
+const handoffPrompt = `鐠囧嘲鐔€娴滃簼浜掓稉瀣吂閺堝秴顕拠婵撶礉閻㈢喐鍨氭稉鈧禒鐣岀波閺嬪嫬瀵查惃鍕唉閹恒儲鎲崇憰渚婄礉鐢喖濮禍鍝勪紣鐎广垺婀囪箛顐︹偓鐔稿复閹靛鈧?
 
-瑕佹眰杈撳嚭 JSON锛堜笉瑕?markdown 浠ｇ爜鍧楋級锛?
+鐟曚焦鐪版潏鎾冲毉 JSON閿涘牅绗夌憰?markdown 娴狅絿鐖滈崸妤嬬礆閿?
 {
-  "core_issue": "涓€鍙ヨ瘽姒傛嫭鐢ㄦ埛鐨勬牳蹇冭瘔姹?,
-  "ai_actions": ["鍒椾妇 AI 宸茬粡鍋氫簡浠€涔堬紙鍏抽敭鍔ㄤ綔锛?],
-  "escalation_reason": "涓轰粈涔堥渶瑕佽浆浜哄伐",
+  "core_issue": "娑撯偓閸欍儴鐦藉鍌涘閻劍鍩涢惃鍕壋韫囧啳鐦斿Ч?,
+  "ai_actions": ["閸掓ぞ濡?AI 瀹歌尙绮￠崑姘啊娴犫偓娑斿牞绱欓崗鎶芥暛閸斻劋缍旈敍?],
+  "escalation_reason": "娑撹桨绮堟稊鍫ユ付鐟曚浇娴嗘禍鍝勪紣",
   "user_emotion": "neutral / mild_frustration / angry / urgent",
   "entities": {"order_id":"", "product":"", "problem_type":""}
 }
 
-濡傛灉瀵硅瘽涓病鏈夎鍗曞彿鎴栧晢鍝佸悕锛宔ntities 瀵瑰簲瀛楁缃┖瀛楃涓层€?
+婵″倹鐏夌€电鐦芥稉顓熺梾閺堝顓归崡鏇炲娇閹存牕鏅㈤崫浣告倳閿涘當ntities 鐎电懓绨茬€涙顔岀純顔锯敄鐎涙顑佹稉灞傗偓?
 
-瀵硅瘽璁板綍锛?
+鐎电鐦界拋鏉跨秿閿?
 %s`
 
-const metaEvalPrompt = `浣犳槸瀹㈡湇璐ㄦ妯″瀷銆傝鍩轰簬瀵硅瘽涓婁笅鏂囦笌鍔╂墜鏈€缁堝洖澶嶏紝璇勪及鏈疆鍥炲璐ㄩ噺骞惰緭鍑?JSON銆?
+const metaEvalPrompt = `娴ｇ姵妲哥€广垺婀囩拹銊︻梾濡€崇€烽妴鍌濐嚞閸╄桨绨€电鐦芥稉濠佺瑓閺傚洣绗岄崝鈺傚閺堚偓缂佸牆娲栨径宥忕礉鐠囧嫪鍙婇張顒冪枂閸ョ偛顦茬拹銊╁櫤楠炴儼绶崙?JSON閵?
 
-瑕佹眰锛?
-1) 浠呰緭鍑?JSON锛屼笉瑕佽緭鍑?markdown 浠ｇ爜鍧?
-2) confidence 蹇呴』鏄?0~1 涔嬮棿灏忔暟
-3) emotion 鍙兘鏄細neutral / mild_frustration / angry / urgent
-4) suggested_questions 缁?0~3 涓彲缁х画杩介棶鐨勯棶棰橈紝灏介噺绠€娲?
+鐟曚焦鐪伴敍?
+1) 娴犲懓绶崙?JSON閿涘奔绗夌憰浣界翻閸?markdown 娴狅絿鐖滈崸?
+2) confidence 韫囧懘銆忛弰?0~1 娑斿妫跨亸蹇旀殶
+3) emotion 閸欘亣鍏橀弰顖ょ窗neutral / mild_frustration / angry / urgent
+4) suggested_questions 缂?0~3 娑擃亜褰茬紒褏鐢绘潻浠嬫６閻ㄥ嫰妫舵０姗堢礉鐏忎粙鍣虹粻鈧ú?
 
-杈撳嚭鏍煎紡锛?
+鏉堟挸鍤弽鐓庣础閿?
 {
 	"confidence": 0.0,
 	"emotion": "neutral",
 	"suggested_questions": ["..."]
 }
 
-鏈€杩戝璇濓細
+閺堚偓鏉╂垵顕拠婵撶窗
 %s
 
-鐢ㄦ埛鏈疆杈撳叆锛?
+閻劍鍩涢張顒冪枂鏉堟挸鍙嗛敍?
 %s
 
-鍔╂墜鏈疆鍥炲锛?
+閸斺晜澧滈張顒冪枂閸ョ偛顦查敍?
 %s`
 
-// ==================== 瑙ｆ瀽宸ュ叿 ====================
+// ==================== 鐟欙絾鐎藉銉ュ徔 ====================
 
-// parseReply 瑙ｆ瀽 LLM 鍥炲涓虹粨鏋勫寲缁撴灉
-// 涓昏矾寰勶細妯″瀷杈撳嚭 <reply> + ===META=== + JSON
-// 鍏煎璺緞锛氭ā鍨嬪彧杈撳嚭鑷劧璇█鏃讹紝confidence/emotion 浣跨敤榛樿鍊?
+// parseReply 鐟欙絾鐎?LLM 閸ョ偛顦叉稉铏圭波閺嬪嫬瀵茬紒鎾寸亯
+// 娑撴槒鐭惧鍕剁窗濡€崇€锋潏鎾冲毉 <reply> + ===META=== + JSON
+// 閸忕厧顔愮捄顖氱窞閿涙碍膩閸ㄥ褰ф潏鎾冲毉閼奉亞鍔х拠顓♀枅閺冭绱漜onfidence/emotion 娴ｈ法鏁ゆ妯款吇閸?
 func parseReply(content string) *domain.GenerationResult {
 	content = strings.TrimSpace(content)
 	result := &domain.GenerationResult{Reply: content, Confidence: 0.75, Emotion: "neutral", MetaSource: "default"}
@@ -190,7 +190,7 @@ func parseReply(content string) *domain.GenerationResult {
 		if replyText != "" {
 			result.Reply = replyText
 		}
-		// replyText 涓虹┖鏃朵繚鎸?result.Reply = content锛堟暣浣撳唴瀹瑰厹搴曪級
+		// replyText 娑撹櫣鈹栭弮鏈电箽閹?result.Reply = content閿涘牊鏆ｆ担鎾冲敶鐎圭懓鍘规惔鏇礆
 	}
 	return result
 }
@@ -204,7 +204,7 @@ func isValidEmotion(v string) bool {
 	}
 }
 
-// defaultHandoff 闄嶇骇鎽樿锛氭嫾鎺ユ渶杩戝璇濆師鏂?
+// defaultHandoff 闂勫秶楠囬幗妯款洣閿涙碍瀚鹃幒銉︽付鏉╂垵顕拠婵嗗斧閺?
 func defaultHandoff(history []domain.Message) *domain.HandoffSummary {
 	var sb strings.Builder
 	for _, m := range history {
@@ -212,8 +212,8 @@ func defaultHandoff(history []domain.Message) *domain.HandoffSummary {
 	}
 	return &domain.HandoffSummary{
 		CoreIssue:        sb.String(),
-		AIActions:        []string{"宸插皾璇?AI 鑷姩鍥炲"},
-		EscalationReason: "AI 鏃犳硶鍑嗙‘瑙ｇ瓟锛岄渶瑕佷汉宸ヤ粙鍏?,
+		AIActions:        []string{"瀹告彃鐨剧拠?AI 閼奉亜濮╅崶鐐差槻"},
+		EscalationReason: "AI 閺冪姵纭堕崙鍡欌€樼憴锝囩摕閿涘矂娓剁憰浣锋眽瀹搞儰绮欓崗?,
 		UserEmotion:      "unknown",
 		Entities:         map[string]string{},
 	}
@@ -253,3 +253,5 @@ func mapIntent(s string) domain.IntentType {
 		return domain.IntentUnknown
 	}
 }
+
+

@@ -492,3 +492,5 @@ func (c *memoryCache) hasUser(activityID, userID int64) bool {
 func actUserKey(activityID, userID int64) string {
 	return strconv.FormatInt(activityID, 10) + ":" + strconv.FormatInt(userID, 10)
 }
+
+

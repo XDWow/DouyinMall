@@ -15,13 +15,13 @@ import (
 
 const groupAgentMessages = "agent-message-consumer"
 
-// 鎵归噺娑堣垂 Kafka 娑堟伅骞惰惤搴?
-// 鍒╃敤 saramax.BatchHandler 瀹炵幇"鏃堕棿+鏁伴噺"鍙岃Е鍙戞壒閲忔秷璐癸細
-//   - 鍑戝 batchSize 鏉＄珛鍗冲鐞?
-//   - 瓒呰繃 batchDuration 涓嶈冻涓€鎵逛篃绔嬪嵆澶勭悊
+// 閹靛綊鍣哄☉鍫ｅ瀭 Kafka 濞戝牊浼呴獮鎯版儰鎼?
+// 閸掆晝鏁?saramax.BatchHandler 鐎圭偟骞?閺冨爼妫?閺佷即鍣?閸欏矁袝閸欐垶澹掗柌蹇旂Х鐠愮櫢绱?
+//   - 閸戞垵顧?batchSize 閺夛紕鐝涢崡鍐差槱閻?
+//   - 鐡掑懓绻?batchDuration 娑撳秷鍐绘稉鈧幍閫涚瘍缁斿宓嗘径鍕倞
 //
-// 鍗曟鎵归噺娑堣垂灏嗗杞璇濈殑娑堟伅灞曞钩鍚庢墽琛屼竴娆?BatchInsertMessages锛?
-// 鏄捐憲闄嶄綆 MySQL 鍐欏叆娆℃暟锛屾彁楂樻暣浣撳悶鍚?
+// 閸楁洘顐奸幍褰掑櫤濞戝牐鍨傜亸鍡楊樋鏉烆喖顕拠婵堟畱濞戝牊浼呯仦鏇為挬閸氬孩澧界悰灞肩濞?BatchInsertMessages閿?
+// 閺勬崘鎲查梽宥勭秵 MySQL 閸愭瑥鍙嗗▎鈩冩殶閿涘本褰佹妯绘殻娴ｆ挸鎮堕崥?
 type MessageConsumer struct {
 	client sarama.Client
 	db     *gorm.DB
@@ -38,7 +38,7 @@ func NewMessageConsumer(
 	return &MessageConsumer{client: client, db: db, l: l}
 }
 
-// Start 鍚姩娑堣垂鑰咃紙闈為樆濉烇紝鍐呴儴 goroutine 鑷姩閲嶈繛锛?
+// Start 閸氼垰濮╁☉鍫ｅ瀭閼板拑绱欓棃鐐烘▎婵夌儑绱濋崘鍛村劥 goroutine 閼奉亜濮╅柌宥堢箾閿?
 func (c *MessageConsumer) Start() error {
 	cg, err := sarama.NewConsumerGroupFromClient(groupAgentMessages, c.client)
 	if err != nil {
@@ -46,15 +46,15 @@ func (c *MessageConsumer) Start() error {
 	}
 	c.consumerGrp = cg
 
-	// batchSize=10锛氭瘡鎵规渶澶氳仛鍚?10 涓?Kafka 娑堟伅锛堢害 20 鏉?chat message锛夛紝
-	// 涓€娆?BatchInsertMessages 钀藉簱
+	// batchSize=10閿涙碍鐦￠幍瑙勬付婢舵俺浠涢崥?10 娑?Kafka 濞戝牊浼呴敍鍫㈠ 20 閺?chat message閿涘绱?
+	// 娑撯偓濞?BatchInsertMessages 閽€钘夌氨
 	handler := saramax.NewBatchHandler[domain.ChatMessageEvent](c.l, c.consume, 10)
 
 	go func() {
 		for {
 			if err := cg.Consume(context.Background(),
 				[]string{TopicAgentMessages}, handler); err != nil {
-				c.l.Error("agent 娑堟伅娑堣垂寮傚父锛屽嵆灏嗛噸杩?,
+				c.l.Error("agent 濞戝牊浼呭☉鍫ｅ瀭瀵倸鐖堕敍灞藉祮鐏忓棝鍣告潻?,
 					logger.Error(err))
 			}
 		}
@@ -63,14 +63,14 @@ func (c *MessageConsumer) Start() error {
 	return nil
 }
 
-// Stop 浼橀泤鍏抽棴娑堣垂鑰?
+// Stop 娴兼﹢娉ら崗鎶芥４濞戝牐鍨傞懓?
 func (c *MessageConsumer) Stop() {
 	if c.consumerGrp != nil {
 		_ = c.consumerGrp.Close()
 	}
 }
 
-// consume 鎵归噺娑堣垂鍥炶皟锛氬睍骞冲涓簨浠剁殑娑堟伅 鈫?涓€娆℃壒閲?INSERT
+// consume 閹靛綊鍣哄☉鍫ｅ瀭閸ョ偠鐨熼敍姘潔楠炲啿顦挎稉顏冪皑娴犲墎娈戝☉鍫熶紖 閳?娑撯偓濞嗏剝澹掗柌?INSERT
 func (c *MessageConsumer) consume(
 	_ []*sarama.ConsumerMessage,
 	events []domain.ChatMessageEvent,
@@ -94,3 +94,5 @@ func (c *MessageConsumer) consume(
 	}
 	return c.db.Create(&allMsgs).Error
 }
+
+

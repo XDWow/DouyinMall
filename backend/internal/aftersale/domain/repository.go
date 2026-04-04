@@ -7,3 +7,5 @@ type RequestRepository interface {
 	FindOpenByUserOrder(ctx context.Context, userID, orderID int64, requestType RequestType) (*Request, error)
 	GetByRequestNo(ctx context.Context, requestNo string) (*Request, error)
 }
+
+

@@ -48,3 +48,5 @@ func initViper() {
 		fmt.Printf("warning: read inventory config failed: %v\n", err)
 	}
 }
+
+

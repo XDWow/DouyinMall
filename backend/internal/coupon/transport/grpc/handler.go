@@ -39,7 +39,7 @@ func NewCouponHandler(
 	}
 }
 
-// ListUserCoupons 查询用户优惠券列表
+// ListUserCoupons 鏌ヨ鐢ㄦ埛浼樻儬鍒稿垪琛?
 func (h *CouponHandler) ListUserCoupons(ctx context.Context, req *couponv1.ListUserCouponsReq) (*couponv1.ListUserCouponsResp, error) {
 	output, err := h.listUserCouponsUC.Execute(ctx, usecase.ListUserCouponsInput{
 		UserID:   req.GetUserId(),
@@ -62,7 +62,7 @@ func (h *CouponHandler) ListUserCoupons(ctx context.Context, req *couponv1.ListU
 	}, nil
 }
 
-// ListAvailableCoupons 查询订单可用优惠券（结算页）
+// ListAvailableCoupons 鏌ヨ璁㈠崟鍙敤浼樻儬鍒革紙缁撶畻椤碉級
 func (h *CouponHandler) ListAvailableCoupons(ctx context.Context, req *couponv1.ListAvailableCouponsReq) (*couponv1.ListAvailableCouponsResp, error) {
 	items := make([]domain.OrderItem, 0, len(req.GetItems()))
 	for _, item := range req.GetItems() {
@@ -81,7 +81,7 @@ func (h *CouponHandler) ListAvailableCoupons(ctx context.Context, req *couponv1.
 		return nil, err
 	}
 
-	// 只返回可用的券
+	// 鍙繑鍥炲彲鐢ㄧ殑鍒?
 	coupons := make([]*couponv1.UserCoupon, 0)
 	for _, evaluated := range output.Coupons {
 		if evaluated.Usable {
@@ -94,7 +94,7 @@ func (h *CouponHandler) ListAvailableCoupons(ctx context.Context, req *couponv1.
 	}, nil
 }
 
-// ReserveCoupon 预扣优惠券（创建订单时锁定）
+// ReserveCoupon 棰勬墸浼樻儬鍒革紙鍒涘缓璁㈠崟鏃堕攣瀹氾級
 func (h *CouponHandler) ReserveCoupon(ctx context.Context, req *couponv1.ReserveCouponReq) (*couponv1.ReserveCouponResp, error) {
 	output, err := h.reserveUC.Execute(ctx, usecase.ReserveCouponInput{
 		UserID:    req.GetUserId(),
@@ -115,7 +115,7 @@ func (h *CouponHandler) ReserveCoupon(ctx context.Context, req *couponv1.Reserve
 	}, nil
 }
 
-// CommitCoupon 确认核销（支付成功）
+// CommitCoupon 纭鏍搁攢锛堟敮浠樻垚鍔燂級
 func (h *CouponHandler) CommitCoupon(ctx context.Context, req *couponv1.CommitCouponReq) (*couponv1.CommitCouponResp, error) {
 	err := h.commitUC.Execute(ctx, usecase.CommitCouponInput{
 		OrderID: req.GetOrderId(),
@@ -127,7 +127,7 @@ func (h *CouponHandler) CommitCoupon(ctx context.Context, req *couponv1.CommitCo
 	return &couponv1.CommitCouponResp{Success: true}, nil
 }
 
-// ReleaseCoupon 释放预扣（订单取消）
+// ReleaseCoupon 閲婃斁棰勬墸锛堣鍗曞彇娑堬級
 func (h *CouponHandler) ReleaseCoupon(ctx context.Context, req *couponv1.ReleaseCouponReq) (*couponv1.ReleaseCouponResp, error) {
 	err := h.releaseUC.Execute(ctx, usecase.ReleaseCouponInput{
 		OrderID: req.GetOrderId(),
@@ -139,7 +139,7 @@ func (h *CouponHandler) ReleaseCoupon(ctx context.Context, req *couponv1.Release
 	return &couponv1.ReleaseCouponResp{Success: true}, nil
 }
 
-// RefundCoupon 退还优惠券（订单退款）
+// RefundCoupon 閫€杩樹紭鎯犲埜锛堣鍗曢€€娆撅級
 func (h *CouponHandler) RefundCoupon(ctx context.Context, req *couponv1.RefundCouponReq) (*couponv1.RefundCouponResp, error) {
 	err := h.refundUC.Execute(ctx, usecase.RefundCouponInput{
 		OrderID: req.GetOrderId(),
@@ -151,7 +151,7 @@ func (h *CouponHandler) RefundCoupon(ctx context.Context, req *couponv1.RefundCo
 	return &couponv1.RefundCouponResp{Success: true}, nil
 }
 
-// IssueCoupon 发放优惠券
+// IssueCoupon 鍙戞斁浼樻儬鍒?
 func (h *CouponHandler) IssueCoupon(ctx context.Context, req *couponv1.IssueCouponReq) (*couponv1.IssueCouponResp, error) {
 	output, err := h.issueUC.Execute(ctx, usecase.IssueCouponInput{
 		UserID:      req.GetUserId(),
@@ -196,13 +196,13 @@ func toCouponFailures(failures []usecase.ReserveCouponFailure) []*couponv1.Coupo
 	return result
 }
 
-// CreateCouponTemplate 创建优惠券模板（暂不实现，预留接口）
+// CreateCouponTemplate 鍒涘缓浼樻儬鍒告ā鏉匡紙鏆備笉瀹炵幇锛岄鐣欐帴鍙ｏ級
 func (h *CouponHandler) CreateCouponTemplate(ctx context.Context, req *couponv1.CreateCouponTemplateReq) (*couponv1.CreateCouponTemplateResp, error) {
-	// TODO: 实现创建优惠券模板的UseCase
+	// TODO: 瀹炵幇鍒涘缓浼樻儬鍒告ā鏉跨殑UseCase
 	return nil, errors.New("not implemented yet")
 }
 
-// domainToProto 转换domain模型到proto
+// domainToProto 杞崲domain妯″瀷鍒皃roto
 func domainToProto(c *domain.Coupon) *couponv1.UserCoupon {
 	pb := &couponv1.UserCoupon{
 		Id:             c.ID,
@@ -223,7 +223,7 @@ func domainToProto(c *domain.Coupon) *couponv1.UserCoupon {
 		pb.UsedAt = c.UsedAt.Unix()
 	}
 
-	// 转换模板信息（如果有）
+	// 杞崲妯℃澘淇℃伅锛堝鏋滄湁锛?
 	if c.Template != nil {
 		pb.Template = &couponv1.CouponTemplate{
 			Id:            c.Template.ID,
@@ -244,3 +244,5 @@ func domainToProto(c *domain.Coupon) *couponv1.UserCoupon {
 
 	return pb
 }
+
+

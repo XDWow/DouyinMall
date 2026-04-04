@@ -30,3 +30,5 @@ func InitKafkaSyncProducer(client sarama.Client) sarama.SyncProducer {
 	}
 	return producer
 }
+
+

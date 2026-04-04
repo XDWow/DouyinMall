@@ -325,3 +325,5 @@ func openKafkaProducer(t *testing.T) sarama.SyncProducer {
 
 	return producer
 }
+
+

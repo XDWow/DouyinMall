@@ -24,15 +24,15 @@ func TestProductService_ListProducts(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:     "成功获取商品列表",
+			name:     "鎴愬姛鑾峰彇鍟嗗搧鍒楄〃",
 			page:     1,
 			pageSize: 10,
 			category: "",
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
 				repo := repomocks.NewMockProductRepo(ctrl)
 				repo.EXPECT().ListProducts(gomock.Any(), int64(1), int64(10), "").Return([]domain.Product{
-					{ID: 1, Name: "商品1", Price: 100},
-					{ID: 2, Name: "商品2", Price: 200},
+					{ID: 1, Name: "鍟嗗搧1", Price: 100},
+					{ID: 2, Name: "鍟嗗搧2", Price: 200},
 				}, nil)
 				return repo
 			},
@@ -40,14 +40,14 @@ func TestProductService_ListProducts(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:     "按分类查询",
+			name:     "鎸夊垎绫绘煡璇?,
 			page:     1,
 			pageSize: 10,
-			category: "电子产品",
+			category: "鐢靛瓙浜у搧",
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
 				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().ListProducts(gomock.Any(), int64(1), int64(10), "电子产品").Return([]domain.Product{
-					{ID: 1, Name: "手机", Price: 599900, Categories: []string{"电子产品"}},
+				repo.EXPECT().ListProducts(gomock.Any(), int64(1), int64(10), "鐢靛瓙浜у搧").Return([]domain.Product{
+					{ID: 1, Name: "鎵嬫満", Price: 599900, Categories: []string{"鐢靛瓙浜у搧"}},
 				}, nil)
 				return repo
 			},
@@ -55,7 +55,7 @@ func TestProductService_ListProducts(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:     "Repo返回错误",
+			name:     "Repo杩斿洖閿欒",
 			page:     1,
 			pageSize: 10,
 			category: "",
@@ -98,7 +98,7 @@ func TestProductService_GetProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功获取商品详情",
+			name: "鎴愬姛鑾峰彇鍟嗗搧璇︽儏",
 			id:   1,
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
 				repo := repomocks.NewMockProductRepo(ctrl)
@@ -114,7 +114,7 @@ func TestProductService_GetProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "商品不存在",
+			name: "鍟嗗搧涓嶅瓨鍦?,
 			id:   999,
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
 				repo := repomocks.NewMockProductRepo(ctrl)
@@ -155,12 +155,12 @@ func TestProductService_CreateProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功创建商品",
+			name: "鎴愬姛鍒涘缓鍟嗗搧",
 			product: domain.Product{
-				Name:       "新商品",
+				Name:       "鏂板晢鍝?,
 				Price:      9900,
 				InStock:    true,
-				Categories: []string{"服装"},
+				Categories: []string{"鏈嶈"},
 			},
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
 				repo := repomocks.NewMockProductRepo(ctrl)
@@ -171,23 +171,23 @@ func TestProductService_CreateProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "商品名包含敏感词",
+			name: "鍟嗗搧鍚嶅寘鍚晱鎰熻瘝",
 			product: domain.Product{
-				Name:  "敏感词商品",
+				Name:  "鏁忔劅璇嶅晢鍝?,
 				Price: 9900,
 			},
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				// 不会调用 repo，因为敏感词校验在前
+				// 涓嶄細璋冪敤 repo锛屽洜涓烘晱鎰熻瘝鏍￠獙鍦ㄥ墠
 				return repomocks.NewMockProductRepo(ctrl)
 			},
 			wantID:  0,
 			wantErr: true,
 		},
 		{
-			name: "描述包含敏感词",
+			name: "鎻忚堪鍖呭惈鏁忔劅璇?,
 			product: domain.Product{
-				Name:        "正常商品",
-				Description: "这是敏感词描述",
+				Name:        "姝ｅ父鍟嗗搧",
+				Description: "杩欐槸鏁忔劅璇嶆弿杩?,
 				Price:       9900,
 			},
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
@@ -197,9 +197,9 @@ func TestProductService_CreateProduct(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Repo返回错误",
+			name: "Repo杩斿洖閿欒",
 			product: domain.Product{
-				Name:  "正常商品",
+				Name:  "姝ｅ父鍟嗗搧",
 				Price: 9900,
 			},
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
@@ -241,10 +241,10 @@ func TestProductService_UpdateProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "成功更新商品",
+			name: "鎴愬姛鏇存柊鍟嗗搧",
 			product: domain.Product{
 				ID:    1,
-				Name:  "更新后的商品名",
+				Name:  "鏇存柊鍚庣殑鍟嗗搧鍚?,
 				Price: 19900,
 			},
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
@@ -256,10 +256,10 @@ func TestProductService_UpdateProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "更新时商品名包含敏感词",
+			name: "鏇存柊鏃跺晢鍝佸悕鍖呭惈鏁忔劅璇?,
 			product: domain.Product{
 				ID:   1,
-				Name: "敏感词名称",
+				Name: "鏁忔劅璇嶅悕绉?,
 			},
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
 				return repomocks.NewMockProductRepo(ctrl)
@@ -298,7 +298,7 @@ func TestProductService_DeleteProduct(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "成功删除商品",
+			name:   "鎴愬姛鍒犻櫎鍟嗗搧",
 			id:     1,
 			userID: 100,
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
@@ -309,7 +309,7 @@ func TestProductService_DeleteProduct(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:   "删除失败-无权限",
+			name:   "鍒犻櫎澶辫触-鏃犳潈闄?,
 			id:     1,
 			userID: 999,
 			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
@@ -339,3 +339,5 @@ func TestProductService_DeleteProduct(t *testing.T) {
 		})
 	}
 }
+
+

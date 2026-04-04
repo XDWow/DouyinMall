@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-// InitOrderClient 初始化订单服务客户端
+// InitOrderClient 鍒濆鍖栬鍗曟湇鍔″鎴风
 func InitOrderClient() orderv1.Client {
-	// 初始化 etcd 服务发现
+	// 鍒濆鍖?etcd 鏈嶅姟鍙戠幇
 	endpoints := viper.GetStringSlice("etcd.endpoints")
 	if len(endpoints) == 0 {
 		if ep := viper.GetString("etcd.endpoints"); ep != "" {
@@ -21,17 +21,19 @@ func InitOrderClient() orderv1.Client {
 
 	r, err := etcd.NewEtcdResolver(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("创建 etcd 服务发现失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓 etcd 鏈嶅姟鍙戠幇澶辫触: %w", err))
 	}
 
-	// 创建订单服务客户端
+	// 鍒涘缓璁㈠崟鏈嶅姟瀹㈡埛绔?
 	orderClient, err := orderv1.NewClient(
-		"order.service", // 服务名
+		"order.service", // 鏈嶅姟鍚?
 		client.WithResolver(r),
 	)
 	if err != nil {
-		panic(fmt.Errorf("创建订单服务客户端失败: %w", err))
+		panic(fmt.Errorf("鍒涘缓璁㈠崟鏈嶅姟瀹㈡埛绔け璐? %w", err))
 	}
 
 	return orderClient
 }
+
+

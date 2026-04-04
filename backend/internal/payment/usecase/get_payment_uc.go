@@ -17,12 +17,14 @@ func NewGetPaymentUC(repo domain.PaymentRepository, l logger.LoggerV1) *GetPayme
 }
 
 type QueryPaymentCmd struct {
-	BizTradeNo string // 这个就是支付交易单的主键
+	BizTradeNo string // 杩欎釜灏辨槸鏀粯浜ゆ槗鍗曠殑涓婚敭
 }
 
 func (uc *GetPaymentUC) Execute(ctx context.Context, cmd QueryPaymentCmd) (domain.Payment, error) {
 	if cmd.BizTradeNo == "" {
-		return domain.Payment{}, errors.New("业务交易号为空")
+		return domain.Payment{}, errors.New("涓氬姟浜ゆ槗鍙蜂负绌?)
 	}
 	return uc.repo.GetPayment(ctx, cmd.BizTradeNo)
 }
+
+

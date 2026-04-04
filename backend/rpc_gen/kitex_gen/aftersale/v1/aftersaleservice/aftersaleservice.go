@@ -347,3 +347,5 @@ func (p *kClient) GetAfterSaleRequest(ctx context.Context, Req *v1.GetAfterSaleR
 	}
 	return _result.GetSuccess(), nil
 }
+
+

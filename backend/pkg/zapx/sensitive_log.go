@@ -9,7 +9,7 @@ type MyCore struct {
 	zapcore.Core
 }
 
-// 打日志时将电话号码隐私
+// 鎵撴棩蹇楁椂灏嗙數璇濆彿鐮侀殣绉?
 func (c MyCore) Write(entry zapcore.Entry, fds []zapcore.Field) error {
 	for _, fd := range fds {
 		if fd.Key == "phone" {
@@ -27,3 +27,5 @@ func MaskPhone(key string, value string) zap.Field {
 		String: value,
 	}
 }
+
+

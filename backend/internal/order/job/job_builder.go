@@ -21,7 +21,7 @@ func NewCronJobBuilder(l logger.LoggerV1) *CronJobBuilder {
 	p := prometheus.NewSummaryVec(prometheus.SummaryOpts{
 		Namespace: "douyin_mall",
 		Subsystem: "order",
-		Help:      "统计定时任务的执行情况",
+		Help:      "缁熻瀹氭椂浠诲姟鐨勬墽琛屾儏鍐?,
 		Name:      "cron_job",
 	}, []string{"name", "success"})
 	prometheus.MustRegister(p)
@@ -38,11 +38,11 @@ func (b *CronJobBuilder) Build(job Job) cron.Job {
 		_, span := b.tracer.Start(context.Background(), name)
 		defer span.End()
 		start := time.Now()
-		b.l.Info("任务开始",
+		b.l.Info("浠诲姟寮€濮?,
 			logger.String("job", name))
 		var success bool
 		defer func() {
-			b.l.Info("任务结束",
+			b.l.Info("浠诲姟缁撴潫",
 				logger.String("job", name))
 			duration := time.Since(start).Milliseconds()
 			b.p.WithLabelValues(name, strconv.FormatBool(success)).Observe(float64(duration))
@@ -51,7 +51,7 @@ func (b *CronJobBuilder) Build(job Job) cron.Job {
 		success = err == nil
 		if err != nil {
 			span.RecordError(err)
-			b.l.Error("运行任务失败", logger.Error(err),
+			b.l.Error("杩愯浠诲姟澶辫触", logger.Error(err),
 				logger.String("job", name))
 		}
 		return nil
@@ -63,3 +63,5 @@ type cronJobFuncAdapter func() error
 func (c cronJobFuncAdapter) Run() {
 	_ = c()
 }
+
+

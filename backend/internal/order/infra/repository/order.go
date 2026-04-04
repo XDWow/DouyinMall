@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ErrRecordNotFound 已移到domain层
+// ErrRecordNotFound 宸茬Щ鍒癲omain灞?
 // var ErrRecordNotFound = gorm.ErrRecordNotFound
 
 const (
@@ -24,16 +24,16 @@ const (
 	pageLimit        = 10
 )
 
-// 缓存场景分析：
-// 一致性高 + 低并发 → 直接 DB
-// 一致性高 + 高并发 → 删缓存(cache-aside，立刻拿到最新数据) + 短TTL（删除缓存失败了的兜底，最多延迟一会自动过期）（核心：不信任地使用缓存）
-// 一致性低 + 高并发 → 维护缓存
-// 一致性低 + 低并发 → 甚至不需要 Redis
+// 缂撳瓨鍦烘櫙鍒嗘瀽锛?
+// 涓€鑷存€ч珮 + 浣庡苟鍙?鈫?鐩存帴 DB
+// 涓€鑷存€ч珮 + 楂樺苟鍙?鈫?鍒犵紦瀛?cache-aside锛岀珛鍒绘嬁鍒版渶鏂版暟鎹? + 鐭璗TL锛堝垹闄ょ紦瀛樺け璐ヤ簡鐨勫厹搴曪紝鏈€澶氬欢杩熶竴浼氳嚜鍔ㄨ繃鏈燂級锛堟牳蹇冿細涓嶄俊浠诲湴浣跨敤缂撳瓨锛?
+// 涓€鑷存€т綆 + 楂樺苟鍙?鈫?缁存姢缂撳瓨
+// 涓€鑷存€т綆 + 浣庡苟鍙?鈫?鐢氳嚦涓嶉渶瑕?Redis
 
-// 订单系统采用旁路缓存（Cache Aside）
-// DB 为唯一事实源，缓存仅用于加速高并发读
-// 通过 TTL 兜底，允许几十秒的展示滞后，但保证最终一致性
-// 不允许缓存参与业务状态演进
+// 璁㈠崟绯荤粺閲囩敤鏃佽矾缂撳瓨锛圕ache Aside锛?
+// DB 涓哄敮涓€浜嬪疄婧愶紝缂撳瓨浠呯敤浜庡姞閫熼珮骞跺彂璇?
+// 閫氳繃 TTL 鍏滃簳锛屽厑璁稿嚑鍗佺鐨勫睍绀烘粸鍚庯紝浣嗕繚璇佹渶缁堜竴鑷存€?
+// 涓嶅厑璁哥紦瀛樺弬涓庝笟鍔＄姸鎬佹紨杩?
 type orderRepository struct {
 	db    *gorm.DB
 	cache cache.OrderCache
@@ -59,29 +59,29 @@ func userOrderListKey(userID int64) string {
 func (repo *orderRepository) Save(ctx context.Context, order *domain.Order) error {
 	conn := db.DBFromContext(ctx, repo.db)
 	orderModel := toOrderModel(order)
-	// GORM会自动设置OrderItems的OrderID外键
+	// GORM浼氳嚜鍔ㄨ缃甇rderItems鐨凮rderID澶栭敭
 	if err := conn.Create(orderModel).Error; err != nil {
 		return err
 	}
-	// 回写生成的ID到domain对象
+	// 鍥炲啓鐢熸垚鐨処D鍒癲omain瀵硅薄
 	order.ID = orderModel.ID
 
-	// 写缓存，失败了打日志就行，大不了不加速了而已
+	// 鍐欑紦瀛橈紝澶辫触浜嗘墦鏃ュ織灏辫锛屽ぇ涓嶄簡涓嶅姞閫熶簡鑰屽凡
 	data, err := json.Marshal(orderModel)
 	if err != nil {
-		repo.log.Warn("订单序列化失败，无法写入缓存", logger.Error(err), logger.Int64("orderID", order.ID))
+		repo.log.Warn("璁㈠崟搴忓垪鍖栧け璐ワ紝鏃犳硶鍐欏叆缂撳瓨", logger.Error(err), logger.Int64("orderID", order.ID))
 		return nil
 	}
 	if err := repo.cache.Set(ctx, orderKey(orderModel.ID), string(data), orderTTL); err != nil {
-		repo.log.Warn("写入订单缓存失败", logger.Error(err), logger.Int64("orderID", order.ID))
+		repo.log.Warn("鍐欏叆璁㈠崟缂撳瓨澶辫触", logger.Error(err), logger.Int64("orderID", order.ID))
 	}
 
 	members := map[string]float64{
 		strconv.FormatInt(orderModel.ID, 10): float64(orderModel.CreatedAt.UnixMilli()),
 	}
-	// 使用ZAddWithLimit保持固定大小
+	// 浣跨敤ZAddWithLimit淇濇寔鍥哄畾澶у皬
 	if err := repo.cache.ZAddWithLimit(ctx, userOrderListKey(orderModel.UserID), members, pageLimit, userOrderListTTL); err != nil {
-		repo.log.Warn("写入用户订单列表缓存失败", logger.Error(err), logger.Int64("userID", orderModel.UserID))
+		repo.log.Warn("鍐欏叆鐢ㄦ埛璁㈠崟鍒楄〃缂撳瓨澶辫触", logger.Error(err), logger.Int64("userID", orderModel.UserID))
 	}
 
 	return nil
@@ -91,7 +91,7 @@ func (repo *orderRepository) FindByID(ctx context.Context, orderID int64) (domai
 	conn := db.DBFromContext(ctx, repo.db)
 	var orderModel db.OrderModel
 	err := conn.
-		Preload("Items"). // 预加载订单项
+		Preload("Items"). // 棰勫姞杞借鍗曢」
 		Where("id = ?", orderID).
 		First(&orderModel).Error
 	if err != nil {
@@ -118,17 +118,17 @@ func (repo *orderRepository) findByIDs(ctx context.Context, orderIDs []int64, fo
 
 	conn := db.DBFromContext(ctx, repo.db)
 	if forUpdate {
-		conn = conn.Clauses(clause.Locking{Strength: "UPDATE"}) // sql 语句会带上 for update
+		conn = conn.Clauses(clause.Locking{Strength: "UPDATE"}) // sql 璇彞浼氬甫涓?for update
 	}
 	var models []db.OrderModel
 	if err := conn.
-		Preload("Items"). // 把 Items 这个关联字段顺手一起查出来，不然默认只查主表
+		Preload("Items"). // 鎶?Items 杩欎釜鍏宠仈瀛楁椤烘墜涓€璧锋煡鍑烘潵锛屼笉鐒堕粯璁ゅ彧鏌ヤ富琛?
 		Where("id IN ?", orderIDs).
 		Find(&models).Error; err != nil {
 		return nil, err
 	}
 
-	// 数据库查询是无序的，通过 map 来使返回的 order 跟传进来的 orderID 顺序对应
+	// 鏁版嵁搴撴煡璇㈡槸鏃犲簭鐨勶紝閫氳繃 map 鏉ヤ娇杩斿洖鐨?order 璺熶紶杩涙潵鐨?orderID 椤哄簭瀵瑰簲
 	ordersByID := make(map[int64]*domain.Order, len(models))
 	for _, model := range models {
 		order := toDomainOrder(&model)
@@ -160,15 +160,15 @@ func (repo *orderRepository) UpdateStatus(ctx context.Context, orderID int64, fr
 	if res.RowsAffected == 0 {
 		return domain.ErrRecordNotFound
 	}
-	// 这里删除缓存失败会导致数据不一致，只能依赖短TTL兜底，无能的丈夫
+	// 杩欓噷鍒犻櫎缂撳瓨澶辫触浼氬鑷存暟鎹笉涓€鑷达紝鍙兘渚濊禆鐭璗TL鍏滃簳锛屾棤鑳界殑涓堝か
 	err := repo.cache.Del(ctx, orderKey(orderID))
 	if err != nil {
-		repo.log.Warn("删除订单缓存失败", logger.Error(err), logger.Int64("orderID", order.ID))
+		repo.log.Warn("鍒犻櫎璁㈠崟缂撳瓨澶辫触", logger.Error(err), logger.Int64("orderID", order.ID))
 	}
 	return nil
 }
 
-// 现在的场景是：批量取消订单
+// 鐜板湪鐨勫満鏅槸锛氭壒閲忓彇娑堣鍗?
 func (repo *orderRepository) BatchUpdateStatus(ctx context.Context, orderIDs []int64, fromStatus, toStatus domain.OrderStatus) error {
 	if len(orderIDs) == 0 {
 		return nil
@@ -201,12 +201,12 @@ func (repo *orderRepository) ListByUserID(
 	cursor int64,
 	limit int,
 ) (orders []*domain.Order, nextCursor int64, err error) {
-	// 只缓存第一页（cursor=0时的热点数据）
+	// 鍙紦瀛樼涓€椤碉紙cursor=0鏃剁殑鐑偣鏁版嵁锛?
 	if cursor == 0 && limit <= pageLimit {
-		// 1. 从ZSet获取orderID列表
+		// 1. 浠嶼Set鑾峰彇orderID鍒楄〃
 		idStrs, err := repo.cache.ZRange(ctx, userOrderListKey(userID), 0, int64(limit-1), true)
 		if err != nil {
-			repo.log.Warn("ZRange 查询失败，回退到数据库", logger.Error(err), logger.Int64("userID", userID))
+			repo.log.Warn("ZRange 鏌ヨ澶辫触锛屽洖閫€鍒版暟鎹簱", logger.Error(err), logger.Int64("userID", userID))
 		} else if len(idStrs) > 0 {
 			orderIDs := make([]int64, 0, len(idStrs))
 			for _, idStr := range idStrs {
@@ -215,7 +215,7 @@ func (repo *orderRepository) ListByUserID(
 				}
 			}
 			if len(orderIDs) > 0 {
-				// 2. 批量MGet查询缓存
+				// 2. 鎵归噺MGet鏌ヨ缂撳瓨
 				keys := make([]string, len(orderIDs))
 				for i, id := range orderIDs {
 					keys[i] = orderKey(id)
@@ -223,24 +223,24 @@ func (repo *orderRepository) ListByUserID(
 
 				dataList, err := repo.cache.MGet(ctx, keys...)
 				if err != nil {
-					repo.log.Warn("MGet 查询失败，回退到数据库", logger.Error(err), logger.Int64("userID", userID))
+					repo.log.Warn("MGet 鏌ヨ澶辫触锛屽洖閫€鍒版暟鎹簱", logger.Error(err), logger.Int64("userID", userID))
 				} else {
-					// 3. 分离命中和未命中的orderIDs
+					// 3. 鍒嗙鍛戒腑鍜屾湭鍛戒腑鐨刼rderIDs
 					orders := make([]*domain.Order, 0, len(orderIDs))
 					missIDs := make([]int64, 0)
-					missIndexes := make(map[int64]int) // orderID -> orders中的位置
+					missIndexes := make(map[int64]int) // orderID -> orders涓殑浣嶇疆
 
 					for i, data := range dataList {
 						if data == nil {
-							// 缓存未命中
+							// 缂撳瓨鏈懡涓?
 							missIDs = append(missIDs, orderIDs[i])
 							missIndexes[orderIDs[i]] = len(orders)
-							orders = append(orders, nil) // 占位
+							orders = append(orders, nil) // 鍗犱綅
 						} else {
 							var order domain.Order
 							if err := json.Unmarshal([]byte(*data), &order); err != nil {
-								repo.log.Warn("反序列化订单失败", logger.Error(err), logger.Int64("orderID", orderIDs[i]))
-								// 反序列化失败，当作miss处理
+								repo.log.Warn("鍙嶅簭鍒楀寲璁㈠崟澶辫触", logger.Error(err), logger.Int64("orderID", orderIDs[i]))
+								// 鍙嶅簭鍒楀寲澶辫触锛屽綋浣渕iss澶勭悊
 								missIDs = append(missIDs, orderIDs[i])
 								missIndexes[orderIDs[i]] = len(orders)
 								orders = append(orders, nil)
@@ -250,7 +250,7 @@ func (repo *orderRepository) ListByUserID(
 						}
 					}
 
-					// 4. 去DB补充查询未命中的订单
+					// 4. 鍘籇B琛ュ厖鏌ヨ鏈懡涓殑璁㈠崟
 					if len(missIDs) > 0 {
 						var missModels []db.OrderModel
 						err := db.DBFromContext(ctx, repo.db).
@@ -258,11 +258,11 @@ func (repo *orderRepository) ListByUserID(
 							Where("id IN ?", missIDs).
 							Find(&missModels).Error
 						if err != nil {
-							repo.log.Error("数据库查询缺失订单失败", logger.Error(err))
+							repo.log.Error("鏁版嵁搴撴煡璇㈢己澶辫鍗曞け璐?, logger.Error(err))
 							return nil, 0, err
 						}
 
-						// 5. 回填到结果 orders，并写回缓存
+						// 5. 鍥炲～鍒扮粨鏋?orders锛屽苟鍐欏洖缂撳瓨
 
 						for _, model := range missModels {
 							order := toDomainOrder(&model)
@@ -271,14 +271,14 @@ func (repo *orderRepository) ListByUserID(
 								orders[idx] = order
 							}
 
-							// 写回缓存
+							// 鍐欏洖缂撳瓨
 							if data, e := json.Marshal(&order); e == nil {
 								repo.cache.Set(ctx, orderKey(order.ID), string(data), orderTTL)
 							}
 						}
 					}
 
-					// 6. 过滤掉仍然为空的占位（DB中也不存在，说明缓存list有脏数据）
+					// 6. 杩囨护鎺変粛鐒朵负绌虹殑鍗犱綅锛圖B涓篃涓嶅瓨鍦紝璇存槑缂撳瓨list鏈夎剰鏁版嵁锛?
 					validOrders := make([]*domain.Order, 0, len(orders))
 					hasInvalidData := false
 					for _, o := range orders {
@@ -289,14 +289,14 @@ func (repo *orderRepository) ListByUserID(
 						}
 					}
 
-					// 数据库没有（真相），但是list竟然有，那就是脏数据，删除list缓存
+					// 鏁版嵁搴撴病鏈夛紙鐪熺浉锛夛紝浣嗘槸list绔熺劧鏈夛紝閭ｅ氨鏄剰鏁版嵁锛屽垹闄ist缂撳瓨
 					if hasInvalidData {
-						repo.log.Warn("缓存list存在脏数据，删除list缓存", logger.Int64("userID", userID))
+						repo.log.Warn("缂撳瓨list瀛樺湪鑴忔暟鎹紝鍒犻櫎list缂撳瓨", logger.Int64("userID", userID))
 						repo.cache.Del(ctx, userOrderListKey(userID))
 					}
 
-					// 计算nextCursor
-					if len(validOrders) < limit { // 没有下一页了
+					// 璁＄畻nextCursor
+					if len(validOrders) < limit { // 娌℃湁涓嬩竴椤典簡
 						return validOrders, 0, nil
 					}
 					nextCursor = validOrders[len(validOrders)-1].ID
@@ -306,9 +306,9 @@ func (repo *orderRepository) ListByUserID(
 		}
 	}
 
-	// 非首页，不走缓存，直接DB查询
+	// 闈為椤碉紝涓嶈蛋缂撳瓨锛岀洿鎺B鏌ヨ
 	var models []db.OrderModel
-	// Limit(limit+1)来判断是否还有下一页
+	// Limit(limit+1)鏉ュ垽鏂槸鍚﹁繕鏈変笅涓€椤?
 	query := db.DBFromContext(ctx, repo.db).
 		Preload("Items").
 		Where("user_id = ?", userID)
@@ -322,10 +322,10 @@ func (repo *orderRepository) ListByUserID(
 		return nil, cursor, err
 	}
 
-	// 如果查询结果超过limit，说明有下一页
+	// 濡傛灉鏌ヨ缁撴灉瓒呰繃limit锛岃鏄庢湁涓嬩竴椤?
 	hasMore := len(models) > limit
 	if hasMore {
-		models = models[:limit] // 只返回limit条
+		models = models[:limit] // 鍙繑鍥瀕imit鏉?
 	}
 
 	orders = make([]*domain.Order, len(models))
@@ -348,7 +348,7 @@ func (repo *orderRepository) FindExpiredOrders(ctx context.Context, limit int) (
 		Preload("Items").
 		Where("status = ? AND expired_at < ?", domain.OrderStatusCreated, time.Now())
 
-	// limit > 0 才限制数量，否则查询所有
+	// limit > 0 鎵嶉檺鍒舵暟閲忥紝鍚﹀垯鏌ヨ鎵€鏈?
 	if limit > 0 {
 		query = query.Limit(limit)
 	}
@@ -365,7 +365,7 @@ func (repo *orderRepository) FindExpiredOrders(ctx context.Context, limit int) (
 	return orders, nil
 }
 
-// 列出某用户某状态的订单列表，这个不是热点数据吧，不缓存了
+// 鍒楀嚭鏌愮敤鎴锋煇鐘舵€佺殑璁㈠崟鍒楄〃锛岃繖涓笉鏄儹鐐规暟鎹惂锛屼笉缂撳瓨浜?
 func (repo *orderRepository) ListOrdersByStatus(ctx context.Context, userID int64, status string) ([]*domain.Order, error) {
 	var models []db.OrderModel
 	err := db.DBFromContext(ctx, repo.db).
@@ -465,3 +465,5 @@ func toDomainOrder(model *db.OrderModel) *domain.Order {
 func matchStatuses(status domain.OrderStatus) []domain.OrderStatus {
 	return []domain.OrderStatus{status}
 }
+
+

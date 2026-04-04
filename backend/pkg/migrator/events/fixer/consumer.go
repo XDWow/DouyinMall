@@ -17,7 +17,7 @@ import (
 type Consumer[T migrator.Entity] struct {
 	client sarama.Client
 	l      logger.LoggerV1
-	// 消费逻辑: fix
+	// 娑堣垂閫昏緫: fix
 	srcFirst *fixer.OverrideFixer[T]
 	dstFirst *fixer.OverrideFixer[T]
 	topic    string
@@ -46,7 +46,7 @@ func NewConsumer[T migrator.Entity](
 	}, err
 }
 
-// Start 就是自己启动 goroutine 了
+// Start 灏辨槸鑷繁鍚姩 goroutine 浜?
 func (c *Consumer[T]) Start() error {
 	cg, err := sarama.NewConsumerGroupFromClient("migrator-fix", c.client)
 	if err != nil {
@@ -69,6 +69,8 @@ func (c *Consumer[T]) consume(msg *sarama.ConsumerMessage, t events.Inconsistent
 	case "DST":
 		return c.dstFirst.Fix(ctx, t.ID)
 	default:
-		return errors.New("未知的校验方向")
+		return errors.New("鏈煡鐨勬牎楠屾柟鍚?)
 	}
 }
+
+

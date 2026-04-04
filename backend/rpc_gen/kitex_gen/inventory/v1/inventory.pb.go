@@ -278,3 +278,5 @@ type InventoryService interface {
 	RefundStock(ctx context.Context, req *RefundStockReq) (res *InventoryOpResp, err error)
 	AdjustStock(ctx context.Context, req *AdjustStockReq) (res *InventoryOpResp, err error)
 }
+
+

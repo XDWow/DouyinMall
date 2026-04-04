@@ -9,7 +9,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// SyncWechatOrderJob 用于在支付回调缺失时做最终兜底同步。
+// SyncWechatOrderJob 鐢ㄤ簬鍦ㄦ敮浠樺洖璋冪己澶辨椂鍋氭渶缁堝厹搴曞悓姝ャ€?
 type SyncWechatOrderJob struct {
 	syncUC *usecase.SyncWechatOrderUC
 	repo   domain.PaymentRepository
@@ -37,7 +37,7 @@ func (s *SyncWechatOrderJob) Run() error {
 	threshold := time.Now().Add(-25 * time.Minute)
 	deadline := time.Now().Add(30 * time.Second)
 
-	for time.Now().Before(deadline) { // 只跑 30s，避免一个 crobJob 持续太久
+	for time.Now().Before(deadline) { // 鍙窇 30s锛岄伩鍏嶄竴涓?crobJob 鎸佺画澶箙
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		pmts, err := s.repo.FindExpiredPayment(ctx, limit, threshold)
 		cancel()
@@ -57,7 +57,7 @@ func (s *SyncWechatOrderJob) Run() error {
 			err = s.syncUC.SyncWechatInfo(callCtx, pmt.BizTradeNo)
 			callCancel()
 			if err != nil {
-				s.l.Error("同步微信支付单失败",
+				s.l.Error("鍚屾寰俊鏀粯鍗曞け璐?,
 					logger.String("trade_no", pmt.BizTradeNo),
 					logger.Error(err))
 			}
@@ -65,3 +65,5 @@ func (s *SyncWechatOrderJob) Run() error {
 	}
 	return nil
 }
+
+

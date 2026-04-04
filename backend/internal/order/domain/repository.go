@@ -4,10 +4,10 @@ import (
 	"context"
 )
 
-// Repository 接口描述的是业务对世界的期望，重点在业务，而不是基础设施
-// 所以它属于 domain 层
-// infra 只负责提供实现
-// 这样业务层才能在没有数据库的情况下被完整建模和测试
+// Repository 鎺ュ彛鎻忚堪鐨勬槸涓氬姟瀵逛笘鐣岀殑鏈熸湜锛岄噸鐐瑰湪涓氬姟锛岃€屼笉鏄熀纭€璁炬柦
+// 鎵€浠ュ畠灞炰簬 domain 灞?
+// infra 鍙礋璐ｆ彁渚涘疄鐜?
+// 杩欐牱涓氬姟灞傛墠鑳藉湪娌℃湁鏁版嵁搴撶殑鎯呭喌涓嬭瀹屾暣寤烘ā鍜屾祴璇?
 type OrderRepository interface {
 	Save(ctx context.Context, order *Order) error
 	FindByID(ctx context.Context, orderID int64) (Order, error)
@@ -15,23 +15,25 @@ type OrderRepository interface {
 	FindByIDsForUpdate(ctx context.Context, orderIDs []int64) ([]*Order, error)
 	UpdateStatus(ctx context.Context, orderID int64, fromStatus, toStatus OrderStatus) error
 	ListOrdersByStatus(ctx context.Context, userID int64, status string) ([]*Order, error)
-	// 查找超过30分钟未支付的待支付订单（过期）
+	// 鏌ユ壘瓒呰繃30鍒嗛挓鏈敮浠樼殑寰呮敮浠樿鍗曪紙杩囨湡锛?
 	FindExpiredOrders(ctx context.Context, limit int) ([]*Order, error)
-	// 批量更新订单状态，现在只用于批量取消订单：pending -> canceled
+	// 鎵归噺鏇存柊璁㈠崟鐘舵€侊紝鐜板湪鍙敤浜庢壒閲忓彇娑堣鍗曪細pending -> canceled
 	BatchUpdateStatus(ctx context.Context, orderIDs []int64, fromStatus, toStatus OrderStatus) error
 
-	// Keyset分页：cursor为上一页最后的orderID，首次查询传0
-	// 返回值：orders列表 + nextCursor（用于下一页查询，0表示没有更多数据）
+	// Keyset鍒嗛〉锛歝ursor涓轰笂涓€椤垫渶鍚庣殑orderID锛岄娆℃煡璇紶0
+	// 杩斿洖鍊硷細orders鍒楄〃 + nextCursor锛堢敤浜庝笅涓€椤垫煡璇紝0琛ㄧず娌℃湁鏇村鏁版嵁锛?
 	ListByUserID(ctx context.Context, userID int64, cursor int64, limit int) (orders []*Order, nextCursor int64, err error)
 }
 
 type OutboxRepository interface {
 	Add(ctx context.Context, eventType string, payload any) (int64, error)
 	BatchAdd(ctx context.Context, eventType string, payloads []any) ([]int64, error)
-	// ListPending 分页查询待发送的事件
+	// ListPending 鍒嗛〉鏌ヨ寰呭彂閫佺殑浜嬩欢
 	ListPending(ctx context.Context, offset, limit int) ([]OutboxEvent, error)
 	MarkSent(ctx context.Context, id int64) error
 	BatchMarkSent(ctx context.Context, ids []int64) error
 	MarkFailed(ctx context.Context, id int64) error
 	IncreaseRetry(ctx context.Context, id int64) (int, error)
 }
+
+

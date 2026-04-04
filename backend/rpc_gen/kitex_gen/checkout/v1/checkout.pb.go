@@ -487,3 +487,5 @@ type CheckoutService interface {
 	PlaceOrder(ctx context.Context, req *PlaceOrderReq) (res *PlaceOrderResp, err error)
 	PayOrder(ctx context.Context, req *PayOrderReq) (res *PayOrderResp, err error)
 }
+
+

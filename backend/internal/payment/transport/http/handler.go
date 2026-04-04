@@ -141,3 +141,5 @@ func (h *WechatCallbackHandler) RegisterRoutes(router *gin.Engine) {
 	paymentGroup := router.Group("/payment")
 	paymentGroup.POST("/wechat/callback", h.HandleWechatCallback)
 }
+
+
