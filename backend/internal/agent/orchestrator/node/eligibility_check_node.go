@@ -9,9 +9,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type EligibilityCheckNode struct{ suite *Suite }
+type EligibilityCheckNode struct{}
 
-func (s *Suite) EligibilityCheck() *EligibilityCheckNode { return &EligibilityCheckNode{suite: s} }
+func NewEligibilityCheckNode() *EligibilityCheckNode { return &EligibilityCheckNode{} }
 
 func (n *EligibilityCheckNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {
@@ -98,4 +98,3 @@ func orderString(order map[string]any, key string) string {
 	}
 	return strings.TrimSpace(graphstate.ToString(value))
 }
-

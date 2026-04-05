@@ -7,13 +7,20 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 
+	orchestratorprompt "github.com/XDWow/DouyinMall/backend/internal/agent/components/prompt"
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type RewriteNode struct{ suite *Suite }
+type RewriteNodeDeps struct {
+	Prompts *orchestratorprompt.Set
+}
 
-func (s *Suite) Rewrite() *RewriteNode { return &RewriteNode{suite: s} }
+type RewriteNode struct{ deps RewriteNodeDeps }
+
+func NewRewriteNode(deps RewriteNodeDeps) *RewriteNode {
+	return &RewriteNode{deps: deps}
+}
 
 func (n *RewriteNode) Evaluate(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	graphstate.BindConversationState(ctx, state)
@@ -36,7 +43,7 @@ func (n *RewriteNode) BuildPromptInput(ctx context.Context, state *graphstate.Co
 		return nil, fmt.Errorf("state is required")
 	}
 	return map[string]any{
-		"system_text":  n.suite.deps.Prompts.SystemText,
+		"system_text":  n.deps.Prompts.SystemText,
 		"history_text": support.HistoryText(graphstate.RecentMessages(state)),
 		"message":      state.Session.RawQuery,
 		"intent":       string(state.Session.Intent),

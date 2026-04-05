@@ -17,13 +17,12 @@ import (
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agentmemory "github.com/XDWow/DouyinMall/backend/internal/agent/memory"
-	orchestratorgraph "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/graph"
 	orchestratorcallback "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/callback"
+	orchestratorgraph "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/graph"
 	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	orchestratortoolexec "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
-	orchestratorworkflow "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/workflow"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
@@ -66,37 +65,11 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 		tracer:          tracer,
 	}
 
-	nodes := orchestratornode.NewSuite(orchestratornode.Dependencies{
-		Config: orchestratornode.Config{
-			DefaultTenantID:    cfg.DefaultTenantID,
-			RateLimitPerMinute: cfg.RateLimitPerMinute,
-			ConversationWindow: cfg.ConversationWindow,
-			L0CacheTTL:         cfg.L0CacheTTL,
-			RerankTopK:         cfg.RerankTopK,
-			ToolParallelism:    cfg.ToolParallelism,
-		},
-		Model:           deps.Model,
-		Registry:        deps.Registry,
-		ExactCache:      deps.ExactCache,
-		RateLimiter:     deps.RateLimiter,
-		CheckpointStore: deps.CheckpointStore,
-		Prompts:         prompts,
-		Logger:          log,
-		Metrics:         metrics,
-		Hooks: orchestratornode.Hooks{
-			GenerateAnswer:          svc.generateAnswer,
-			PersistConversationTurn: svc.persistConversationTurn,
-			RegistryHasTool:         svc.registryHasTool,
-			ApplyToolPlans:          svc.applyToolPlans,
-		},
-	})
-	workflows := &orchestratorworkflow.Builder{
-		Model:     deps.Model,
-		Retriever: deps.Retriever,
-		Tools:     deps.Registry,
-		Prompts:   prompts,
-		Nodes:     nodes,
-	}
+	toolCheck := orchestratornode.ToolRegistryCheck(svc.registryHasTool)
+	toolApply := orchestratornode.ToolPlanApplier(svc.applyToolPlans)
+	persistTurn := orchestratornode.ConversationTurnPersister(svc.persistConversationTurn)
+	genAnswer := orchestratornode.AnswerGenerator(svc.generateAnswer)
+
 	svc.callbackHandler = orchestratorcallback.Builder{Tracer: tracer, Metrics: metrics}.New()
 
 	runner, err := (&orchestratorgraph.Builder{
@@ -105,8 +78,53 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 			InterruptAfterNodes:  cfg.InterruptAfterNodes,
 		},
 		CheckpointStore: deps.CheckpointStore,
-		Nodes:           nodes,
-		Workflows:       workflows,
+		Model:           deps.Model,
+		Retriever:       deps.Retriever,
+		Registry:        deps.Registry,
+		Prompts:         prompts,
+		AccessGuard: orchestratornode.NewAccessGuardNode(orchestratornode.AccessGuardNodeDeps{
+			DefaultTenantID:    cfg.DefaultTenantID,
+			RateLimitPerMinute: cfg.RateLimitPerMinute,
+			RateLimiter:        deps.RateLimiter,
+			CheckpointStore:    deps.CheckpointStore,
+		}),
+		SessionLoad:    orchestratornode.NewSessionLoadNode(),
+		L0ExactCache:   orchestratornode.NewL0ExactCacheNode(orchestratornode.L0ExactCacheNodeDeps{ExactCache: deps.ExactCache}),
+		IntentClassify: orchestratornode.NewIntentClassifyNode(orchestratornode.IntentClassifyNodeDeps{Prompts: prompts}),
+		SlotExtract:    orchestratornode.NewSlotExtractNode(),
+		SlotCheck:      orchestratornode.NewSlotCheckNode(),
+		AskUser: orchestratornode.NewAskUserNode(orchestratornode.AskUserNodeDeps{
+			PersistTurn: persistTurn,
+			Logger:      log,
+		}),
+		Route: orchestratornode.NewRouteNode(),
+		ResponseRender: orchestratornode.NewResponseRenderNode(orchestratornode.ResponseRenderNodeDeps{
+			Model:          deps.Model,
+			Prompts:        prompts,
+			GenerateAnswer: genAnswer,
+			Metrics:        metrics,
+		}),
+		CacheWriteback: orchestratornode.NewCacheWritebackNode(orchestratornode.CacheWritebackNodeDeps{
+			ExactCache:  deps.ExactCache,
+			L0CacheTTL:  cfg.L0CacheTTL,
+			PersistTurn: persistTurn,
+			Logger:      log,
+		}),
+		OrderRead:    orchestratornode.NewOrderReadNode(orchestratornode.OrderReadNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
+		InventoryRead: orchestratornode.NewInventoryReadNode(orchestratornode.InventoryReadNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
+		ProductInfo:  orchestratornode.NewProductInfoNode(orchestratornode.ProductInfoNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
+		AddToCart:    orchestratornode.NewAddToCartNode(orchestratornode.AddToCartNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
+		ReturnExchangeQuery: orchestratornode.NewReturnExchangeQueryNode(orchestratornode.ReturnExchangeQueryNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
+		EligibilityCheck: orchestratornode.NewEligibilityCheckNode(),
+		ConfirmSummary: orchestratornode.NewConfirmSummaryNode(orchestratornode.ConfirmSummaryNodeDeps{
+			PersistTurn: persistTurn,
+			Logger:      log,
+		}),
+		SubmitAfterSale: orchestratornode.NewSubmitAfterSaleNode(orchestratornode.SubmitAfterSaleNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
+		Rewrite:  orchestratornode.NewRewriteNode(orchestratornode.RewriteNodeDeps{Prompts: prompts}),
+		Retrieve: orchestratornode.NewRetrieveNode(),
+		Rerank:   orchestratornode.NewRerankNode(orchestratornode.RerankNodeDeps{TopK: cfg.RerankTopK}),
+		Fallback: orchestratornode.NewFallbackNode(),
 	}).Build(ctx)
 	if err != nil {
 		return nil, err

@@ -11,20 +11,20 @@ import (
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-func Build(_ context.Context, registry *agenttool.Registry, nodes *orchestratornode.Suite, mode agenttool.ToolExecutionMode) (compose.AnyGraph, error) {
-	if registry == nil || nodes == nil {
+func Build(_ context.Context, registry *agenttool.Registry, mode agenttool.ToolExecutionMode) (compose.AnyGraph, error) {
+	if registry == nil {
 		return nil, nil
 	}
 	toolsNode, err := registry.ToolsNode(mode)
 	if err != nil {
 		return nil, err
 	}
-	toolNode := nodes.ToolExec()
+	execNode := orchestratornode.NewToolExecNode(orchestratornode.ToolExecNodeDeps{Registry: registry})
 	prepareName := "PrepareSerialToolMessageNode"
-	prepareFn := toolNode.PrepareSerialMessage
+	prepareFn := execNode.PrepareSerialMessage
 	if mode == agenttool.ToolExecutionParallelReadOnly {
 		prepareName = "PrepareParallelReadonlyToolMessageNode"
-		prepareFn = toolNode.PrepareParallelReadOnlyMessage
+		prepareFn = execNode.PrepareParallelReadOnlyMessage
 	}
 	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
 	if err := g.AddLambdaNode(prepareName, compose.InvokableLambda(prepareFn), compose.WithNodeName(prepareName)); err != nil {
@@ -33,7 +33,7 @@ func Build(_ context.Context, registry *agenttool.Registry, nodes *orchestratorn
 	if err := g.AddToolsNode("ToolsNode", toolsNode, compose.WithNodeName("ToolsNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddLambdaNode("ApplyToolMessagesNode", compose.InvokableLambda(toolNode.ApplyMessages), compose.WithNodeName("ApplyToolMessagesNode")); err != nil {
+	if err := g.AddLambdaNode("ApplyToolMessagesNode", compose.InvokableLambda(execNode.ApplyMessages), compose.WithNodeName("ApplyToolMessagesNode")); err != nil {
 		return nil, err
 	}
 	for _, edge := range [][2]string{
@@ -55,4 +55,3 @@ func addEdge(g interface{ AddEdge(string, string) error }, start, end string) er
 	}
 	return nil
 }
-

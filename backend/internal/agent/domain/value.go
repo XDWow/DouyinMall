@@ -4,18 +4,11 @@ type Intent string
 
 const (
 	IntentUnknown             Intent = "unknown"
-	IntentFAQ                 Intent = "faq"
-	IntentProductSearch       Intent = "product_search"
 	IntentOrderQuery          Intent = "order_query"
-	IntentAddToCart           Intent = "add_to_cart"
-	IntentPolicy              Intent = "policy"
-	IntentComplaint           Intent = "complaint"
-	IntentHandoff             Intent = "handoff"
-	IntentChitchat            Intent = "chitchat"
-	IntentUnsupported         Intent = "unsupported"
-	IntentReturnPolicy        Intent = "return_policy"
 	IntentInventoryQuery      Intent = "inventory_query"
 	IntentProductInfo         Intent = "product_info"
+	IntentAddToCart           Intent = "add_to_cart"
+	IntentReturnPolicy        Intent = "return_policy"
 	IntentReturnExchangeApply Intent = "return_exchange_apply"
 	IntentFallback            Intent = "fallback"
 )

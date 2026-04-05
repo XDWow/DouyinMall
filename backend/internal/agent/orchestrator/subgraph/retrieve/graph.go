@@ -11,19 +11,18 @@ import (
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-func Build(_ context.Context, retriever einoretriever.Retriever, nodes *orchestratornode.Suite) (compose.AnyGraph, error) {
-	if retriever == nil || nodes == nil {
+func Build(_ context.Context, retriever einoretriever.Retriever, node *orchestratornode.RetrieveNode) (compose.AnyGraph, error) {
+	if retriever == nil || node == nil {
 		return nil, nil
 	}
-	retrieveNode := nodes.Retrieve()
 	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
-	if err := g.AddLambdaNode("PrepareRetrieveQueryNode", compose.InvokableLambda(retrieveNode.PrepareQuery), compose.WithNodeName("PrepareRetrieveQueryNode")); err != nil {
+	if err := g.AddLambdaNode("PrepareRetrieveQueryNode", compose.InvokableLambda(node.PrepareQuery), compose.WithNodeName("PrepareRetrieveQueryNode")); err != nil {
 		return nil, err
 	}
 	if err := g.AddRetrieverNode("RetrieverNode", retriever, compose.WithNodeName("RetrieverNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddLambdaNode("ApplyRetrieveNode", compose.InvokableLambda(retrieveNode.ApplyDocuments), compose.WithNodeName("ApplyRetrieveNode")); err != nil {
+	if err := g.AddLambdaNode("ApplyRetrieveNode", compose.InvokableLambda(node.ApplyDocuments), compose.WithNodeName("ApplyRetrieveNode")); err != nil {
 		return nil, err
 	}
 	for _, edge := range [][2]string{
@@ -45,4 +44,3 @@ func addEdge(g interface{ AddEdge(string, string) error }, start, end string) er
 	}
 	return nil
 }
-

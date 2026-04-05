@@ -12,13 +12,12 @@ import (
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-func Build(_ context.Context, chatModel model.ToolCallingChatModel, prompts *orchestratorprompt.Set, nodes *orchestratornode.Suite) (compose.AnyGraph, error) {
-	if chatModel == nil || prompts == nil || prompts.Intent == nil || nodes == nil {
+func Build(_ context.Context, chatModel model.ToolCallingChatModel, prompts *orchestratorprompt.Set, node *orchestratornode.IntentClassifyNode) (compose.AnyGraph, error) {
+	if chatModel == nil || prompts == nil || prompts.Intent == nil || node == nil {
 		return nil, nil
 	}
-	intent := nodes.IntentClassify()
 	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
-	if err := g.AddLambdaNode("BuildIntentPromptInputNode", compose.InvokableLambda(intent.BuildPromptInput), compose.WithNodeName("BuildIntentPromptInputNode")); err != nil {
+	if err := g.AddLambdaNode("BuildIntentPromptInputNode", compose.InvokableLambda(node.BuildPromptInput), compose.WithNodeName("BuildIntentPromptInputNode")); err != nil {
 		return nil, err
 	}
 	if err := g.AddChatTemplateNode("IntentPromptNode", prompts.Intent, compose.WithNodeName("IntentPromptNode")); err != nil {
@@ -27,7 +26,7 @@ func Build(_ context.Context, chatModel model.ToolCallingChatModel, prompts *orc
 	if err := g.AddChatModelNode("IntentModelNode", chatModel, compose.WithNodeName("IntentModelNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddLambdaNode("ApplyIntentNode", compose.InvokableLambda(intent.Apply), compose.WithNodeName("ApplyIntentNode")); err != nil {
+	if err := g.AddLambdaNode("ApplyIntentNode", compose.InvokableLambda(node.Apply), compose.WithNodeName("ApplyIntentNode")); err != nil {
 		return nil, err
 	}
 	for _, edge := range [][2]string{
@@ -50,4 +49,3 @@ func addEdge(g interface{ AddEdge(string, string) error }, start, end string) er
 	}
 	return nil
 }
-

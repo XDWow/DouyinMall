@@ -5,14 +5,27 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudwego/eino/components/model"
+
+	orchestratorprompt "github.com/XDWow/DouyinMall/backend/internal/agent/components/prompt"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type ResponseRenderNode struct{ suite *Suite }
+type ResponseRenderNodeDeps struct {
+	Model          model.ToolCallingChatModel
+	Prompts        *orchestratorprompt.Set
+	GenerateAnswer AnswerGenerator
+	Metrics        *observe.Metrics
+}
 
-func (s *Suite) ResponseRender() *ResponseRenderNode { return &ResponseRenderNode{suite: s} }
+type ResponseRenderNode struct{ deps ResponseRenderNodeDeps }
+
+func NewResponseRenderNode(deps ResponseRenderNodeDeps) *ResponseRenderNode {
+	return &ResponseRenderNode{deps: deps}
+}
 
 func (n *ResponseRenderNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {
@@ -28,17 +41,17 @@ func (n *ResponseRenderNode) Invoke(ctx context.Context, state *graphstate.Conve
 	}
 	reply := strings.TrimSpace(state.Session.FinalAnswer)
 	source := "state"
-	if reply == "" && support.ShouldUseLLMAnswer(state) && n.suite.deps.Model != nil && n.suite.deps.Prompts != nil && n.suite.deps.Prompts.Answer != nil {
-		messages, err := n.suite.deps.Prompts.Answer.Format(ctx, map[string]any{
-			"system_text":     n.suite.deps.Prompts.SystemText,
-			"history":         graphstate.RecentMessages(state), // already []*schema.Message, windowed
+	if reply == "" && support.ShouldUseLLMAnswer(state) && n.deps.Model != nil && n.deps.Prompts != nil && n.deps.Prompts.Answer != nil {
+		messages, err := n.deps.Prompts.Answer.Format(ctx, map[string]any{
+			"system_text":     n.deps.Prompts.SystemText,
+			"history":         graphstate.RecentMessages(state),
 			"message":         state.Session.RawQuery,
 			"query":           support.FirstNonEmpty(state.Session.RewrittenQuery, state.Session.RawQuery),
 			"references_text": support.ReferencesText(state.Retrieval.References),
 			"tool_text":       support.ToolText(state.ToolExecutions()),
 		})
-		if err == nil && n.suite.deps.Hooks.GenerateAnswer != nil {
-			if generated, genErr := n.suite.deps.Hooks.GenerateAnswer(ctx, state, messages); genErr == nil && strings.TrimSpace(generated) != "" {
+		if err == nil && n.deps.GenerateAnswer != nil {
+			if generated, genErr := n.deps.GenerateAnswer(ctx, state, messages); genErr == nil && strings.TrimSpace(generated) != "" {
 				reply = generated
 				source = "llm"
 			}
@@ -60,8 +73,8 @@ func (n *ResponseRenderNode) Invoke(ctx context.Context, state *graphstate.Conve
 	resp.Trace.RewrittenQuery = state.Session.RewrittenQuery
 	if resp.NeedHandoff {
 		resp.Status = domain.ReplyStatusHandoff
-		if n.suite.deps.Metrics != nil {
-			n.suite.deps.Metrics.ObserveHandoff(resp.HandoffReason)
+		if n.deps.Metrics != nil {
+			n.deps.Metrics.ObserveHandoff(resp.HandoffReason)
 		}
 	} else {
 		resp.Status = domain.ReplyStatusAnswered

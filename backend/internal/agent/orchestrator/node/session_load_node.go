@@ -10,9 +10,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type SessionLoadNode struct{ suite *Suite }
+type SessionLoadNode struct{}
 
-func (s *Suite) SessionLoad() *SessionLoadNode { return &SessionLoadNode{suite: s} }
+func NewSessionLoadNode() *SessionLoadNode { return &SessionLoadNode{} }
 
 func (n *SessionLoadNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {

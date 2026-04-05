@@ -11,9 +11,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type RetrieveNode struct{ suite *Suite }
+type RetrieveNode struct{}
 
-func (s *Suite) Retrieve() *RetrieveNode { return &RetrieveNode{suite: s} }
+func NewRetrieveNode() *RetrieveNode { return &RetrieveNode{} }
 
 func (n *RetrieveNode) PrepareQuery(ctx context.Context, state *graphstate.ConversationState) (string, error) {
 	graphstate.BindConversationState(ctx, state)
@@ -33,4 +33,3 @@ func (n *RetrieveNode) ApplyDocuments(ctx context.Context, docs []*schema.Docume
 	graphstate.BindConversationState(ctx, state)
 	return state, nil
 }
-

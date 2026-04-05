@@ -9,9 +9,15 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type RerankNode struct{ suite *Suite }
+type RerankNodeDeps struct {
+	TopK int
+}
 
-func (s *Suite) Rerank() *RerankNode { return &RerankNode{suite: s} }
+type RerankNode struct{ deps RerankNodeDeps }
+
+func NewRerankNode(deps RerankNodeDeps) *RerankNode {
+	return &RerankNode{deps: deps}
+}
 
 func (n *RerankNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil || len(state.Retrieval.Documents) == 0 {
@@ -42,8 +48,8 @@ func (n *RerankNode) Invoke(ctx context.Context, state *graphstate.ConversationS
 	}
 
 	sort.Slice(refs, func(i, j int) bool { return refs[i].Score > refs[j].Score })
-	if len(refs) > n.suite.deps.Config.RerankTopK {
-		refs = refs[:n.suite.deps.Config.RerankTopK]
+	if n.deps.TopK > 0 && len(refs) > n.deps.TopK {
+		refs = refs[:n.deps.TopK]
 	}
 	state.Retrieval.References = refs
 	graphstate.BindConversationState(ctx, state)
@@ -70,4 +76,3 @@ func metaStringMap(meta map[string]any) map[string]string {
 	}
 	return out
 }
-

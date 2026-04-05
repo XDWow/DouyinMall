@@ -6,13 +6,20 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 
+	orchestratorprompt "github.com/XDWow/DouyinMall/backend/internal/agent/components/prompt"
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type IntentClassifyNode struct{ suite *Suite }
+type IntentClassifyNodeDeps struct {
+	Prompts *orchestratorprompt.Set
+}
 
-func (s *Suite) IntentClassify() *IntentClassifyNode { return &IntentClassifyNode{suite: s} }
+type IntentClassifyNode struct{ deps IntentClassifyNodeDeps }
+
+func NewIntentClassifyNode(deps IntentClassifyNodeDeps) *IntentClassifyNode {
+	return &IntentClassifyNode{deps: deps}
+}
 
 // Invoke is the fast heuristic-only path used when no LLM subgraph is built.
 // LLM-based classification runs through the intentclassify subgraph:
@@ -34,7 +41,7 @@ func (n *IntentClassifyNode) BuildPromptInput(ctx context.Context, state *graphs
 		return nil, fmt.Errorf("state is required")
 	}
 	return map[string]any{
-		"system_text":  n.suite.deps.Prompts.SystemText,
+		"system_text":  n.deps.Prompts.SystemText,
 		"history_text": support.HistoryText(graphstate.RecentMessages(state)),
 		"message":      state.Session.RawQuery,
 	}, nil

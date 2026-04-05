@@ -14,21 +14,24 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-func Build(ctx context.Context, registry *agenttool.Registry, nodes *orchestratornode.Suite) (compose.AnyGraph, error) {
-	toolWorkflow, err := toolexec.Build(ctx, registry, nodes, agenttool.ToolExecutionSerial)
+func Build(
+	ctx context.Context,
+	registry *agenttool.Registry,
+	queryNode *orchestratornode.ReturnExchangeQueryNode,
+	eligibilityNode *orchestratornode.EligibilityCheckNode,
+	confirmNode *orchestratornode.ConfirmSummaryNode,
+	submitNode *orchestratornode.SubmitAfterSaleNode,
+) (compose.AnyGraph, error) {
+	toolGraph, err := toolexec.Build(ctx, registry, agenttool.ToolExecutionSerial)
 	if err != nil {
 		return nil, err
 	}
-	queryNode := nodes.ReturnExchangeQuery()
-	eligibilityNode := nodes.EligibilityCheck()
-	confirmNode := nodes.ConfirmSummary()
-	submitNode := nodes.SubmitAfterSale()
 	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
 	if err := g.AddLambdaNode("GetOrderDetailNode", compose.InvokableLambda(queryNode.BuildOrderQuery), compose.WithNodeName("GetOrderDetailNode")); err != nil {
 		return nil, err
 	}
-	if toolWorkflow != nil {
-		if err := g.AddGraphNode("CallReturnOrderServiceNode", toolWorkflow, compose.WithNodeName("CallReturnOrderServiceNode")); err != nil {
+	if toolGraph != nil {
+		if err := g.AddGraphNode("CallReturnOrderServiceNode", toolGraph, compose.WithNodeName("CallReturnOrderServiceNode")); err != nil {
 			return nil, err
 		}
 	}
@@ -44,34 +47,39 @@ func Build(ctx context.Context, registry *agenttool.Registry, nodes *orchestrato
 	if err := g.AddLambdaNode("BuildAfterSaleSubmitNode", compose.InvokableLambda(submitNode.BuildRequest), compose.WithNodeName("BuildAfterSaleSubmitNode")); err != nil {
 		return nil, err
 	}
-	if toolWorkflow != nil {
-		if err := g.AddGraphNode("CallAfterSaleServiceNode", toolWorkflow, compose.WithNodeName("CallAfterSaleServiceNode")); err != nil {
+	if toolGraph != nil {
+		if err := g.AddGraphNode("CallAfterSaleServiceNode", toolGraph, compose.WithNodeName("CallAfterSaleServiceNode")); err != nil {
 			return nil, err
 		}
 	}
 	if err := g.AddLambdaNode("SubmitAfterSaleNode", compose.InvokableLambda(submitNode.Invoke), compose.WithNodeName("SubmitAfterSaleNode")); err != nil {
 		return nil, err
 	}
+
 	edges := [][2]string{
-		{compose.START, "GetOrderDetailNode"},
 		{"ReturnOrderResultNode", "EligibilityCheckNode"},
 		{"ConfirmSummaryNode", compose.END},
 		{"SubmitAfterSaleNode", compose.END},
 	}
-	if toolWorkflow != nil {
+	if toolGraph != nil {
 		edges = append(edges,
+			[2]string{compose.START, "GetOrderDetailNode"},
 			[2]string{"GetOrderDetailNode", "CallReturnOrderServiceNode"},
 			[2]string{"CallReturnOrderServiceNode", "ReturnOrderResultNode"},
 			[2]string{"CallAfterSaleServiceNode", "SubmitAfterSaleNode"},
 		)
 	} else {
-		edges = append(edges, [2]string{"GetOrderDetailNode", "ReturnOrderResultNode"})
+		edges = append(edges,
+			[2]string{compose.START, "GetOrderDetailNode"},
+			[2]string{"GetOrderDetailNode", "ReturnOrderResultNode"},
+		)
 	}
 	for _, edge := range edges {
 		if err := addEdge(g, edge[0], edge[1]); err != nil {
 			return nil, err
 		}
 	}
+
 	if err := g.AddBranch("EligibilityCheckNode", compose.NewGraphBranch(
 		func(ctx context.Context, _ *orchestratorstate.ConversationState) (string, error) {
 			state := orchestratorstate.ConversationStateFromContext(ctx)
@@ -93,14 +101,15 @@ func Build(ctx context.Context, registry *agenttool.Registry, nodes *orchestrato
 	)); err != nil {
 		return nil, err
 	}
+
 	submitTargets := map[string]bool{compose.END: true}
-	if toolWorkflow != nil {
+	if toolGraph != nil {
 		submitTargets["CallAfterSaleServiceNode"] = true
 	}
 	if err := g.AddBranch("BuildAfterSaleSubmitNode", compose.NewGraphBranch(
 		func(ctx context.Context, _ *orchestratorstate.ConversationState) (string, error) {
 			state := orchestratorstate.ConversationStateFromContext(ctx)
-			if toolWorkflow != nil && support.HasToolPlan(state, "create_after_sale_request") {
+			if toolGraph != nil && support.HasToolPlan(state, "create_after_sale_request") {
 				return "CallAfterSaleServiceNode", nil
 			}
 			return compose.END, nil
@@ -118,4 +127,3 @@ func addEdge(g interface{ AddEdge(string, string) error }, start, end string) er
 	}
 	return nil
 }
-

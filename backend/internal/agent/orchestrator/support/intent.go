@@ -15,12 +15,14 @@ func RouteFromIntent(intent domain.Intent) graphstate.WorkflowRoute {
 	switch intent {
 	case domain.IntentOrderQuery:
 		return graphstate.RouteOrderQuery
-	case domain.IntentReturnPolicy:
-		return graphstate.RouteReturnPolicy
 	case domain.IntentInventoryQuery:
 		return graphstate.RouteInventory
 	case domain.IntentProductInfo:
 		return graphstate.RouteProductInfo
+	case domain.IntentAddToCart:
+		return graphstate.RouteAddToCart
+	case domain.IntentReturnPolicy:
+		return graphstate.RouteReturnPolicy
 	case domain.IntentReturnExchangeApply:
 		return graphstate.RouteReturnExchangeApply
 	default:
@@ -32,12 +34,14 @@ func RouteEnabled(flags graphstate.FeatureFlags, route graphstate.WorkflowRoute)
 	switch route {
 	case graphstate.RouteOrderQuery:
 		return flags.OrderQuery
-	case graphstate.RouteReturnPolicy:
-		return flags.ReturnPolicy
 	case graphstate.RouteInventory:
 		return flags.Inventory
 	case graphstate.RouteProductInfo:
 		return flags.ProductInfo
+	case graphstate.RouteAddToCart:
+		return flags.AddToCart
+	case graphstate.RouteReturnPolicy:
+		return flags.ReturnPolicy
 	case graphstate.RouteReturnExchangeApply:
 		return flags.ReturnExchangeApply
 	default:
@@ -47,7 +51,7 @@ func RouteEnabled(flags graphstate.FeatureFlags, route graphstate.WorkflowRoute)
 
 func RequiredMissingSlots(state *graphstate.ConversationState) []string {
 	switch state.Session.Intent {
-	case domain.IntentInventoryQuery, domain.IntentProductInfo:
+	case domain.IntentInventoryQuery, domain.IntentProductInfo, domain.IntentAddToCart:
 		return MissingIfEmpty(state, "product_id")
 	case domain.IntentReturnExchangeApply:
 		if state.Session.AwaitingConfirm {
@@ -70,10 +74,14 @@ func AskMessageForMissingSlot(state *graphstate.ConversationState, slot string) 
 		}
 		return "Please provide the order ID so I can continue."
 	case "product_id":
-		if state.Session.Intent == domain.IntentInventoryQuery {
+		switch state.Session.Intent {
+		case domain.IntentInventoryQuery:
 			return "Please provide the product ID or SKU so I can check inventory."
+		case domain.IntentAddToCart:
+			return "Which product would you like to add to cart? Please provide the product ID."
+		default:
+			return "Please provide the product ID or SKU so I can continue."
 		}
-		return "Please provide the product ID or SKU so I can continue."
 	case "reason":
 		return "Please tell me the after-sale reason, for example damage, wrong size, or changed your mind."
 	default:
@@ -100,6 +108,8 @@ func HeuristicIntent(message string) graphstate.IntentDecision {
 		intent, confidence = domain.IntentReturnExchangeApply, 0.92
 	case ContainsAny(raw, "return policy", "refund policy", "exchange policy", "7 day"):
 		intent, confidence = domain.IntentReturnPolicy, 0.86
+	case ContainsAny(raw, "add to cart", "add to my cart", "put in cart"):
+		intent, confidence = domain.IntentAddToCart, 0.90
 	case ContainsAny(raw, "inventory", "stock", "available", "in stock"):
 		intent, confidence = domain.IntentInventoryQuery, 0.86
 	case ContainsAny(raw, "order", "shipping", "delivery", "tracking"):
@@ -115,12 +125,14 @@ func NormalizeIntent(raw string) domain.Intent {
 	switch strings.TrimSpace(strings.ToLower(raw)) {
 	case "order_query":
 		return domain.IntentOrderQuery
-	case "return_policy", "policy":
-		return domain.IntentReturnPolicy
 	case "inventory", "inventory_query":
 		return domain.IntentInventoryQuery
 	case "product_info", "product_search":
 		return domain.IntentProductInfo
+	case "add_to_cart", "cart":
+		return domain.IntentAddToCart
+	case "return_policy", "policy":
+		return domain.IntentReturnPolicy
 	case "return_exchange_apply", "apply_return_exchange", "apply_return":
 		return domain.IntentReturnExchangeApply
 	case "fallback", "faq", "unknown", "unsupported":
@@ -222,7 +234,7 @@ func ExtractSlotsFromMessage(message string, intent domain.Intent) map[string]an
 		switch intent {
 		case domain.IntentOrderQuery, domain.IntentReturnExchangeApply:
 			result["order_id"] = id
-		case domain.IntentInventoryQuery, domain.IntentProductInfo:
+		case domain.IntentInventoryQuery, domain.IntentProductInfo, domain.IntentAddToCart:
 			result["product_id"] = id
 		}
 	}

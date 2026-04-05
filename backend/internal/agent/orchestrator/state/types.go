@@ -25,18 +25,20 @@ type WorkflowRoute string
 const (
 	RouteUnknown             WorkflowRoute = "unknown"
 	RouteOrderQuery          WorkflowRoute = "order_query"
-	RouteReturnPolicy        WorkflowRoute = "return_policy"
 	RouteInventory           WorkflowRoute = "inventory"
 	RouteProductInfo         WorkflowRoute = "product_info"
+	RouteAddToCart           WorkflowRoute = "add_to_cart"
+	RouteReturnPolicy        WorkflowRoute = "return_policy"
 	RouteReturnExchangeApply WorkflowRoute = "return_exchange_apply"
 	RouteFallback            WorkflowRoute = "fallback"
 )
 
 type FeatureFlags struct {
 	OrderQuery          bool
-	ReturnPolicy        bool
 	Inventory           bool
 	ProductInfo         bool
+	AddToCart           bool
+	ReturnPolicy        bool
 	ReturnExchangeApply bool
 }
 

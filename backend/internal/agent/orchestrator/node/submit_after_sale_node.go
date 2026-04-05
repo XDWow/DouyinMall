@@ -10,9 +10,16 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type SubmitAfterSaleNode struct{ suite *Suite }
+type SubmitAfterSaleNodeDeps struct {
+	RegistryHasTool ToolRegistryCheck
+	ApplyToolPlans  ToolPlanApplier
+}
 
-func (s *Suite) SubmitAfterSale() *SubmitAfterSaleNode { return &SubmitAfterSaleNode{suite: s} }
+type SubmitAfterSaleNode struct{ deps SubmitAfterSaleNodeDeps }
+
+func NewSubmitAfterSaleNode(deps SubmitAfterSaleNodeDeps) *SubmitAfterSaleNode {
+	return &SubmitAfterSaleNode{deps: deps}
+}
 
 func (n *SubmitAfterSaleNode) BuildRequest(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {
@@ -23,14 +30,14 @@ func (n *SubmitAfterSaleNode) BuildRequest(ctx context.Context, state *graphstat
 		graphstate.BindConversationState(ctx, state)
 		return state, nil
 	}
-	if n.suite.deps.Hooks.RegistryHasTool == nil || !n.suite.deps.Hooks.RegistryHasTool(ctx, "create_after_sale_request") {
+	if n.deps.RegistryHasTool == nil || !n.deps.RegistryHasTool(ctx, "create_after_sale_request") {
 		state.Session.NeedHandoff = true
 		state.Session.HandoffReason = "after_sale_service_unavailable"
 		state.Session.FinalAnswer = "After-sale submission is unavailable. Handing off to a human agent."
 		graphstate.BindConversationState(ctx, state)
 		return state, nil
 	}
-	orderID, err := n.suite.ToolExec().ParseSlotInt64(state, "order_id")
+	orderID, err := parseSlotInt64(state, "order_id")
 	if err != nil {
 		return nil, err
 	}
@@ -39,12 +46,12 @@ func (n *SubmitAfterSaleNode) BuildRequest(ctx context.Context, state *graphstat
 		"reason":       graphstate.SlotString(state, "reason"),
 		"request_type": support.FirstNonEmpty(graphstate.SlotString(state, "request_type"), "return"),
 	}
-	if itemID := graphstate.SlotString(state, "item_id", "sku_id", "product_id"); itemID != "" {
-		if parsed, parseErr := n.suite.ToolExec().ParseSlotInt64(state, "item_id", "sku_id", "product_id"); parseErr == nil {
+	if graphstate.SlotString(state, "item_id", "sku_id", "product_id") != "" {
+		if parsed, parseErr := parseSlotInt64(state, "item_id", "sku_id", "product_id"); parseErr == nil {
 			args["item_id"] = parsed
 		}
 	}
-	return n.suite.deps.Hooks.ApplyToolPlans(ctx, state, []domain.ToolCallPlan{{Name: "create_after_sale_request", Arguments: args, Reason: "submit_after_sale_request"}})
+	return n.deps.ApplyToolPlans(ctx, state, []domain.ToolCallPlan{{Name: "create_after_sale_request", Arguments: args, Reason: "submit_after_sale_request"}})
 }
 
 func (n *SubmitAfterSaleNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
@@ -80,4 +87,3 @@ func (n *SubmitAfterSaleNode) Invoke(ctx context.Context, state *graphstate.Conv
 	graphstate.BindConversationState(ctx, state)
 	return state, nil
 }
-

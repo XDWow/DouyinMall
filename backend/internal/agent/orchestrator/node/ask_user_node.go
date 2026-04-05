@@ -13,9 +13,16 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-type AskUserNode struct{ suite *Suite }
+type AskUserNodeDeps struct {
+	PersistTurn ConversationTurnPersister
+	Logger      logger.LoggerV1
+}
 
-func (s *Suite) AskUser() *AskUserNode { return &AskUserNode{suite: s} }
+type AskUserNode struct{ deps AskUserNodeDeps }
+
+func NewAskUserNode(deps AskUserNodeDeps) *AskUserNode {
+	return &AskUserNode{deps: deps}
+}
 
 func (n *AskUserNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {
@@ -30,12 +37,11 @@ func (n *AskUserNode) Invoke(ctx context.Context, state *graphstate.Conversation
 	resp.Intent = state.Session.Intent
 	resp.Status = domain.ReplyStatusFallback
 	resp.Confidence = support.MaxFloat(state.Session.IntentConfidence, 0.8)
-	if n.suite.deps.Hooks.PersistConversationTurn != nil {
-		if err := n.suite.deps.Hooks.PersistConversationTurn(ctx, state, reply, resp.Intent, resp.Confidence); err != nil {
-			n.suite.deps.Logger.Warn("persist interrupted turn failed", logger.Error(err))
+	if n.deps.PersistTurn != nil {
+		if err := n.deps.PersistTurn(ctx, state, reply, resp.Intent, resp.Confidence); err != nil {
+			n.deps.Logger.Warn("persist interrupted turn failed", logger.Error(err))
 		}
 	}
 	graphstate.BindConversationState(ctx, state)
 	return state, compose.Interrupt(ctx, map[string]any{"missing_slots": state.Session.MissingSlots, "question": reply})
 }
-

@@ -3,20 +3,27 @@ package node
 import (
 	"context"
 
+	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type L0ExactCacheNode struct{ suite *Suite }
+type L0ExactCacheNodeDeps struct {
+	ExactCache cache.ExactCache
+}
 
-func (s *Suite) L0ExactCache() *L0ExactCacheNode { return &L0ExactCacheNode{suite: s} }
+type L0ExactCacheNode struct{ deps L0ExactCacheNodeDeps }
+
+func NewL0ExactCacheNode(deps L0ExactCacheNodeDeps) *L0ExactCacheNode {
+	return &L0ExactCacheNode{deps: deps}
+}
 
 func (n *L0ExactCacheNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
-	if state == nil || n.suite.deps.ExactCache == nil || state.Session.ResumeFromCP {
+	if state == nil || n.deps.ExactCache == nil || state.Session.ResumeFromCP {
 		graphstate.BindConversationState(ctx, state)
 		return state, nil
 	}
-	item, err := n.suite.deps.ExactCache.Lookup(ctx, state.Session.TenantID, state.Request.UserID, state.Session.RawQuery)
+	item, err := n.deps.ExactCache.Lookup(ctx, state.Session.TenantID, state.Request.UserID, state.Session.RawQuery)
 	if err != nil || item == nil {
 		graphstate.BindConversationState(ctx, state)
 		return state, nil
@@ -34,4 +41,3 @@ func (n *L0ExactCacheNode) Invoke(ctx context.Context, state *graphstate.Convers
 	graphstate.BindConversationState(ctx, state)
 	return state, nil
 }
-

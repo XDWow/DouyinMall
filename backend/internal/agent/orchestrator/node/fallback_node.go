@@ -9,9 +9,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type FallbackNode struct{ suite *Suite }
+type FallbackNode struct{}
 
-func (s *Suite) Fallback() *FallbackNode { return &FallbackNode{suite: s} }
+func NewFallbackNode() *FallbackNode { return &FallbackNode{} }
 
 func (n *FallbackNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {
@@ -23,4 +23,3 @@ func (n *FallbackNode) Invoke(ctx context.Context, state *graphstate.Conversatio
 	graphstate.BindConversationState(ctx, state)
 	return state, nil
 }
-

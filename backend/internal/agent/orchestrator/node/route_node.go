@@ -8,9 +8,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type RouteNode struct{ suite *Suite }
+type RouteNode struct{}
 
-func (s *Suite) Route() *RouteNode { return &RouteNode{suite: s} }
+func NewRouteNode() *RouteNode { return &RouteNode{} }
 
 func (n *RouteNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {
@@ -26,7 +26,7 @@ func (n *RouteNode) Invoke(ctx context.Context, state *graphstate.ConversationSt
 		ss.ErrorCode = "feature_disabled"
 	}
 	ss.Route = route
-	ss.ReadOnly = route != graphstate.RouteReturnExchangeApply
+	ss.ReadOnly = route != graphstate.RouteReturnExchangeApply && route != graphstate.RouteAddToCart
 	graphstate.BindConversationState(ctx, state)
 	return state, nil
 }

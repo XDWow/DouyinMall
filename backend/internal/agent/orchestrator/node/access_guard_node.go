@@ -6,12 +6,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-type AccessGuardNode struct{ suite *Suite }
+type AccessGuardNodeDeps struct {
+	DefaultTenantID    string
+	RateLimitPerMinute int64
+	RateLimiter        cache.RateLimiter
+	CheckpointStore    cache.CheckpointStore
+}
 
-func (s *Suite) AccessGuard() *AccessGuardNode { return &AccessGuardNode{suite: s} }
+type AccessGuardNode struct{ deps AccessGuardNodeDeps }
+
+func NewAccessGuardNode(deps AccessGuardNodeDeps) *AccessGuardNode {
+	return &AccessGuardNode{deps: deps}
+}
 
 func (n *AccessGuardNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {
@@ -26,12 +36,12 @@ func (n *AccessGuardNode) Invoke(ctx context.Context, state *graphstate.Conversa
 	ss := graphstate.EnsureSessionState(state)
 	ss.UserID = state.Request.UserID
 	ss.RawQuery = strings.TrimSpace(state.Request.Message)
-	ss.TenantID = n.suite.deps.Config.DefaultTenantID
+	ss.TenantID = n.deps.DefaultTenantID
 	if ss.TenantID == "" {
 		ss.TenantID = "default"
 	}
-	if n.suite.deps.RateLimiter != nil {
-		allowed, err := n.suite.deps.RateLimiter.AllowUser(ctx, state.Request.UserID, n.suite.deps.Config.RateLimitPerMinute, time.Minute)
+	if n.deps.RateLimiter != nil {
+		allowed, err := n.deps.RateLimiter.AllowUser(ctx, state.Request.UserID, n.deps.RateLimitPerMinute, time.Minute)
 		if err == nil && !allowed {
 			ss.NeedHandoff = true
 			ss.HandoffReason = "rate_limit"
@@ -40,10 +50,10 @@ func (n *AccessGuardNode) Invoke(ctx context.Context, state *graphstate.Conversa
 		}
 	}
 	if strings.TrimSpace(state.Request.ResumeToken) != "" {
-		if n.suite.deps.CheckpointStore == nil {
+		if n.deps.CheckpointStore == nil {
 			return nil, fmt.Errorf("resume is not enabled")
 		}
-		_, ok, err := n.suite.deps.CheckpointStore.Get(ctx, state.Request.ResumeToken)
+		_, ok, err := n.deps.CheckpointStore.Get(ctx, state.Request.ResumeToken)
 		if err != nil {
 			return nil, err
 		}

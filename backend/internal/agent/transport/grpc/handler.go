@@ -195,26 +195,13 @@ func toProtoIntent(intent domain.Intent, message string) agentv1.IntentType {
 	switch intent {
 	case domain.IntentReturnPolicy, domain.IntentReturnExchangeApply:
 		return agentv1.IntentType_INTENT_RETURN
-	case domain.IntentInventoryQuery, domain.IntentProductInfo:
-		return agentv1.IntentType_INTENT_PRODUCT_INQUIRY
-	case domain.IntentFAQ:
-		return agentv1.IntentType_INTENT_FAQ
-	case domain.IntentProductSearch, domain.IntentAddToCart:
+	case domain.IntentInventoryQuery, domain.IntentProductInfo, domain.IntentAddToCart:
 		if containsAny(msg, "promotion", "discount", "coupon", "deal") {
 			return agentv1.IntentType_INTENT_PROMOTION
 		}
 		return agentv1.IntentType_INTENT_PRODUCT_INQUIRY
 	case domain.IntentOrderQuery:
-		if containsAny(msg, "logistics", "shipping", "delivery", "shipped") {
-			return agentv1.IntentType_INTENT_LOGISTICS
-		}
 		return agentv1.IntentType_INTENT_ORDER_INQUIRY
-	case domain.IntentComplaint:
-		return agentv1.IntentType_INTENT_COMPLAINT
-	case domain.IntentChitchat:
-		return agentv1.IntentType_INTENT_CHITCHAT
-	case domain.IntentHandoff:
-		return agentv1.IntentType_INTENT_TRANSFER_TO_HUMAN
 	case domain.IntentFallback, domain.IntentUnknown:
 		if containsAny(msg, "payment", "paid", "charge", "billing") {
 			return agentv1.IntentType_INTENT_PAYMENT
@@ -310,9 +297,9 @@ func buildSuggestedQuestions(resp *agentusecase.ChatOutput, userMessage string) 
 
 	switch resp.Intent {
 	case domain.IntentOrderQuery:
-		add("Do you want me to check the logistics progress as well?")
-		add("Should I look up the latest status of this order?")
-	case domain.IntentProductSearch:
+		add("Do you want me to check the latest status of this order?")
+		add("Should I look up any related after-sale options?")
+	case domain.IntentInventoryQuery, domain.IntentProductInfo:
 		add("Do you want similar product recommendations?")
 		add("Should I narrow the results by price or category?")
 	case domain.IntentAddToCart:
@@ -321,8 +308,9 @@ func buildSuggestedQuestions(resp *agentusecase.ChatOutput, userMessage string) 
 	case domain.IntentReturnPolicy:
 		add("Do you want me to explain the refund conditions in more detail?")
 		add("Should I walk through the exchange process as well?")
-	case domain.IntentComplaint:
-		add("Do you want me to prepare a handoff summary for human support?")
+	case domain.IntentReturnExchangeApply:
+		add("Do you want me to check the eligibility for return or exchange?")
+		add("Should I prepare a handoff summary for human support?")
 	default:
 		add("Can you provide a bit more detail so I can continue?")
 	}

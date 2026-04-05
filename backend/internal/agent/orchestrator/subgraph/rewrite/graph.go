@@ -12,19 +12,18 @@ import (
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-func Build(_ context.Context, chatModel model.ToolCallingChatModel, prompts *orchestratorprompt.Set, nodes *orchestratornode.Suite) (compose.AnyGraph, error) {
-	if chatModel == nil || prompts == nil || prompts.Rewrite == nil || nodes == nil {
+func Build(_ context.Context, chatModel model.ToolCallingChatModel, prompts *orchestratorprompt.Set, node *orchestratornode.RewriteNode) (compose.AnyGraph, error) {
+	if chatModel == nil || prompts == nil || prompts.Rewrite == nil || node == nil {
 		return nil, nil
 	}
-	rewriteNode := nodes.Rewrite()
 	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
-	if err := g.AddLambdaNode("RewriteEvaluateNode", compose.InvokableLambda(rewriteNode.Evaluate), compose.WithNodeName("RewriteEvaluateNode")); err != nil {
+	if err := g.AddLambdaNode("RewriteEvaluateNode", compose.InvokableLambda(node.Evaluate), compose.WithNodeName("RewriteEvaluateNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddLambdaNode("RewriteIdentityNode", compose.InvokableLambda(rewriteNode.Identity), compose.WithNodeName("RewriteIdentityNode")); err != nil {
+	if err := g.AddLambdaNode("RewriteIdentityNode", compose.InvokableLambda(node.Identity), compose.WithNodeName("RewriteIdentityNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddLambdaNode("BuildRewritePromptInputNode", compose.InvokableLambda(rewriteNode.BuildPromptInput), compose.WithNodeName("BuildRewritePromptInputNode")); err != nil {
+	if err := g.AddLambdaNode("BuildRewritePromptInputNode", compose.InvokableLambda(node.BuildPromptInput), compose.WithNodeName("BuildRewritePromptInputNode")); err != nil {
 		return nil, err
 	}
 	if err := g.AddChatTemplateNode("RewritePromptNode", prompts.Rewrite, compose.WithNodeName("RewritePromptNode")); err != nil {
@@ -33,7 +32,7 @@ func Build(_ context.Context, chatModel model.ToolCallingChatModel, prompts *orc
 	if err := g.AddChatModelNode("RewriteModelNode", chatModel, compose.WithNodeName("RewriteModelNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddLambdaNode("ApplyRewriteNode", compose.InvokableLambda(rewriteNode.Apply), compose.WithNodeName("ApplyRewriteNode")); err != nil {
+	if err := g.AddLambdaNode("ApplyRewriteNode", compose.InvokableLambda(node.Apply), compose.WithNodeName("ApplyRewriteNode")); err != nil {
 		return nil, err
 	}
 	if err := addEdge(g, compose.START, "RewriteEvaluateNode"); err != nil {
@@ -71,4 +70,3 @@ func addEdge(g interface{ AddEdge(string, string) error }, start, end string) er
 	}
 	return nil
 }
-

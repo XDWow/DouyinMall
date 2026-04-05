@@ -9,13 +9,20 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type OrderReadNode struct{ suite *Suite }
+type OrderReadNodeDeps struct {
+	RegistryHasTool ToolRegistryCheck
+	ApplyToolPlans  ToolPlanApplier
+}
 
-func (s *Suite) OrderRead() *OrderReadNode { return &OrderReadNode{suite: s} }
+type OrderReadNode struct{ deps OrderReadNodeDeps }
+
+func NewOrderReadNode(deps OrderReadNodeDeps) *OrderReadNode {
+	return &OrderReadNode{deps: deps}
+}
 
 func (n *OrderReadNode) BuildQuery(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	state.Session.ReadOnly = true
-	if n.suite.deps.Hooks.RegistryHasTool == nil || !n.suite.deps.Hooks.RegistryHasTool(ctx, "query_order") {
+	if n.deps.RegistryHasTool == nil || !n.deps.RegistryHasTool(ctx, "query_order") {
 		state.Session.FinalAnswer = "Order query service is unavailable. Handing off to a human agent."
 		state.Session.NeedHandoff = true
 		state.Session.HandoffReason = "order_service_unavailable"
@@ -29,7 +36,7 @@ func (n *OrderReadNode) BuildQuery(ctx context.Context, state *graphstate.Conver
 			plans[0].Arguments["limit"] = 1
 		}
 	}
-	return n.suite.deps.Hooks.ApplyToolPlans(ctx, state, plans)
+	return n.deps.ApplyToolPlans(ctx, state, plans)
 }
 
 func (n *OrderReadNode) ApplyResult(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
@@ -37,4 +44,3 @@ func (n *OrderReadNode) ApplyResult(ctx context.Context, state *graphstate.Conve
 	graphstate.BindConversationState(ctx, state)
 	return state, nil
 }
-

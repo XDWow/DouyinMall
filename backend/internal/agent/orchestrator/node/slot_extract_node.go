@@ -8,9 +8,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type SlotExtractNode struct{ suite *Suite }
+type SlotExtractNode struct{}
 
-func (s *Suite) SlotExtract() *SlotExtractNode { return &SlotExtractNode{suite: s} }
+func NewSlotExtractNode() *SlotExtractNode { return &SlotExtractNode{} }
 
 func (n *SlotExtractNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
 	if state == nil {
