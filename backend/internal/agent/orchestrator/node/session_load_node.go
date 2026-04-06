@@ -6,46 +6,51 @@ import (
 	"strings"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
+// SessionLoadInput 描述会话装载阶段的输入。
+type SessionLoadInput struct {
+	Request     domain.ChatCommand
+	TraceID     string
+	SessionMeta *domain.Session
+}
+
+// SessionLoadNode 负责补齐会话标识，并整理请求携带的槽位。
 type SessionLoadNode struct{}
 
 func NewSessionLoadNode() *SessionLoadNode { return &SessionLoadNode{} }
 
-func (n *SessionLoadNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
-	if state == nil {
-		return nil, fmt.Errorf("state is required")
-	}
-	sessionID := strings.TrimSpace(state.Request.SessionID)
+type SessionLoadResult struct {
+	SessionID   string
+	SessionMeta *domain.Session
+	OrderID     string
+	ProductID   string
+}
+
+// Invoke 生成会话装载阶段的结果。
+func (n *SessionLoadNode) Invoke(_ context.Context, input SessionLoadInput) (*SessionLoadResult, error) {
+	sessionID := strings.TrimSpace(input.Request.SessionID)
 	if sessionID == "" {
-		sessionID = "sess_" + state.TraceID
-		state.Request.SessionID = sessionID
+		sessionID = "sess_" + input.TraceID
 	}
-	if state.SessionMeta == nil {
-		state.SessionMeta = &domain.Session{
+
+	sessionMeta := input.SessionMeta
+	if sessionMeta == nil {
+		sessionMeta = &domain.Session{
 			SessionID: sessionID,
-			UserID:    state.Request.UserID,
+			UserID:    input.Request.UserID,
 			Status:    domain.SessionStatusActive,
 		}
 	}
-	if state.SessionMeta.UserID != 0 && state.SessionMeta.UserID != state.Request.UserID {
-		return nil, fmt.Errorf("session owner mismatch")
+	if sessionMeta.UserID != 0 && sessionMeta.UserID != input.Request.UserID {
+		return nil, fmt.Errorf("会话归属用户不匹配")
 	}
-	ss := graphstate.EnsureSessionState(state)
-	ss.SessionID = state.SessionMeta.SessionID
-	if graphstate.SlotString(state, "order_id") == "" {
-		if id := support.MetadataValue(state.Request.Metadata, "order_id", "orderID"); id != "" {
-			graphstate.SetSlot(state, "order_id", support.DigitsOnlyID(id))
-		}
-	}
-	if graphstate.SlotString(state, "product_id") == "" {
-		if id := support.MetadataValue(state.Request.Metadata, "product_id", "productID"); id != "" {
-			graphstate.SetSlot(state, "product_id", support.DigitsOnlyID(id))
-		}
-	}
-	state.EnsureResponse().SessionID = state.SessionMeta.SessionID
-	graphstate.BindConversationState(ctx, state)
-	return state, nil
+
+	return &SessionLoadResult{
+		SessionID:   sessionMeta.SessionID,
+		SessionMeta: sessionMeta,
+		OrderID:     support.DigitsOnlyID(support.MetadataValue(input.Request.Metadata, "order_id", "orderID")),
+		ProductID:   support.DigitsOnlyID(support.MetadataValue(input.Request.Metadata, "product_id", "productID")),
+	}, nil
 }

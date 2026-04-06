@@ -1,4 +1,4 @@
-package domain
+﻿package domain
 
 type ChatResult struct {
 	SessionID      string
@@ -14,3 +14,4 @@ type ChatResult struct {
 	Trace          Trace
 	Interrupt      *InterruptInfo
 }
+

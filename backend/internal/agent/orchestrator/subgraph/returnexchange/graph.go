@@ -3,127 +3,267 @@ package returnexchange
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 
-	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
+// Input 描述退换货处理子图的入口。
+type Input struct {
+	Slots    map[string]any
+	Message  string
+	Intent   domain.Intent
+	Recorder *agenttool.SafeExecutionRecorder
+}
+
+// Output 描述退换货处理子图的出口。
+type Output struct {
+	FinalAnswer     string
+	NeedHandoff     bool
+	HandoffReason   string
+	ReadOnly        bool
+	AwaitingConfirm bool
+	ToolMessages    []*schema.Message
+}
+
+// Build 组装退换货处理子图。
+// 这段流程会完成：订单预查询、资格校验、确认中断、提交售后。
 func Build(
-	ctx context.Context,
+	_ context.Context,
 	registry *agenttool.Registry,
 	queryNode *orchestratornode.ReturnExchangeQueryNode,
 	eligibilityNode *orchestratornode.EligibilityCheckNode,
 	confirmNode *orchestratornode.ConfirmSummaryNode,
 	submitNode *orchestratornode.SubmitAfterSaleNode,
 ) (compose.AnyGraph, error) {
-	toolGraph, err := toolexec.Build(ctx, registry, agenttool.ToolExecutionSerial)
-	if err != nil {
-		return nil, err
-	}
-	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
-	if err := g.AddLambdaNode("GetOrderDetailNode", compose.InvokableLambda(queryNode.BuildOrderQuery), compose.WithNodeName("GetOrderDetailNode")); err != nil {
-		return nil, err
-	}
-	if toolGraph != nil {
-		if err := g.AddGraphNode("CallReturnOrderServiceNode", toolGraph, compose.WithNodeName("CallReturnOrderServiceNode")); err != nil {
-			return nil, err
-		}
-	}
-	if err := g.AddLambdaNode("ReturnOrderResultNode", compose.InvokableLambda(queryNode.ApplyOrderResult), compose.WithNodeName("ReturnOrderResultNode")); err != nil {
-		return nil, err
-	}
-	if err := g.AddLambdaNode("EligibilityCheckNode", compose.InvokableLambda(eligibilityNode.Invoke), compose.WithNodeName("EligibilityCheckNode")); err != nil {
-		return nil, err
-	}
-	if err := g.AddLambdaNode("ConfirmSummaryNode", compose.InvokableLambda(confirmNode.Invoke), compose.WithNodeName("ConfirmSummaryNode")); err != nil {
-		return nil, err
-	}
-	if err := g.AddLambdaNode("BuildAfterSaleSubmitNode", compose.InvokableLambda(submitNode.BuildRequest), compose.WithNodeName("BuildAfterSaleSubmitNode")); err != nil {
-		return nil, err
-	}
-	if toolGraph != nil {
-		if err := g.AddGraphNode("CallAfterSaleServiceNode", toolGraph, compose.WithNodeName("CallAfterSaleServiceNode")); err != nil {
-			return nil, err
-		}
-	}
-	if err := g.AddLambdaNode("SubmitAfterSaleNode", compose.InvokableLambda(submitNode.Invoke), compose.WithNodeName("SubmitAfterSaleNode")); err != nil {
-		return nil, err
+	if queryNode == nil || eligibilityNode == nil || confirmNode == nil || submitNode == nil {
+		return nil, nil
 	}
 
-	edges := [][2]string{
-		{"ReturnOrderResultNode", "EligibilityCheckNode"},
-		{"ConfirmSummaryNode", compose.END},
-		{"SubmitAfterSaleNode", compose.END},
-	}
-	if toolGraph != nil {
-		edges = append(edges,
-			[2]string{compose.START, "GetOrderDetailNode"},
-			[2]string{"GetOrderDetailNode", "CallReturnOrderServiceNode"},
-			[2]string{"CallReturnOrderServiceNode", "ReturnOrderResultNode"},
-			[2]string{"CallAfterSaleServiceNode", "SubmitAfterSaleNode"},
-		)
-	} else {
-		edges = append(edges,
-			[2]string{compose.START, "GetOrderDetailNode"},
-			[2]string{"GetOrderDetailNode", "ReturnOrderResultNode"},
-		)
-	}
-	for _, edge := range edges {
-		if err := addEdge(g, edge[0], edge[1]); err != nil {
-			return nil, err
-		}
-	}
+	toolExecNode := orchestratornode.NewToolExecNode(registry)
+	g := compose.NewGraph[Input, Output]()
+	if err := g.AddLambdaNode("ExecuteReturnExchangeFlowNode", compose.InvokableLambda(
+		func(ctx context.Context, input Input) (Output, error) {
+			slots := cloneSlots(input.Slots)
+			if slots == nil {
+				slots = map[string]any{}
+			}
+			needHandoff := false
+			handoffReason := ""
+			finalAnswer := ""
+			readOnly := false
+			awaitingConfirm := false
 
-	if err := g.AddBranch("EligibilityCheckNode", compose.NewGraphBranch(
-		func(ctx context.Context, _ *orchestratorstate.ConversationState) (string, error) {
-			state := orchestratorstate.ConversationStateFromContext(ctx)
-			if state == nil || state.Session.NeedHandoff {
-				return compose.END, nil
+			queryResult, err := queryNode.Invoke(ctx, orchestratornode.ReturnExchangeQueryInput{Slots: slots})
+			if err != nil {
+				return Output{}, err
 			}
-			switch strings.ToLower(strings.TrimSpace(orchestratorstate.SlotString(state, "confirm_status"))) {
-			case "confirmed":
-				return "BuildAfterSaleSubmitNode", nil
-			case "cancelled":
-				return compose.END, nil
+			needHandoff = queryResult.NeedHandoff
+			handoffReason = queryResult.HandoffReason
+			finalAnswer = queryResult.FinalAnswer
+			readOnly = queryResult.ReadOnly
+
+			var toolMessages []*schema.Message
+			if len(queryResult.Plans) > 0 && toolExecNode != nil {
+				callMessage, callErr := toolexec.CreateToolCallMessage(queryResult.Plans)
+				if callErr != nil {
+					return Output{}, callErr
+				}
+				messages, execErr := toolExecNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+					Plans:       queryResult.Plans,
+					CallMessage: callMessage,
+					Mode:        agenttool.ToolExecutionSerial,
+				})
+				if execErr != nil {
+					return Output{}, execErr
+				}
+				toolMessages = append(toolMessages, messages...)
+				if input.Recorder != nil {
+					support.HydrateToolResultsIntoSlots(slots, input.Recorder.Snapshot())
+				}
 			}
-			if state.Session.AwaitingConfirm {
-				return "ConfirmSummaryNode", nil
+
+			eligibilityResult, err := eligibilityNode.Invoke(ctx, orchestratornode.EligibilityCheckInput{
+				Message:          input.Message,
+				Slots:            slots,
+				NeedHandoff:      needHandoff,
+				AwaitingConfirm:  awaitingConfirm,
+				QueryOrderResult: support.ToolResultRecordFromSlots(slots, "query_order"),
+			})
+			if err != nil {
+				return Output{}, err
 			}
-			return compose.END, nil
-		},
-		map[string]bool{"ConfirmSummaryNode": true, "BuildAfterSaleSubmitNode": true, compose.END: true},
-	)); err != nil {
+			needHandoff = eligibilityResult.NeedHandoff
+			handoffReason = eligibilityResult.HandoffReason
+			if eligibilityResult.FinalAnswer != "" {
+				finalAnswer = eligibilityResult.FinalAnswer
+			}
+			readOnly = eligibilityResult.ReadOnly
+			awaitingConfirm = eligibilityResult.AwaitingConfirm
+			confirmStatus := eligibilityResult.ConfirmStatus
+
+			if awaitingConfirm {
+				confirmResult, confirmErr := confirmNode.Invoke(ctx, orchestratornode.ConfirmSummaryInput{
+					Reply:  finalAnswer,
+					Intent: input.Intent,
+				})
+				if confirmErr != nil {
+					return Output{}, confirmErr
+				}
+				if confirmResult != nil && confirmResult.Reply != "" {
+					finalAnswer = confirmResult.Reply
+				}
+			}
+
+			if strings.EqualFold(confirmStatus, "confirmed") && !needHandoff {
+				plans, buildErr := buildAfterSaleSubmitPlan(ctx, registry, slots)
+				if buildErr != nil {
+					return Output{}, buildErr
+				}
+				if len(plans) == 0 {
+					needHandoff = true
+					handoffReason = "after_sale_service_unavailable"
+					finalAnswer = "售后申请服务暂时不可用，已为你转人工处理。"
+					return Output{
+						FinalAnswer:     finalAnswer,
+						NeedHandoff:     needHandoff,
+						HandoffReason:   handoffReason,
+						ReadOnly:        readOnly,
+						AwaitingConfirm: false,
+						ToolMessages:    append([]*schema.Message(nil), toolMessages...),
+					}, nil
+				}
+				if len(plans) > 0 && toolExecNode != nil {
+					callMessage, callErr := toolexec.CreateToolCallMessage(plans)
+					if callErr != nil {
+						return Output{}, callErr
+					}
+					messages, execErr := toolExecNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+						Plans:       plans,
+						CallMessage: callMessage,
+						Mode:        agenttool.ToolExecutionSerial,
+					})
+					if execErr != nil {
+						return Output{}, execErr
+					}
+					toolMessages = append(toolMessages, messages...)
+					if input.Recorder != nil {
+						support.HydrateToolResultsIntoSlots(slots, input.Recorder.Snapshot())
+					}
+				}
+				submitResult, submitErr := submitNode.Invoke(ctx, orchestratornode.SubmitAfterSaleInput{
+					ConfirmStatus: confirmStatus,
+					RequestType:   support.FirstNonEmpty(slotString(slots, "request_type"), "return"),
+					SubmitResult:  support.ToolResultMapFromSlots(slots, "create_after_sale_request"),
+				})
+				if submitErr != nil {
+					return Output{}, submitErr
+				}
+				needHandoff = submitResult.NeedHandoff
+				handoffReason = submitResult.HandoffReason
+				if submitResult.FinalAnswer != "" {
+					finalAnswer = submitResult.FinalAnswer
+				}
+				readOnly = submitResult.ReadOnly
+				awaitingConfirm = submitResult.AwaitingConfirm
+			}
+
+			return Output{
+				FinalAnswer:     finalAnswer,
+				NeedHandoff:     needHandoff,
+				HandoffReason:   handoffReason,
+				ReadOnly:        readOnly,
+				AwaitingConfirm: awaitingConfirm,
+				ToolMessages:    append([]*schema.Message(nil), toolMessages...),
+			}, nil
+		}), compose.WithNodeName("ExecuteReturnExchangeFlowNode")); err != nil {
 		return nil, err
 	}
-
-	submitTargets := map[string]bool{compose.END: true}
-	if toolGraph != nil {
-		submitTargets["CallAfterSaleServiceNode"] = true
+	if err := g.AddEdge(compose.START, "ExecuteReturnExchangeFlowNode"); err != nil {
+		return nil, err
 	}
-	if err := g.AddBranch("BuildAfterSaleSubmitNode", compose.NewGraphBranch(
-		func(ctx context.Context, _ *orchestratorstate.ConversationState) (string, error) {
-			state := orchestratorstate.ConversationStateFromContext(ctx)
-			if toolGraph != nil && support.HasToolPlan(state, "create_after_sale_request") {
-				return "CallAfterSaleServiceNode", nil
-			}
-			return compose.END, nil
-		},
-		submitTargets,
-	)); err != nil {
+	if err := g.AddEdge("ExecuteReturnExchangeFlowNode", compose.END); err != nil {
 		return nil, err
 	}
 	return g, nil
 }
 
-func addEdge(g interface{ AddEdge(string, string) error }, start, end string) error {
-	if err := g.AddEdge(start, end); err != nil {
-		return fmt.Errorf("add edge %s -> %s: %w", start, end, err)
+func buildAfterSaleSubmitPlan(ctx context.Context, registry *agenttool.Registry, slots map[string]any) ([]domain.ToolCallPlan, error) {
+	if !registryHasTool(ctx, registry, "create_after_sale_request") {
+		return nil, nil
 	}
-	return nil
+	orderID, err := parseSubmitOrderID(slots)
+	if err != nil {
+		return nil, err
+	}
+	args := map[string]any{
+		"order_id":     orderID,
+		"reason":       slotString(slots, "reason"),
+		"request_type": support.FirstNonEmpty(slotString(slots, "request_type"), "return"),
+	}
+	if slotString(slots, "item_id", "sku_id", "product_id") != "" {
+		if parsed, parseErr := parseSubmitItemID(slots); parseErr == nil {
+			args["item_id"] = parsed
+		}
+	}
+	return []domain.ToolCallPlan{{
+		Name:      "create_after_sale_request",
+		Arguments: args,
+		Reason:    "submit_after_sale_request",
+	}}, nil
+}
+
+func registryHasTool(ctx context.Context, registry *agenttool.Registry, name string) bool {
+	if registry == nil {
+		return false
+	}
+	for _, tool := range registry.Tools() {
+		info, err := tool.Info(ctx)
+		if err == nil && info != nil && info.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func parseSubmitOrderID(slots map[string]any) (int64, error) {
+	return strconv.ParseInt(slotString(slots, "order_id"), 10, 64)
+}
+
+func parseSubmitItemID(slots map[string]any) (int64, error) {
+	return strconv.ParseInt(slotString(slots, "item_id", "sku_id", "product_id"), 10, 64)
+}
+
+func cloneSlots(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
+	}
+	result := make(map[string]any, len(input))
+	for key, value := range input {
+		result[key] = value
+	}
+	return result
+}
+
+func slotString(slots map[string]any, keys ...string) string {
+	if len(slots) == 0 {
+		return ""
+	}
+	for _, key := range keys {
+		if value, ok := slots[key]; ok && value != nil {
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text != "" && text != "<nil>" {
+				return text
+			}
+		}
+	}
+	return ""
 }

@@ -73,12 +73,18 @@ func NewRedisSemanticCache(rdb redis.Cmdable) *RedisSemanticCache {
 	}
 }
 
-func (c *RedisSemanticCache) Lookup(ctx context.Context, vector []float64, threshold float64, limit int) (*SemanticCacheItem, error) {
-	if limit <= 0 {
-		limit = 20
+func (c *RedisSemanticCache) Lookup(ctx context.Context, req SemanticCacheLookup) (*SemanticCacheItem, error) {
+	if len(req.Vector) == 0 {
+		return nil, nil
 	}
+	if req.Limit <= 0 {
+		req.Limit = 20
+	}
+	// Redis 这一层的“分桶”就是先按 tenant + scope + intent bucket 拿到对应索引，
+	// 避免把所有语义缓存都混在一起比较。
+	indexKey := semanticIndexKey(req.TenantID, req.UserID, req.IntentBucket, req.Scope)
 
-	ids, err := c.rdb.ZRevRange(ctx, semanticIndexKeyPrefix, 0, int64(limit-1)).Result()
+	ids, err := c.rdb.ZRevRange(ctx, indexKey, 0, int64(req.Limit-1)).Result()
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
@@ -98,8 +104,11 @@ func (c *RedisSemanticCache) Lookup(ctx context.Context, vector []float64, thres
 		if err := json.Unmarshal(raw, &item); err != nil {
 			continue
 		}
-		score := cosineSimilarity(item.Vector, vector)
-		if score >= threshold {
+		if !matchesSemanticLookup(item, req) {
+			continue
+		}
+		score := cosineSimilarity(item.Vector, req.Vector)
+		if score >= req.Threshold {
 			candidates = append(candidates, candidate{item: &item, score: score})
 		}
 	}
@@ -131,11 +140,11 @@ func (c *RedisSemanticCache) Store(ctx context.Context, item *SemanticCacheItem,
 
 	pipe := c.rdb.Pipeline()
 	pipe.Set(ctx, semanticItemKeyPrefix+item.ID, payload, ttl)
-	pipe.ZAdd(ctx, semanticIndexKeyPrefix, redis.Z{
+	pipe.ZAdd(ctx, semanticIndexKey(item.TenantID, item.UserID, item.IntentBucket, item.Scope), redis.Z{
 		Score:  float64(item.CreatedAt.UnixMilli()),
 		Member: item.ID,
 	})
-	pipe.ZRemRangeByRank(ctx, semanticIndexKeyPrefix, 0, -(c.maxItems + 1))
+	pipe.ZRemRangeByRank(ctx, semanticIndexKey(item.TenantID, item.UserID, item.IntentBucket, item.Scope), 0, -(c.maxItems + 1))
 	_, err = pipe.Exec(ctx)
 	return err
 }
@@ -223,6 +232,54 @@ func exactCacheKey(tenantID string, userID int64, query string) string {
 }
 
 func normalizeExactQuery(query string) string {
+	query = strings.NewReplacer(
+		"，", " ",
+		"。", " ",
+		"？", " ",
+		"！", " ",
+		"：", " ",
+		"；", " ",
+		",", " ",
+		".", " ",
+		"?", " ",
+		"!", " ",
+		":", " ",
+		";", " ",
+		"(", " ",
+		")", " ",
+		"（", " ",
+		"）", " ",
+	).Replace(query)
 	query = strings.ToLower(strings.TrimSpace(query))
 	return strings.Join(strings.Fields(query), " ")
+}
+
+func semanticIndexKey(tenantID string, userID int64, intentBucket string, scope CacheScope) string {
+	bucket := strings.TrimSpace(intentBucket)
+	if bucket == "" {
+		bucket = "fallback"
+	}
+	raw := fmt.Sprintf("%s:%s:%s:%d", scope, tenantID, bucket, scopedUserID(scope, userID))
+	sum := sha1.Sum([]byte(raw))
+	return semanticIndexKeyPrefix + ":" + hex.EncodeToString(sum[:8])
+}
+
+func scopedUserID(scope CacheScope, userID int64) int64 {
+	if scope == CacheScopeTenantUser {
+		return userID
+	}
+	return 0
+}
+
+func matchesSemanticLookup(item SemanticCacheItem, req SemanticCacheLookup) bool {
+	if item.TenantID != req.TenantID {
+		return false
+	}
+	if item.Scope != req.Scope {
+		return false
+	}
+	if strings.TrimSpace(item.IntentBucket) != strings.TrimSpace(req.IntentBucket) {
+		return false
+	}
+	return scopedUserID(item.Scope, item.UserID) == scopedUserID(req.Scope, req.UserID)
 }

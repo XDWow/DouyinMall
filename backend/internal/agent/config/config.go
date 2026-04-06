@@ -7,10 +7,12 @@ type Config struct {
 	Redis         RedisConfig         `mapstructure:"redis"`
 	Etcd          EtcdConfig          `mapstructure:"etcd"`
 	MCP           MCPConfig           `mapstructure:"mcp"`
+	Skill         SkillConfig         `mapstructure:"skill"`
 	Tenant        TenantConfig        `mapstructure:"tenant"`
 	FeatureFlags  FeatureFlagsConfig  `mapstructure:"feature_flags"`
 	LLM           LLMConfig           `mapstructure:"llm"`
 	Embedding     EmbeddingConfig     `mapstructure:"embedding"`
+	KnowledgeBase KnowledgeBaseConfig `mapstructure:"knowledge_base"`
 	Workflow      WorkflowConfig      `mapstructure:"workflow"`
 	Observability ObservabilityConfig `mapstructure:"observability"`
 }
@@ -59,6 +61,11 @@ type MCPServerConfig struct {
 	Enabled        bool   `mapstructure:"enabled"`
 }
 
+type SkillConfig struct {
+	Enabled bool     `mapstructure:"enabled"`
+	Roots   []string `mapstructure:"roots"`
+}
+
 type TenantConfig struct {
 	DefaultID string `mapstructure:"default_id"`
 }
@@ -87,20 +94,33 @@ type EmbeddingConfig struct {
 	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
 }
 
+type KnowledgeBaseConfig struct {
+	Scheme            string `mapstructure:"scheme"`
+	Domain            string `mapstructure:"domain"`
+	ServiceChatPath   string `mapstructure:"service_chat_path"`
+	ServiceResourceID string `mapstructure:"service_resource_id"`
+	APIKey            string `mapstructure:"api_key"`
+	TimeoutSeconds    int    `mapstructure:"timeout_seconds"`
+}
+
 type WorkflowConfig struct {
-	RateLimitPerMinute   int64    `mapstructure:"rate_limit_per_minute"`
-	ConversationWindow   int      `mapstructure:"conversation_window"`
-	L0CacheTTLSeconds    int      `mapstructure:"l0_cache_ttl_seconds"`
-	RetrieveTopK         int      `mapstructure:"retrieve_top_k"`
-	RetrieveMinScore     float64  `mapstructure:"retrieve_min_score"`
-	RerankTopK           int      `mapstructure:"rerank_top_k"`
-	ToolParallelism      int      `mapstructure:"tool_parallelism"`
-	ConfidenceThreshold  float64  `mapstructure:"confidence_threshold"`
-	MaxAnswerTokens      int      `mapstructure:"max_answer_tokens"`
-	StreamBuffer         int      `mapstructure:"stream_buffer"`
-	CheckpointTTLSeconds int      `mapstructure:"checkpoint_ttl_seconds"`
-	InterruptBeforeNodes []string `mapstructure:"interrupt_before_nodes"`
-	InterruptAfterNodes  []string `mapstructure:"interrupt_after_nodes"`
+	RateLimitPerMinute      int64    `mapstructure:"rate_limit_per_minute"`
+	ConversationWindow      int      `mapstructure:"conversation_window"`
+	ExactCacheTTLSeconds    int      `mapstructure:"exact_cache_ttl_seconds"`
+	L0CacheTTLSeconds       int      `mapstructure:"l0_cache_ttl_seconds"`
+	SemanticCacheTTLSeconds int      `mapstructure:"semantic_cache_ttl_seconds"`
+	SemanticCacheScore      float64  `mapstructure:"semantic_cache_score"`
+	SemanticCacheTopK       int      `mapstructure:"semantic_cache_top_k"`
+	RetrieveTopK            int      `mapstructure:"retrieve_top_k"`
+	RetrieveMinScore        float64  `mapstructure:"retrieve_min_score"`
+	RerankTopK              int      `mapstructure:"rerank_top_k"`
+	ToolParallelism         int      `mapstructure:"tool_parallelism"`
+	ConfidenceThreshold     float64  `mapstructure:"confidence_threshold"`
+	MaxAnswerTokens         int      `mapstructure:"max_answer_tokens"`
+	StreamBuffer            int      `mapstructure:"stream_buffer"`
+	CheckpointTTLSeconds    int      `mapstructure:"checkpoint_ttl_seconds"`
+	InterruptBeforeNodes    []string `mapstructure:"interrupt_before_nodes"`
+	InterruptAfterNodes     []string `mapstructure:"interrupt_after_nodes"`
 }
 
 type ObservabilityConfig struct {

@@ -1,4 +1,4 @@
-package orchestrator
+﻿package orchestrator
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func TestWorkflowCallbackHandlerAppendsTraceStep(t *testing.T) {
 	}.New()
 
 	state := orchestratorstate.NewConversationState(domain.ChatCommand{Message: "hello"}, nil, orchestratorstate.InitOptions{})
-	info := &callbacks.RunInfo{Name: "IntentClassifyChain"}
+	info := &callbacks.RunInfo{Name: "IntentClassifyNode"}
 
 	ctx := handler.OnStart(context.Background(), info, state)
 	handler.OnEnd(ctx, info, state)
@@ -30,8 +30,8 @@ func TestWorkflowCallbackHandlerAppendsTraceStep(t *testing.T) {
 		t.Fatalf("expected 1 trace step, got %d", got)
 	}
 	step := state.EnsureResponse().Trace.Steps[0]
-	if step.Node != "IntentClassifyChain" {
-		t.Fatalf("expected node IntentClassifyChain, got %s", step.Node)
+	if step.Node != "IntentClassifyNode" {
+		t.Fatalf("expected node IntentClassifyNode, got %s", step.Node)
 	}
 	if step.Status != "ok" {
 		t.Fatalf("expected status ok, got %s", step.Status)

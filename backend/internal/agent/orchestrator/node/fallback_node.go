@@ -2,10 +2,10 @@ package node
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
+	"github.com/cloudwego/eino/schema"
+
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
@@ -13,13 +13,22 @@ type FallbackNode struct{}
 
 func NewFallbackNode() *FallbackNode { return &FallbackNode{} }
 
-func (n *FallbackNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
-	if state == nil {
-		return nil, fmt.Errorf("state is required")
+// FallbackInput 描述兜底节点真正依赖的最小输入。
+type FallbackInput struct {
+	FinalAnswer string
+	Documents   []*schema.Document
+}
+
+// FallbackResult 表示兜底阶段输出的最终文案。
+type FallbackResult struct {
+	FinalAnswer string
+}
+
+// Invoke 生成兜底阶段的状态更新结果。
+func (n *FallbackNode) Invoke(_ context.Context, input FallbackInput) (*FallbackResult, error) {
+	answer := strings.TrimSpace(input.FinalAnswer)
+	if answer == "" {
+		answer = support.FallbackAnswerFromDocuments(input.Documents)
 	}
-	if strings.TrimSpace(state.Session.FinalAnswer) == "" {
-		state.Session.FinalAnswer = support.FallbackAnswer(state)
-	}
-	graphstate.BindConversationState(ctx, state)
-	return state, nil
+	return &FallbackResult{FinalAnswer: answer}, nil
 }

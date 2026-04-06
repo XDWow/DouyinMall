@@ -1,4 +1,4 @@
-package node
+﻿package node
 
 import (
 	"context"
@@ -15,14 +15,14 @@ func TestBuildSubmitRequestClearsStaleToolPlansWhenNotConfirmed(t *testing.T) {
 	node := suite.SubmitAfterSale()
 	state := graphstate.NewConversationState(domain.ChatCommand{SessionID: "sess_1", UserID: 1, Message: "i want to return"}, nil, graphstate.InitOptions{})
 	state.Tool.Plans = []domain.ToolCallPlan{{Name: "query_order"}}
-	state.Tool.DecisionMessage = schema.AssistantMessage("", nil)
+	state.Tool.CallMessage = schema.AssistantMessage("", nil)
 	if _, err := node.BuildRequest(context.Background(), state); err != nil {
 		t.Fatalf("build submit request failed: %v", err)
 	}
 	if len(state.Tool.Plans) != 0 {
 		t.Fatalf("expected stale tool plans to be cleared, got %+v", state.Tool.Plans)
 	}
-	if state.Tool.DecisionMessage != nil {
+	if state.Tool.CallMessage != nil {
 		t.Fatal("expected stale decision message to be cleared")
 	}
 }

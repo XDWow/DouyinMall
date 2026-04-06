@@ -10,7 +10,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
 
-func CreateDecisionMessage(plans []domain.ToolCallPlan) (*schema.Message, error) {
+func CreateToolCallMessage(plans []domain.ToolCallPlan) (*schema.Message, error) {
 	if len(plans) == 0 {
 		return nil, nil
 	}

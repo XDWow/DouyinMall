@@ -1,4 +1,4 @@
-package http
+﻿package http
 
 import (
 	"time"
@@ -233,3 +233,4 @@ func toListSessionsResponse(out *agentusecase.SessionListOutput) *listSessionsRe
 	}
 	return &listSessionsResponse{Sessions: items, Total: out.Total}
 }
+

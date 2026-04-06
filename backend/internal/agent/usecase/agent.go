@@ -1,4 +1,4 @@
-package usecase
+﻿package usecase
 
 import (
 	"context"
@@ -177,3 +177,4 @@ type InterruptInfo struct {
 }
 
 type StreamEvent = graphstate.StreamEvent
+

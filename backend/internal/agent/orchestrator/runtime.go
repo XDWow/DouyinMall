@@ -14,21 +14,19 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 
-	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	agentmemory "github.com/XDWow/DouyinMall/backend/internal/agent/memory"
 	orchestratorcallback "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/callback"
 	orchestratorgraph "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/graph"
 	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
+	orchestratorragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/rag"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
-	orchestratortoolexec "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// NewRuntime assembles the full orchestrator Runtime from the supplied
-// configuration and component dependencies.  It compiles the eino graph once
-// and returns a ready-to-use service object.
+// NewRuntime 根据配置和依赖组装完整的编排运行时。
 func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, error) {
 	cfg = applyConfigDefaults(cfg)
 
@@ -53,10 +51,12 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 		cfg:             cfg,
 		model:           deps.Model,
 		embedder:        deps.Embedder,
-		retriever:       deps.Retriever,
+		knowledgeBase:   deps.KnowledgeBase,
+		skills:          deps.Skills,
 		registry:        deps.Registry,
 		memory:          deps.Memory,
 		exactCache:      deps.ExactCache,
+		semanticCache:   deps.SemanticCache,
 		rateLimiter:     deps.RateLimiter,
 		checkpointStore: deps.CheckpointStore,
 		prompts:         prompts,
@@ -66,10 +66,8 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 	}
 
 	toolCheck := orchestratornode.ToolRegistryCheck(svc.registryHasTool)
-	toolApply := orchestratornode.ToolPlanApplier(svc.applyToolPlans)
 	persistTurn := orchestratornode.ConversationTurnPersister(svc.persistConversationTurn)
 	genAnswer := orchestratornode.AnswerGenerator(svc.generateAnswer)
-
 	svc.callbackHandler = orchestratorcallback.Builder{Tracer: tracer, Metrics: metrics}.New()
 
 	runner, err := (&orchestratorgraph.Builder{
@@ -77,74 +75,47 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 			InterruptBeforeNodes: cfg.InterruptBeforeNodes,
 			InterruptAfterNodes:  cfg.InterruptAfterNodes,
 		},
-		CheckpointStore: deps.CheckpointStore,
-		Model:           deps.Model,
-		Retriever:       deps.Retriever,
-		Registry:        deps.Registry,
-		Prompts:         prompts,
-		AccessGuard: orchestratornode.NewAccessGuardNode(orchestratornode.AccessGuardNodeDeps{
-			DefaultTenantID:    cfg.DefaultTenantID,
-			RateLimitPerMinute: cfg.RateLimitPerMinute,
-			RateLimiter:        deps.RateLimiter,
-			CheckpointStore:    deps.CheckpointStore,
-		}),
-		SessionLoad:    orchestratornode.NewSessionLoadNode(),
-		L0ExactCache:   orchestratornode.NewL0ExactCacheNode(orchestratornode.L0ExactCacheNodeDeps{ExactCache: deps.ExactCache}),
-		IntentClassify: orchestratornode.NewIntentClassifyNode(orchestratornode.IntentClassifyNodeDeps{Prompts: prompts}),
-		SlotExtract:    orchestratornode.NewSlotExtractNode(),
-		SlotCheck:      orchestratornode.NewSlotCheckNode(),
-		AskUser: orchestratornode.NewAskUserNode(orchestratornode.AskUserNodeDeps{
-			PersistTurn: persistTurn,
-			Logger:      log,
-		}),
-		Route: orchestratornode.NewRouteNode(),
-		ResponseRender: orchestratornode.NewResponseRenderNode(orchestratornode.ResponseRenderNodeDeps{
-			Model:          deps.Model,
-			Prompts:        prompts,
-			GenerateAnswer: genAnswer,
-			Metrics:        metrics,
-		}),
-		CacheWriteback: orchestratornode.NewCacheWritebackNode(orchestratornode.CacheWritebackNodeDeps{
-			ExactCache:  deps.ExactCache,
-			L0CacheTTL:  cfg.L0CacheTTL,
-			PersistTurn: persistTurn,
-			Logger:      log,
-		}),
-		OrderRead:    orchestratornode.NewOrderReadNode(orchestratornode.OrderReadNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
-		InventoryRead: orchestratornode.NewInventoryReadNode(orchestratornode.InventoryReadNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
-		ProductInfo:  orchestratornode.NewProductInfoNode(orchestratornode.ProductInfoNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
-		AddToCart:    orchestratornode.NewAddToCartNode(orchestratornode.AddToCartNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
-		ReturnExchangeQuery: orchestratornode.NewReturnExchangeQueryNode(orchestratornode.ReturnExchangeQueryNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
-		EligibilityCheck: orchestratornode.NewEligibilityCheckNode(),
-		ConfirmSummary: orchestratornode.NewConfirmSummaryNode(orchestratornode.ConfirmSummaryNodeDeps{
-			PersistTurn: persistTurn,
-			Logger:      log,
-		}),
-		SubmitAfterSale: orchestratornode.NewSubmitAfterSaleNode(orchestratornode.SubmitAfterSaleNodeDeps{RegistryHasTool: toolCheck, ApplyToolPlans: toolApply}),
-		Rewrite:  orchestratornode.NewRewriteNode(orchestratornode.RewriteNodeDeps{Prompts: prompts}),
-		Retrieve: orchestratornode.NewRetrieveNode(),
-		Rerank:   orchestratornode.NewRerankNode(orchestratornode.RerankNodeDeps{TopK: cfg.RerankTopK}),
-		Fallback: orchestratornode.NewFallbackNode(),
+		CheckpointStore:     deps.CheckpointStore,
+		Registry:            deps.Registry,
+		AccessGuard:         orchestratornode.NewAccessGuardNode(cfg.DefaultTenantID, cfg.RateLimitPerMinute, deps.RateLimiter, deps.CheckpointStore),
+		SessionLoad:         orchestratornode.NewSessionLoadNode(),
+		CachePolicy:         orchestratornode.NewCachePolicyNode(),
+		MultiLevelCache:     orchestratornode.NewMultiLevelCacheNode(deps.ExactCache, deps.SemanticCache, deps.Embedder, cfg.SemanticCacheScore, cfg.SemanticCacheTopK),
+		IntentClassify:      orchestratornode.NewIntentClassifyNode(deps.Model, prompts),
+		SlotExtract:         orchestratornode.NewSlotExtractNode(),
+		SlotCheck:           orchestratornode.NewSlotCheckNode(),
+		AskUser:             orchestratornode.NewAskUserNode(persistTurn, log),
+		Route:               orchestratornode.NewRouteNode(),
+		SkillSelect:         orchestratornode.NewSkillSelectNode(deps.Skills),
+		ResponseRender:      orchestratornode.NewResponseRenderNode(deps.Model, prompts, deps.Skills, genAnswer, metrics),
+		CacheWriteback:      orchestratornode.NewCacheWritebackNode(deps.ExactCache, deps.SemanticCache, deps.Embedder, cfg.ExactCacheTTL, cfg.SemanticCacheTTL, persistTurn, log),
+		OrderRead:           orchestratornode.NewOrderReadNode(toolCheck),
+		InventoryRead:       orchestratornode.NewInventoryReadNode(toolCheck),
+		ProductInfo:         orchestratornode.NewProductInfoNode(toolCheck),
+		AddToCart:           orchestratornode.NewAddToCartNode(toolCheck),
+		ReturnExchangeQuery: orchestratornode.NewReturnExchangeQueryNode(toolCheck),
+		EligibilityCheck:    orchestratornode.NewEligibilityCheckNode(),
+		ConfirmSummary:      orchestratornode.NewConfirmSummaryNode(persistTurn, log),
+		SubmitAfterSale:     orchestratornode.NewSubmitAfterSaleNode(),
+		RAG:                 orchestratorragnode.NewRAGNode(deps.KnowledgeBase, cfg.RetrieveTopK, cfg.RetrieveMinScore),
+		Fallback:            orchestratornode.NewFallbackNode(),
 	}).Build(ctx)
 	if err != nil {
 		return nil, err
 	}
+
 	svc.runnable = runner
 	return svc, nil
 }
 
-// Chat invokes the agent synchronously and returns the complete reply.
 func (s *Runtime) Chat(ctx context.Context, req domain.ChatCommand) (*domain.ChatResult, error) {
 	return s.run(ctx, req, nil)
 }
 
-// ChatStream invokes the agent with streaming; partial tokens are forwarded to
-// writer as they arrive.
 func (s *Runtime) ChatStream(ctx context.Context, req domain.ChatCommand, writer StreamWriter) (*domain.ChatResult, error) {
 	return s.run(ctx, req, writer)
 }
 
-// CreateSession creates a new session record in the store.
 func (s *Runtime) CreateSession(ctx context.Context, userID int64) (*domain.Session, error) {
 	sessionID := "sess_" + uuid.NewString()
 	now := time.Now()
@@ -164,7 +135,6 @@ func (s *Runtime) CreateSession(ctx context.Context, userID int64) (*domain.Sess
 	return &session, nil
 }
 
-// GetHistory returns a paginated slice of messages for sessionID.
 func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]domain.Message, int, error) {
 	if s.memory == nil {
 		return nil, 0, nil
@@ -193,7 +163,6 @@ func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offse
 	return append([]domain.Message(nil), messages[offset:end]...), total, nil
 }
 
-// ListSessions returns paginated sessions owned by userID.
 func (s *Runtime) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
 	if s.memory == nil {
 		return nil, 0, nil
@@ -201,7 +170,6 @@ func (s *Runtime) ListSessions(ctx context.Context, userID int64, limit, offset 
 	return s.memory.ListSessions(ctx, userID, limit, offset)
 }
 
-// ClearSession deletes all messages and metadata for sessionID.
 func (s *Runtime) ClearSession(ctx context.Context, sessionID string) error {
 	if s.memory == nil {
 		return nil
@@ -209,14 +177,13 @@ func (s *Runtime) ClearSession(ctx context.Context, sessionID string) error {
 	return s.memory.Clear(ctx, sessionID)
 }
 
-// -- internal run -------------------------------------------------------------
-
 func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer StreamWriter) (*domain.ChatResult, error) {
 	start := time.Now()
 	state := orchestratorstate.NewConversationState(req, writer, orchestratorstate.InitOptions{
 		KBVersion:    cfgValue(s.cfg.KBVersion, DefaultConfig().KBVersion),
 		FeatureFlags: s.cfg.FeatureFlags,
 	})
+
 	checkpointID := req.ResumeToken
 	if checkpointID == "" {
 		checkpointID = state.TraceID
@@ -257,6 +224,7 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 	if out == nil {
 		out = state
 	}
+
 	resp := out.EnsureResponse()
 	resp.Trace.TraceID = out.TraceID
 	resp.Trace.CheckpointID = checkpointID
@@ -268,12 +236,13 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 			resp.Interrupt.RerunNodes = append(resp.Interrupt.RerunNodes, info.RerunNodes...)
 		}
 		if strings.TrimSpace(resp.Reply) == "" {
-			resp.Reply = "Please provide the required information so the workflow can continue."
+			resp.Reply = "请先补充所需信息，我再继续为你处理。"
 		}
 		s.metrics.ObserveRequest(string(resp.Status), time.Since(start))
 		orchestratorobserve.SendEvent(ctx, writer, "done", resp)
 		return resp, nil
 	}
+
 	if err != nil {
 		orchestratorobserve.SendEvent(ctx, writer, "error", map[string]any{"message": err.Error()})
 		s.metrics.ObserveRequest("error", time.Since(start))
@@ -285,10 +254,6 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 	return resp, nil
 }
 
-// -- hook implementations ------------------------------------------------------
-
-// generateAnswer calls the LLM synchronously or streams tokens via state's
-// writer, depending on whether streaming has been requested.
 func (s *Runtime) generateAnswer(ctx context.Context, state *orchestratorstate.ConversationState, messages []*schema.Message) (string, error) {
 	if s.model == nil {
 		return "", fmt.Errorf("chat model is not configured")
@@ -350,35 +315,17 @@ func (s *Runtime) registryHasTool(ctx context.Context, name string) bool {
 	return false
 }
 
-func (s *Runtime) applyToolPlans(ctx context.Context, state *orchestratorstate.ConversationState, plans []domain.ToolCallPlan) (*orchestratorstate.ConversationState, error) {
-	message, err := orchestratortoolexec.CreateDecisionMessage(plans)
-	if err != nil {
-		return nil, err
-	}
-	for i := range plans {
-		plans[i].RawJSON = message.ToolCalls[i].Function.Arguments
-	}
-	state.Tool.Plans = plans
-	state.Tool.DecisionMessage = message
-	orchestratorstate.BindConversationState(ctx, state)
-	return state, nil
-}
-
-// -- session / memory helpers --------------------------------------------------
-
-// loadSessionContext prepopulates state with the session metadata and the
-// windowed recent-message history before the graph starts executing.
 func (s *Runtime) loadSessionContext(ctx context.Context, state *orchestratorstate.ConversationState) error {
 	if state == nil {
 		return fmt.Errorf("state is required")
 	}
+
 	sessionID := strings.TrimSpace(state.Request.SessionID)
 	if sessionID == "" {
 		sessionID = "sess_" + state.TraceID
 		state.Request.SessionID = sessionID
 	}
 
-	// No repository configured -?run in ephemeral/stateless mode.
 	if s.memory == nil {
 		now := time.Now()
 		state.SessionMeta = &domain.Session{
@@ -418,17 +365,12 @@ func (s *Runtime) loadSessionContext(ctx context.Context, state *orchestratorsta
 
 	cloned := *meta
 	state.SessionMeta = &cloned
-	// Convert domain messages to eino-native schema messages and apply the 5-turn
-	// sliding window.  The Manager's maxTurns controls the exact limit.
 	orchestratorstate.SetRecentMessages(state, s.memory.RecentSchemaMessages(messages))
 	state.Session.SessionID = meta.SessionID
 	state.EnsureResponse().SessionID = meta.SessionID
 	return nil
 }
 
-// persistConversationTurn saves the completed user+assistant exchange and
-// refreshes the recent-message window in state so subsequent turns have
-// up-to-date context.
 func (s *Runtime) persistConversationTurn(
 	ctx context.Context,
 	state *orchestratorstate.ConversationState,
@@ -472,15 +414,9 @@ func (s *Runtime) persistConversationTurn(
 	if err := s.memory.SaveTurn(ctx, cloned, userMsg, assistantMsg); err != nil {
 		return err
 	}
-	// Update the session metadata in state so callers see the incremented turn
-	// count.  The schema message window in state.Session.Messages is NOT updated
-	// here: the state is discarded after each request and the next request will
-	// reload a fresh window from the database.
 	state.SessionMeta = &cloned
 	return nil
 }
-
-// -- config helpers ------------------------------------------------------------
 
 func cfgValue(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {

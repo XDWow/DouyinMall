@@ -2,30 +2,53 @@ package node
 
 import (
 	"context"
-	"fmt"
 
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
+// SlotExtractInput 描述槽位抽取阶段的输入。
+type SlotExtractInput struct {
+	ExistingSlots   map[string]any
+	RequestMetadata map[string]string
+	Intent          domain.Intent
+	IntentEntities  map[string]string
+	RawQuery        string
+	AwaitingUser    bool
+	AwaitingConfirm bool
+	ResumeFromCP    bool
+}
+
+// SlotExtractNode 负责从元数据、实体和用户问题中合并槽位。
 type SlotExtractNode struct{}
 
 func NewSlotExtractNode() *SlotExtractNode { return &SlotExtractNode{} }
 
-func (n *SlotExtractNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
-	if state == nil {
-		return nil, fmt.Errorf("state is required")
+type SlotExtractResult struct {
+	Slots           map[string]any
+	AwaitingUser    bool
+	AwaitingConfirm bool
+}
+
+// Invoke 输出当前回合可用的槽位集合。
+func (n *SlotExtractNode) Invoke(_ context.Context, input SlotExtractInput) (*SlotExtractResult, error) {
+	slots := map[string]any{}
+	for key, value := range input.ExistingSlots {
+		slots[key] = value
 	}
-	ss := graphstate.EnsureSessionState(state)
-	support.MergeSlots(ss.Slots, support.ExtractMetadataSlots(state.Request.Metadata))
-	support.MergeSlots(ss.Slots, support.NormalizeEntitySlots(state.Intent.Entities))
-	support.MergeSlots(ss.Slots, support.ExtractSlotsFromMessage(ss.RawQuery, ss.Intent))
-	if ss.ResumeFromCP {
-		ss.AwaitingUser = false
+
+	support.MergeSlots(slots, support.ExtractMetadataSlots(input.RequestMetadata))
+	support.MergeSlots(slots, support.NormalizeEntitySlots(input.IntentEntities))
+	support.MergeSlots(slots, support.ExtractSlotsFromMessage(input.RawQuery, input.Intent))
+
+	awaitingUser := input.AwaitingUser
+	if input.ResumeFromCP || input.AwaitingConfirm {
+		awaitingUser = false
 	}
-	if ss.AwaitingConfirm {
-		ss.AwaitingUser = false
-	}
-	graphstate.BindConversationState(ctx, state)
-	return state, nil
+
+	return &SlotExtractResult{
+		Slots:           slots,
+		AwaitingUser:    awaitingUser,
+		AwaitingConfirm: input.AwaitingConfirm,
+	}, nil
 }

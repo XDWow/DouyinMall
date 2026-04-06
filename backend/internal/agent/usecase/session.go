@@ -1,4 +1,4 @@
-package usecase
+﻿package usecase
 
 import (
 	"context"
@@ -121,3 +121,4 @@ func validateClearSessionInput(input ClearSessionInput) (*domain.ClearSessionCom
 	}
 	return &domain.ClearSessionCommand{SessionID: sessionID}, nil
 }
+

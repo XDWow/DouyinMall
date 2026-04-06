@@ -1,4 +1,4 @@
-package http
+﻿package http
 
 import (
 	"context"
@@ -32,3 +32,4 @@ func (w *SSEWriter) Send(ctx context.Context, event orchestratorstate.StreamEven
 	w.flusher.Flush()
 	return nil
 }
+

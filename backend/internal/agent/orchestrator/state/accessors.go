@@ -31,7 +31,6 @@ func BindConversationState(ctx context.Context, next *ConversationState) {
 	})
 }
 
-
 func EnsureSessionState(state *ConversationState) *SessionState {
 	if state == nil {
 		return nil
@@ -42,9 +41,8 @@ func EnsureSessionState(state *ConversationState) *SessionState {
 	return &state.Session
 }
 
-// RecentMessages returns the eino-native schema.Message window stored in
-// state.  The window has already been applied by the memory.Manager so callers
-// use the slice directly without further trimming.
+// RecentMessages 返回最近一段对话消息。
+// 这段窗口已经由 memory.Manager 截断过，可以直接用于意图识别和知识检索。
 func RecentMessages(state *ConversationState) []*schema.Message {
 	if state == nil || len(state.Session.Messages) == 0 {
 		return nil
@@ -52,7 +50,8 @@ func RecentMessages(state *ConversationState) []*schema.Message {
 	return state.Session.Messages
 }
 
-// SetRecentMessages replaces the message window in state.  Pass nil to clear.
+// SetRecentMessages 替换最近一段对话消息。
+// 传入空切片或 nil 时会清空消息窗口。
 func SetRecentMessages(state *ConversationState, messages []*schema.Message) {
 	if state == nil {
 		return

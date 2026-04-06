@@ -1,4 +1,4 @@
-package domain
+﻿package domain
 
 type ChatCommand struct {
 	SessionID   string
@@ -27,3 +27,4 @@ type SessionListQuery struct {
 type ClearSessionCommand struct {
 	SessionID string
 }
+

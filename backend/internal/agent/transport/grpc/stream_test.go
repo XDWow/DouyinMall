@@ -1,4 +1,4 @@
-package grpc
+﻿package grpc
 
 import (
 	"context"
@@ -58,3 +58,4 @@ func TestStreamWriterSend(t *testing.T) {
 	require.Equal(t, agentv1.ChunkType_TEXT_DELTA, stream.items[1].GetType())
 	require.Equal(t, "hello", stream.items[1].GetText())
 }
+

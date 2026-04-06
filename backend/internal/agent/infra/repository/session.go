@@ -1,4 +1,4 @@
-package repository
+﻿package repository
 
 import (
 	"context"
@@ -267,3 +267,4 @@ func toMessageDO(message domain.Message) MessageDO {
 		CreatedAt:  message.CreatedAt,
 	}
 }
+

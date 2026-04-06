@@ -212,3 +212,4 @@ func ToSchemaRole(role domain.Role) schema.RoleType {
 		return schema.User
 	}
 }
+

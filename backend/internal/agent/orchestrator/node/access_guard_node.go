@@ -10,58 +10,83 @@ import (
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-type AccessGuardNodeDeps struct {
+// AccessGuardInput 描述入口校验阶段的输入。
+type AccessGuardInput struct {
+	Message     string
+	UserID      int64
+	ResumeToken string
+}
+
+// AccessGuardNode 负责入口参数校验、限流和断点恢复检查。
+type AccessGuardNode struct {
 	DefaultTenantID    string
 	RateLimitPerMinute int64
 	RateLimiter        cache.RateLimiter
 	CheckpointStore    cache.CheckpointStore
 }
 
-type AccessGuardNode struct{ deps AccessGuardNodeDeps }
-
-func NewAccessGuardNode(deps AccessGuardNodeDeps) *AccessGuardNode {
-	return &AccessGuardNode{deps: deps}
+func NewAccessGuardNode(defaultTenantID string, rateLimitPerMinute int64, rateLimiter cache.RateLimiter, checkpointStore cache.CheckpointStore) *AccessGuardNode {
+	return &AccessGuardNode{
+		DefaultTenantID:    defaultTenantID,
+		RateLimitPerMinute: rateLimitPerMinute,
+		RateLimiter:        rateLimiter,
+		CheckpointStore:    checkpointStore,
+	}
 }
 
-func (n *AccessGuardNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
-	if state == nil {
-		return nil, fmt.Errorf("state is required")
+type AccessGuardResult struct {
+	UserID        int64
+	RawQuery      string
+	TenantID      string
+	ResumeFromCP  bool
+	NeedHandoff   bool
+	HandoffReason string
+	FinalAnswer   string
+	Route         graphstate.WorkflowRoute
+}
+
+// Invoke 完成入口校验，并返回需要写回状态的结果。
+func (n *AccessGuardNode) Invoke(ctx context.Context, input AccessGuardInput) (*AccessGuardResult, error) {
+	if strings.TrimSpace(input.Message) == "" {
+		return nil, fmt.Errorf("消息不能为空")
 	}
-	if strings.TrimSpace(state.Request.Message) == "" {
-		return nil, fmt.Errorf("message is required")
+	if input.UserID <= 0 {
+		return nil, fmt.Errorf("user_id 不能为空")
 	}
-	if state.Request.UserID <= 0 {
-		return nil, fmt.Errorf("user_id is required")
+
+	result := &AccessGuardResult{
+		UserID:   input.UserID,
+		RawQuery: strings.TrimSpace(input.Message),
+		TenantID: n.DefaultTenantID,
+		Route:    graphstate.RouteUnknown,
 	}
-	ss := graphstate.EnsureSessionState(state)
-	ss.UserID = state.Request.UserID
-	ss.RawQuery = strings.TrimSpace(state.Request.Message)
-	ss.TenantID = n.deps.DefaultTenantID
-	if ss.TenantID == "" {
-		ss.TenantID = "default"
+	if result.TenantID == "" {
+		result.TenantID = "default"
 	}
-	if n.deps.RateLimiter != nil {
-		allowed, err := n.deps.RateLimiter.AllowUser(ctx, state.Request.UserID, n.deps.RateLimitPerMinute, time.Minute)
+
+	if n.RateLimiter != nil {
+		allowed, err := n.RateLimiter.AllowUser(ctx, input.UserID, n.RateLimitPerMinute, time.Minute)
 		if err == nil && !allowed {
-			ss.NeedHandoff = true
-			ss.HandoffReason = "rate_limit"
-			ss.FinalAnswer = "Too many requests. Please retry later or hand off to a human agent."
-			ss.Route = graphstate.RouteFallback
+			result.NeedHandoff = true
+			result.HandoffReason = "rate_limit"
+			result.FinalAnswer = "请求过于频繁，请稍后再试或转人工处理。"
+			result.Route = graphstate.RouteFallback
 		}
 	}
-	if strings.TrimSpace(state.Request.ResumeToken) != "" {
-		if n.deps.CheckpointStore == nil {
-			return nil, fmt.Errorf("resume is not enabled")
+
+	if strings.TrimSpace(input.ResumeToken) != "" {
+		if n.CheckpointStore == nil {
+			return nil, fmt.Errorf("当前未开启断点恢复")
 		}
-		_, ok, err := n.deps.CheckpointStore.Get(ctx, state.Request.ResumeToken)
+		_, ok, err := n.CheckpointStore.Get(ctx, input.ResumeToken)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
-			return nil, fmt.Errorf("resume checkpoint not found")
+			return nil, fmt.Errorf("未找到对应的恢复断点")
 		}
-		ss.ResumeFromCP = true
+		result.ResumeFromCP = true
 	}
-	graphstate.BindConversationState(ctx, state)
-	return state, nil
+
+	return result, nil
 }

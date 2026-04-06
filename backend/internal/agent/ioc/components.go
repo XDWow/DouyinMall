@@ -5,18 +5,18 @@ import (
 	"fmt"
 	"time"
 
-	agentllm "github.com/XDWow/DouyinMall/backend/internal/agent/components/llm"
-	agentprompt "github.com/XDWow/DouyinMall/backend/internal/agent/components/prompt"
-	agentrag "github.com/XDWow/DouyinMall/backend/internal/agent/components/rag"
-	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
 	agentcache "github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
+	agentrag "github.com/XDWow/DouyinMall/backend/internal/agent/infra/knowledgebase"
+	agentllm "github.com/XDWow/DouyinMall/backend/internal/agent/infra/llm"
 	agentrepository "github.com/XDWow/DouyinMall/backend/internal/agent/infra/repository"
+	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	agentmemory "github.com/XDWow/DouyinMall/backend/internal/agent/memory"
 	orchestrator "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator"
+	agentprompt "github.com/XDWow/DouyinMall/backend/internal/agent/prompt"
 	"github.com/cloudwego/eino/components/embedding"
 	"github.com/cloudwego/eino/components/model"
-	einoretriever "github.com/cloudwego/eino/components/retriever"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -26,10 +26,12 @@ import (
 type Components struct {
 	Model           model.ToolCallingChatModel
 	Embedder        embedding.Embedder
-	Retriever       einoretriever.Retriever
+	KnowledgeBase   *agentrag.ManagedKnowledgeService
+	Skills          *agentskill.Registry
 	Registry        *agenttool.Registry
 	Memory          *agentmemory.Manager
 	ExactCache      agentcache.ExactCache
+	SemanticCache   agentcache.SemanticCache
 	RateLimiter     agentcache.RateLimiter
 	CheckpointStore agentcache.CheckpointStore
 	Prompts         *agentprompt.Set
@@ -41,7 +43,6 @@ func InitComponents(
 	cfg agentconfig.Config,
 	dao *agentrepository.DAO,
 	rdb *redis.Client,
-	retrieveTopK int,
 ) (*Components, error) {
 	registry, err := agenttool.NewMCPRegistry(ctx, cfg.MCP.Servers)
 	if err != nil {
@@ -67,7 +68,27 @@ func InitComponents(
 		Timeout: secondsOrDefault(cfg.Embedding.TimeoutSeconds, 15*time.Second),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("init openai embedder failed: %w", err)
+		return nil, fmt.Errorf("init embedding model failed: %w", err)
+	}
+
+	knowledgeBase, err := agentrag.NewManagedKnowledgeService(agentrag.KnowledgeServiceConfig{
+		Scheme:            cfg.KnowledgeBase.Scheme,
+		Domain:            cfg.KnowledgeBase.Domain,
+		ServiceChatPath:   cfg.KnowledgeBase.ServiceChatPath,
+		ServiceResourceID: cfg.KnowledgeBase.ServiceResourceID,
+		APIKey:            cfg.KnowledgeBase.APIKey,
+		Timeout:           secondsOrDefault(cfg.KnowledgeBase.TimeoutSeconds, 60*time.Second),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("init managed knowledge service failed: %w", err)
+	}
+
+	var skills *agentskill.Registry
+	if cfg.Skill.Enabled {
+		skills, err = agentskill.NewRegistry(cfg.Skill.Roots...)
+		if err != nil {
+			return nil, fmt.Errorf("init skill registry failed: %w", err)
+		}
 	}
 
 	sessionRepo := agentrepository.NewSessionStore(dao, rdb)
@@ -77,14 +98,16 @@ func InitComponents(
 	}
 
 	return &Components{
-		Model:     chatModel,
-		Embedder:  embedder,
-		Retriever: agentrag.NewVectorRetriever(agentrepository.NewKnowledgeStore(dao), embedder, retrieveTopK),
-		Registry:  registry,
+		Model:         chatModel,
+		Embedder:      embedder,
+		KnowledgeBase: knowledgeBase,
+		Skills:        skills,
+		Registry:      registry,
 		// Memory wraps the session repository and enforces the conversation
 		// window so the orchestrator doesn't need to know about persistence.
 		Memory:          agentmemory.New(sessionRepo, conversationWindow),
 		ExactCache:      agentcache.NewRedisExactCache(rdb),
+		SemanticCache:   agentcache.NewRedisSemanticCache(rdb),
 		RateLimiter:     agentcache.NewRedisRateLimiter(rdb),
 		CheckpointStore: agentcache.NewRedisCheckpointStore(rdb, secondsOrDefault(cfg.Workflow.CheckpointTTLSeconds, 7*24*time.Hour)),
 		Prompts:         agentprompt.NewDefault(),

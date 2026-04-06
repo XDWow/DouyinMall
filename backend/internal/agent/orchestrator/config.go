@@ -10,8 +10,17 @@ func applyConfigDefaults(cfg Config) Config {
 	if cfg.ConversationWindow == 0 {
 		cfg.ConversationWindow = def.ConversationWindow
 	}
-	if cfg.L0CacheTTL == 0 {
-		cfg.L0CacheTTL = def.L0CacheTTL
+	if cfg.ExactCacheTTL == 0 {
+		cfg.ExactCacheTTL = def.ExactCacheTTL
+	}
+	if cfg.SemanticCacheTTL == 0 {
+		cfg.SemanticCacheTTL = def.SemanticCacheTTL
+	}
+	if cfg.SemanticCacheScore == 0 {
+		cfg.SemanticCacheScore = def.SemanticCacheScore
+	}
+	if cfg.SemanticCacheTopK == 0 {
+		cfg.SemanticCacheTopK = def.SemanticCacheTopK
 	}
 	if cfg.RetrieveTopK == 0 {
 		cfg.RetrieveTopK = def.RetrieveTopK

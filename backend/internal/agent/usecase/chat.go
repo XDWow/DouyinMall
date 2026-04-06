@@ -1,4 +1,4 @@
-package usecase
+﻿package usecase
 
 import (
 	"context"
@@ -146,3 +146,4 @@ func copyAnyMap(in map[string]any) map[string]any {
 	}
 	return out
 }
+

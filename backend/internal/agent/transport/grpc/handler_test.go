@@ -1,4 +1,4 @@
-package grpc
+﻿package grpc
 
 import (
 	"testing"
@@ -35,3 +35,4 @@ func TestFormatTime(t *testing.T) {
 	ts := time.Date(2026, 4, 1, 12, 30, 0, 0, time.Local)
 	require.Equal(t, "2026-04-01 12:30:00", formatTime(ts))
 }
+

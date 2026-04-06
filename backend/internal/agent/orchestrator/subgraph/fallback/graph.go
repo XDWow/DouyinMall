@@ -2,55 +2,72 @@ package fallback
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cloudwego/eino/components/model"
-	einoretriever "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 
-	orchestratorprompt "github.com/XDWow/DouyinMall/backend/internal/agent/components/prompt"
 	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/returnpolicy"
+	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/rag"
 )
 
-// Build 构建兜底子图。优先复用 RAG 知识库兜底；若 RAG 依赖不可用，则退化为纯规则回复。
-func Build(
-	ctx context.Context,
-	chatModel model.ToolCallingChatModel,
-	retriever einoretriever.Retriever,
-	prompts *orchestratorprompt.Set,
-	rewriteNode *orchestratornode.RewriteNode,
-	retrieveNode *orchestratornode.RetrieveNode,
-	rerankNode *orchestratornode.RerankNode,
-	fallbackNode *orchestratornode.FallbackNode,
-) (compose.AnyGraph, error) {
-	// 尝试用退换政策 RAG 子图兜底——共享同一套检索链路，避免重复建图
-	ragGraph, err := returnpolicy.Build(ctx, chatModel, retriever, prompts, rewriteNode, retrieveNode, rerankNode)
-	if err != nil {
-		return nil, err
-	}
-	if ragGraph != nil {
-		return ragGraph, nil
-	}
+// Input 描述兜底子图的入口。
+type Input struct {
+	RawQuery    string
+	Intent      string
+	History     []*schema.Message
+	FinalAnswer string
+}
 
-	// RAG 依赖不可用，退化为规则兜底节点
-	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
-	if err := g.AddLambdaNode("FallbackResolveNode", compose.InvokableLambda(fallbackNode.Invoke), compose.WithNodeName("FallbackResolveNode")); err != nil {
+// Output 描述兜底子图的出口。
+type Output struct {
+	FinalAnswer string
+	Query       string
+	Documents   []*schema.Document
+}
+
+// Build 组装兜底子图。
+// 它会优先尝试知识库检索；如果没有形成明确回答，再走兜底文案生成。
+func Build(_ context.Context, ragNode *ragnode.RAGNode, fallbackNode *orchestratornode.FallbackNode) (compose.AnyGraph, error) {
+	g := compose.NewGraph[Input, Output]()
+	if err := g.AddLambdaNode("ExecuteFallbackFlowNode", compose.InvokableLambda(
+		func(ctx context.Context, input Input) (Output, error) {
+			out := Output{FinalAnswer: input.FinalAnswer}
+			if ragNode != nil {
+				ragResult, err := ragNode.Invoke(ctx, ragnode.Input{
+					Message: input.RawQuery,
+					History: append([]*schema.Message(nil), input.History...),
+					Intent:  input.Intent,
+				})
+				if err != nil {
+					return Output{}, err
+				}
+				if ragResult != nil {
+					out.Query = ragResult.Query
+					out.Documents = append([]*schema.Document(nil), ragResult.Documents...)
+				}
+			}
+
+			if fallbackNode != nil {
+				result, err := fallbackNode.Invoke(ctx, orchestratornode.FallbackInput{
+					FinalAnswer: out.FinalAnswer,
+					Documents:   append([]*schema.Document(nil), out.Documents...),
+				})
+				if err != nil {
+					return Output{}, err
+				}
+				if result != nil {
+					out.FinalAnswer = result.FinalAnswer
+				}
+			}
+			return out, nil
+		}), compose.WithNodeName("ExecuteFallbackFlowNode")); err != nil {
 		return nil, err
 	}
-	if err := addEdge(g, compose.START, "FallbackResolveNode"); err != nil {
+	if err := g.AddEdge(compose.START, "ExecuteFallbackFlowNode"); err != nil {
 		return nil, err
 	}
-	if err := addEdge(g, "FallbackResolveNode", compose.END); err != nil {
+	if err := g.AddEdge("ExecuteFallbackFlowNode", compose.END); err != nil {
 		return nil, err
 	}
 	return g, nil
-}
-
-func addEdge(g interface{ AddEdge(string, string) error }, start, end string) error {
-	if err := g.AddEdge(start, end); err != nil {
-		return fmt.Errorf("添加边 %s -> %s 失败: %w", start, end, err)
-	}
-	return nil
 }

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudwego/eino/schema"
-
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
@@ -70,22 +68,22 @@ func AskMessageForMissingSlot(state *graphstate.ConversationState, slot string) 
 	switch slot {
 	case "order_id":
 		if state.Session.Intent == domain.IntentReturnExchangeApply {
-			return "Please provide the order ID before I continue the after-sale request."
+			return "请先提供订单号，我再继续为你处理售后申请。"
 		}
-		return "Please provide the order ID so I can continue."
+		return "请提供订单号，我再继续为你处理。"
 	case "product_id":
 		switch state.Session.Intent {
 		case domain.IntentInventoryQuery:
-			return "Please provide the product ID or SKU so I can check inventory."
+			return "请提供商品 ID 或 SKU，我来帮你查询库存。"
 		case domain.IntentAddToCart:
-			return "Which product would you like to add to cart? Please provide the product ID."
+			return "请告诉我你想加入购物车的商品 ID。"
 		default:
-			return "Please provide the product ID or SKU so I can continue."
+			return "请提供商品 ID 或 SKU，我再继续为你处理。"
 		}
 	case "reason":
-		return "Please tell me the after-sale reason, for example damage, wrong size, or changed your mind."
+		return "请告诉我售后原因，例如商品破损、尺码不合适或不想要了。"
 	default:
-		return "Please provide the missing information so I can continue."
+		return "请先补充缺失信息，我再继续为你处理。"
 	}
 }
 
@@ -98,27 +96,34 @@ func MissingIfEmpty(state *graphstate.ConversationState, keys ...string) []strin
 	return nil
 }
 
-func HeuristicIntent(message string) graphstate.IntentDecision {
+func HeuristicIntent(message string) graphstate.IntentResult {
 	raw := strings.ToLower(strings.TrimSpace(message))
 	intent := domain.IntentFallback
 	confidence := 0.58
 
 	switch {
-	case ContainsAny(raw, "return", "refund", "exchange", "after sale") && ContainsAny(raw, "apply", "submit", "request"):
+	case ContainsAny(raw, "return", "refund", "exchange", "after sale", "退货", "退款", "换货", "售后") &&
+		ContainsAny(raw, "apply", "submit", "request", "申请", "提交", "发起"):
 		intent, confidence = domain.IntentReturnExchangeApply, 0.92
-	case ContainsAny(raw, "return policy", "refund policy", "exchange policy", "7 day"):
+	case ContainsAny(raw, "return policy", "refund policy", "exchange policy", "7 day", "退换货政策", "退款政策", "换货政策", "七天无理由"):
 		intent, confidence = domain.IntentReturnPolicy, 0.86
-	case ContainsAny(raw, "add to cart", "add to my cart", "put in cart"):
+	case ContainsAny(raw, "add to cart", "add to my cart", "put in cart", "加入购物车", "加购"):
 		intent, confidence = domain.IntentAddToCart, 0.90
-	case ContainsAny(raw, "inventory", "stock", "available", "in stock"):
+	case ContainsAny(raw, "inventory", "stock", "available", "in stock", "库存", "有货", "现货"):
 		intent, confidence = domain.IntentInventoryQuery, 0.86
-	case ContainsAny(raw, "order", "shipping", "delivery", "tracking"):
+	case ContainsAny(raw, "order", "shipping", "delivery", "tracking", "订单", "物流", "发货", "配送"):
 		intent, confidence = domain.IntentOrderQuery, 0.90
-	case ContainsAny(raw, "product", "price", "spec", "detail", "description"):
+	case ContainsAny(raw, "product", "price", "spec", "detail", "description", "商品", "价格", "参数", "详情", "介绍"):
 		intent, confidence = domain.IntentProductInfo, 0.82
 	}
 
-	return graphstate.IntentDecision{Intent: intent, Confidence: confidence, Entities: ExtractSimpleEntities(message), NeedRewrite: false, Reason: "heuristic"}
+	return graphstate.IntentResult{
+		Intent:      intent,
+		Confidence:  confidence,
+		Entities:    ExtractSimpleEntities(message),
+		NeedRewrite: false,
+		Reason:      "heuristic",
+	}
 }
 
 func NormalizeIntent(raw string) domain.Intent {
@@ -142,7 +147,7 @@ func NormalizeIntent(raw string) domain.Intent {
 	}
 }
 
-func ParseIntentDecision(content string) (graphstate.IntentDecision, bool) {
+func ParseIntentResult(content string) (graphstate.IntentResult, bool) {
 	var payload struct {
 		Intent      string            `json:"intent"`
 		Confidence  float64           `json:"confidence"`
@@ -151,32 +156,36 @@ func ParseIntentDecision(content string) (graphstate.IntentDecision, bool) {
 		Entities    map[string]string `json:"entities"`
 	}
 	if err := json.Unmarshal([]byte(CleanJSON(content)), &payload); err != nil {
-		return graphstate.IntentDecision{}, false
+		return graphstate.IntentResult{}, false
 	}
-	return graphstate.IntentDecision{Intent: NormalizeIntent(payload.Intent), Confidence: Clamp01(payload.Confidence), NeedRewrite: payload.NeedRewrite, Reason: payload.Reason, Entities: payload.Entities}, true
+	return graphstate.IntentResult{
+		Intent:      NormalizeIntent(payload.Intent),
+		Confidence:  Clamp01(payload.Confidence),
+		NeedRewrite: payload.NeedRewrite,
+		Reason:      payload.Reason,
+		Entities:    payload.Entities,
+	}, true
 }
 
-func ParseRewriteDecision(content string) (string, string, bool) {
-	var payload struct {
-		Query  string `json:"query"`
-		Reason string `json:"reason"`
-	}
+func ParseRewriteResult(content string) (graphstate.RewriteResult, bool) {
+	var payload graphstate.RewriteResult
 	if err := json.Unmarshal([]byte(CleanJSON(content)), &payload); err != nil {
-		return "", "", false
+		return graphstate.RewriteResult{}, false
 	}
-	return payload.Query, payload.Reason, true
+	return payload, true
 }
 
-// RequiresRewrite returns true when the message is ambiguous enough that
-// adding conversation history context would help the LLM.
-// history is the eino-native window already loaded into the graph state.
-func RequiresRewrite(message string, history []*schema.Message) bool {
+// RequiresRewrite 判断当前问题是否需要结合历史上下文做改写。
+func RequiresRewrite(message string, historyText string) bool {
 	msg := strings.TrimSpace(message)
-	if msg == "" || len(history) == 0 {
+	if msg == "" {
+		return false
+	}
+	if strings.TrimSpace(historyText) == "" || strings.EqualFold(strings.TrimSpace(historyText), "none") {
 		return false
 	}
 	short := len([]rune(msg)) <= 10
-	pronoun := ContainsAny(strings.ToLower(msg), "this", "that", "it", "that one")
+	pronoun := ContainsAny(strings.ToLower(msg), "this", "that", "it", "that one", "这个", "那个", "它")
 	return short || pronoun
 }
 
@@ -263,13 +272,13 @@ func MergeSlots(dst map[string]any, src map[string]any) {
 func DetectReturnReason(message string) string {
 	msg := strings.ToLower(message)
 	switch {
-	case ContainsAny(msg, "damage", "broken", "crack"):
+	case ContainsAny(msg, "damage", "broken", "crack", "破损", "损坏"):
 		return "damaged"
-	case ContainsAny(msg, "size", "fit"):
+	case ContainsAny(msg, "size", "fit", "尺码", "不合适"):
 		return "size_issue"
-	case ContainsAny(msg, "quality", "defect", "odor"):
+	case ContainsAny(msg, "quality", "defect", "odor", "质量", "瑕疵", "异味"):
 		return "quality_issue"
-	case ContainsAny(msg, "do not want", "wrong order", "changed my mind"):
+	case ContainsAny(msg, "do not want", "wrong order", "changed my mind", "不想要", "买错"):
 		return "personal_reason"
 	default:
 		return ""
@@ -279,9 +288,9 @@ func DetectReturnReason(message string) string {
 func DetectAfterSaleType(message string) string {
 	msg := strings.ToLower(message)
 	switch {
-	case ContainsAny(msg, "exchange", "replace"):
+	case ContainsAny(msg, "exchange", "replace", "换货", "更换"):
 		return "exchange"
-	case ContainsAny(msg, "return", "refund"):
+	case ContainsAny(msg, "return", "refund", "退货", "退款"):
 		return "return"
 	default:
 		return ""
@@ -289,28 +298,36 @@ func DetectAfterSaleType(message string) string {
 }
 
 func MentionsInventory(text string) bool {
-	return ContainsAny(strings.ToLower(text), "inventory", "stock", "available", "in stock")
+	return ContainsAny(strings.ToLower(text), "inventory", "stock", "available", "in stock", "库存", "有货", "现货")
 }
+
 func IsAdvisoryProductInfo(text string) bool {
-	return ContainsAny(strings.ToLower(text), "spec", "detail", "price", "recommend")
+	return ContainsAny(strings.ToLower(text), "spec", "detail", "price", "recommend", "参数", "详情", "价格", "推荐")
 }
+
 func IsAffirmative(text string) bool {
-	return ContainsAny(strings.ToLower(strings.TrimSpace(text)), "yes", "ok", "confirm", "sure")
+	return ContainsAny(strings.ToLower(strings.TrimSpace(text)), "yes", "ok", "confirm", "sure", "是", "确认", "好的")
 }
+
 func IsNegative(text string) bool {
-	return ContainsAny(strings.ToLower(strings.TrimSpace(text)), "no", "cancel", "stop", "do not")
+	return ContainsAny(strings.ToLower(strings.TrimSpace(text)), "no", "cancel", "stop", "do not", "否", "取消", "不要")
 }
 
 func BuildReturnApplySummary(state *graphstate.ConversationState) string {
 	requestType := AfterSaleTypeLabel(FirstNonEmpty(graphstate.SlotString(state, "request_type"), "return"))
-	return fmt.Sprintf("Please confirm the %s request for order %s with reason %s.", requestType, FirstNonEmpty(graphstate.SlotString(state, "order_id"), "unknown"), FirstNonEmpty(graphstate.SlotString(state, "reason"), "unknown"))
+	return fmt.Sprintf(
+		"请确认是否提交%s申请，订单号 %s，原因：%s。",
+		requestType,
+		FirstNonEmpty(graphstate.SlotString(state, "order_id"), "未知"),
+		FirstNonEmpty(graphstate.SlotString(state, "reason"), "未知"),
+	)
 }
 
 func AfterSaleTypeLabel(requestType string) string {
 	if strings.EqualFold(strings.TrimSpace(requestType), "exchange") {
-		return "exchange"
+		return "换货"
 	}
-	return "return"
+	return "退货"
 }
 
 func MetadataValue(metadata map[string]string, keys ...string) string {
@@ -324,4 +341,3 @@ func MetadataValue(metadata map[string]string, keys ...string) string {
 	}
 	return ""
 }
-

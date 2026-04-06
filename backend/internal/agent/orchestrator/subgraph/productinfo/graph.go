@@ -2,121 +2,120 @@ package productinfo
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cloudwego/eino/components/model"
-	einoretriever "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 
-	orchestratorprompt "github.com/XDWow/DouyinMall/backend/internal/agent/components/prompt"
-	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/retrieve"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/rewrite"
+	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/rag"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-func Build(
-	ctx context.Context,
-	registry *agenttool.Registry,
-	chatModel model.ToolCallingChatModel,
-	retriever einoretriever.Retriever,
-	prompts *orchestratorprompt.Set,
-	productNode *orchestratornode.ProductInfoNode,
-	rewriteNode *orchestratornode.RewriteNode,
-	retrieveNode *orchestratornode.RetrieveNode,
-	rerankNode *orchestratornode.RerankNode,
-) (compose.AnyGraph, error) {
-	toolGraph, err := toolexec.Build(ctx, registry, agenttool.ToolExecutionParallelReadOnly)
-	if err != nil {
-		return nil, err
-	}
-	rewriteGraph, err := rewrite.Build(ctx, chatModel, prompts, rewriteNode)
-	if err != nil {
-		return nil, err
-	}
-	retrieveGraph, err := retrieve.Build(ctx, retriever, retrieveNode)
-	if err != nil {
-		return nil, err
+// Input 描述商品咨询子图的入口。
+type Input struct {
+	Slots    map[string]any
+	RawQuery string
+	History  []*schema.Message
+	Intent   string
+	Recorder *agenttool.SafeExecutionRecorder
+}
+
+// Output 描述商品咨询子图的出口。
+type Output struct {
+	FinalAnswer   string
+	NeedHandoff   bool
+	HandoffReason string
+	ReadOnly      bool
+	ToolMessages  []*schema.Message
+	Query         string
+	Documents     []*schema.Document
+}
+
+// Build 组装商品咨询子图。
+// 这段流程会先走商品工具查询，再按需要补一段知识库检索。
+func Build(_ context.Context, registry *agenttool.Registry, productNode *orchestratornode.ProductInfoNode, ragNode *ragnode.RAGNode) (compose.AnyGraph, error) {
+	if productNode == nil {
+		return nil, nil
 	}
 
-	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
-	if err := g.AddLambdaNode("BuildProductInfoNode", compose.InvokableLambda(productNode.BuildQuery), compose.WithNodeName("BuildProductInfoNode")); err != nil {
-		return nil, err
-	}
-	if toolGraph != nil {
-		if err := g.AddGraphNode("CallProductServiceNode", toolGraph, compose.WithNodeName("CallProductServiceNode")); err != nil {
-			return nil, err
-		}
-	}
-	if err := g.AddLambdaNode("ProductToolResultNode", compose.InvokableLambda(productNode.ApplyResult), compose.WithNodeName("ProductToolResultNode")); err != nil {
-		return nil, err
-	}
-	// optional RAG enrichment for advisory queries
-	if rewriteGraph != nil {
-		if err := g.AddGraphNode("ProductRewriteNode", rewriteGraph, compose.WithNodeName("ProductRewriteNode")); err != nil {
-			return nil, err
-		}
-	}
-	if retrieveGraph != nil {
-		if err := g.AddGraphNode("ProductRetrieverNode", retrieveGraph, compose.WithNodeName("ProductRetrieverNode")); err != nil {
-			return nil, err
-		}
-	}
-	if err := g.AddLambdaNode("ProductRerankNode", compose.InvokableLambda(rerankNode.Invoke), compose.WithNodeName("ProductRerankNode")); err != nil {
-		return nil, err
-	}
+	toolExecNode := orchestratornode.NewToolExecNode(registry)
+	g := compose.NewGraph[Input, Output]()
+	if err := g.AddLambdaNode("ExecuteProductInfoFlowNode", compose.InvokableLambda(
+		func(ctx context.Context, input Input) (Output, error) {
+			slots := cloneSlots(input.Slots)
+			if slots == nil {
+				slots = map[string]any{}
+			}
 
-	edges := [][2]string{}
-	if toolGraph != nil {
-		edges = append(edges,
-			[2]string{compose.START, "BuildProductInfoNode"},
-			[2]string{"BuildProductInfoNode", "CallProductServiceNode"},
-			[2]string{"CallProductServiceNode", "ProductToolResultNode"},
-		)
-	} else {
-		edges = append(edges,
-			[2]string{compose.START, "BuildProductInfoNode"},
-			[2]string{"BuildProductInfoNode", "ProductToolResultNode"},
-		)
-	}
-	if rewriteGraph != nil && retrieveGraph != nil {
-		edges = append(edges,
-			[2]string{"ProductRewriteNode", "ProductRetrieverNode"},
-			[2]string{"ProductRetrieverNode", "ProductRerankNode"},
-			[2]string{"ProductRerankNode", compose.END},
-		)
-	} else {
-		edges = append(edges, [2]string{"ProductToolResultNode", compose.END})
-	}
-	for _, edge := range edges {
-		if err := addEdge(g, edge[0], edge[1]); err != nil {
-			return nil, err
-		}
-	}
+			result, err := productNode.Invoke(ctx, orchestratornode.ProductInfoInput{
+				Slots:    slots,
+				RawQuery: input.RawQuery,
+			})
+			if err != nil {
+				return Output{}, err
+			}
 
-	if rewriteGraph != nil && retrieveGraph != nil {
-		if err := g.AddBranch("ProductToolResultNode", compose.NewGraphBranch(
-			func(ctx context.Context, _ *orchestratorstate.ConversationState) (string, error) {
-				state := orchestratorstate.ConversationStateFromContext(ctx)
-				if state != nil && support.IsAdvisoryProductInfo(state.Session.RawQuery) {
-					return "ProductRewriteNode", nil
+			out := Output{
+				FinalAnswer:   result.FinalAnswer,
+				NeedHandoff:   result.NeedHandoff,
+				HandoffReason: result.HandoffReason,
+				ReadOnly:      result.ReadOnly,
+			}
+			if len(result.Plans) > 0 && toolExecNode != nil {
+				callMessage, callErr := toolexec.CreateToolCallMessage(result.Plans)
+				if callErr != nil {
+					return Output{}, callErr
 				}
-				return compose.END, nil
-			},
-			map[string]bool{"ProductRewriteNode": true, compose.END: true},
-		)); err != nil {
-			return nil, err
-		}
+				messages, execErr := toolExecNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+					Plans:       result.Plans,
+					CallMessage: callMessage,
+					Mode:        agenttool.ToolExecutionParallelReadOnly,
+				})
+				if execErr != nil {
+					return Output{}, execErr
+				}
+				out.ToolMessages = append([]*schema.Message(nil), messages...)
+				if input.Recorder != nil {
+					support.HydrateToolResultsIntoSlots(slots, input.Recorder.Snapshot())
+				}
+			}
+
+			if ragNode != nil && !out.NeedHandoff && support.IsAdvisoryProductInfo(input.RawQuery) {
+				ragResult, ragErr := ragNode.Invoke(ctx, ragnode.Input{
+					Message: input.RawQuery,
+					History: append([]*schema.Message(nil), input.History...),
+					Intent:  input.Intent,
+				})
+				if ragErr != nil {
+					return Output{}, ragErr
+				}
+				if ragResult != nil {
+					out.Query = ragResult.Query
+					out.Documents = append([]*schema.Document(nil), ragResult.Documents...)
+				}
+			}
+			return out, nil
+		}), compose.WithNodeName("ExecuteProductInfoFlowNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge(compose.START, "ExecuteProductInfoFlowNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("ExecuteProductInfoFlowNode", compose.END); err != nil {
+		return nil, err
 	}
 	return g, nil
 }
 
-func addEdge(g interface{ AddEdge(string, string) error }, start, end string) error {
-	if err := g.AddEdge(start, end); err != nil {
-		return fmt.Errorf("add edge %s -> %s: %w", start, end, err)
+func cloneSlots(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
 	}
-	return nil
+	result := make(map[string]any, len(input))
+	for key, value := range input {
+		result[key] = value
+	}
+	return result
 }

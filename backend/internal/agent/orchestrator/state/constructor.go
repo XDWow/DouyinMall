@@ -6,8 +6,8 @@ import (
 
 	"github.com/google/uuid"
 
-	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 )
 
 func NewConversationState(req domain.ChatCommand, writer StreamWriter, opts InitOptions) *ConversationState {

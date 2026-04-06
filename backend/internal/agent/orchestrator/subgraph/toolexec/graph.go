@@ -2,56 +2,60 @@ package toolexec
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 
-	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-func Build(_ context.Context, registry *agenttool.Registry, mode agenttool.ToolExecutionMode) (compose.AnyGraph, error) {
+// Input 描述工具执行子图真正需要的输入。
+// 这里不再暴露 ConversationState，而是只接收计划、执行模式和可选的调用消息。
+type Input struct {
+	Plans       []domain.ToolCallPlan
+	CallMessage *schema.Message
+	Mode        agenttool.ToolExecutionMode
+}
+
+// Output 描述工具执行子图的结果。
+type Output struct {
+	ToolMessages []*schema.Message
+}
+
+// Build 组装工具执行子图。
+// 它本质上是一个 GraphNode，对外暴露明确的输入输出，内部只封装一次工具执行动作。
+func Build(_ context.Context, registry *agenttool.Registry) (compose.AnyGraph, error) {
 	if registry == nil {
 		return nil, nil
 	}
-	toolsNode, err := registry.ToolsNode(mode)
-	if err != nil {
+
+	execNode := orchestratornode.NewToolExecNode(registry)
+	g := compose.NewGraph[Input, Output]()
+	if err := g.AddLambdaNode("ToolExecNode", compose.InvokableLambda(
+		func(ctx context.Context, input Input) (Output, error) {
+			messages, err := execNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+				CallMessage: input.CallMessage,
+				Plans:       input.Plans,
+				Mode:        input.Mode,
+			})
+			if err != nil {
+				return Output{}, err
+			}
+			return Output{ToolMessages: messages}, nil
+		}), compose.WithNodeName("ToolExecNode")); err != nil {
 		return nil, err
 	}
-	execNode := orchestratornode.NewToolExecNode(orchestratornode.ToolExecNodeDeps{Registry: registry})
-	prepareName := "PrepareSerialToolMessageNode"
-	prepareFn := execNode.PrepareSerialMessage
-	if mode == agenttool.ToolExecutionParallelReadOnly {
-		prepareName = "PrepareParallelReadonlyToolMessageNode"
-		prepareFn = execNode.PrepareParallelReadOnlyMessage
-	}
-	g := compose.NewGraph[*orchestratorstate.ConversationState, *orchestratorstate.ConversationState]()
-	if err := g.AddLambdaNode(prepareName, compose.InvokableLambda(prepareFn), compose.WithNodeName(prepareName)); err != nil {
+	if err := addEdge(g, compose.START, "ToolExecNode"); err != nil {
 		return nil, err
 	}
-	if err := g.AddToolsNode("ToolsNode", toolsNode, compose.WithNodeName("ToolsNode")); err != nil {
+	if err := addEdge(g, "ToolExecNode", compose.END); err != nil {
 		return nil, err
-	}
-	if err := g.AddLambdaNode("ApplyToolMessagesNode", compose.InvokableLambda(execNode.ApplyMessages), compose.WithNodeName("ApplyToolMessagesNode")); err != nil {
-		return nil, err
-	}
-	for _, edge := range [][2]string{
-		{compose.START, prepareName},
-		{prepareName, "ToolsNode"},
-		{"ToolsNode", "ApplyToolMessagesNode"},
-		{"ApplyToolMessagesNode", compose.END},
-	} {
-		if err := addEdge(g, edge[0], edge[1]); err != nil {
-			return nil, err
-		}
 	}
 	return g, nil
 }
 
 func addEdge(g interface{ AddEdge(string, string) error }, start, end string) error {
-	if err := g.AddEdge(start, end); err != nil {
-		return fmt.Errorf("add edge %s -> %s: %w", start, end, err)
-	}
-	return nil
+	return g.AddEdge(start, end)
 }

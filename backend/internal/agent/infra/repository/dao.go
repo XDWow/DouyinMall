@@ -1,4 +1,4 @@
-package repository
+﻿package repository
 
 import (
 	"context"
@@ -59,3 +59,4 @@ func NewDAO(db *gorm.DB) *DAO {
 func (d *DAO) InitTables(ctx context.Context) error {
 	return d.db.WithContext(ctx).AutoMigrate(&SessionDO{}, &MessageDO{}, &KnowledgeChunkDO{})
 }
+

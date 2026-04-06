@@ -48,13 +48,11 @@ func (w *StreamWriter) Send(ctx context.Context, event orchestratorstate.StreamE
 
 func normalizeStage(node string) string {
 	switch node {
-	case "L0ExactCacheNode":
+	case "CachePolicyNode", "MultiLevelCacheNode":
 		return "cache"
-	case "IntentClassifyChain", "BuildIntentPromptInputNode", "IntentPromptNode", "IntentModelNode", "ApplyIntentNode":
+	case "PrepareIntentClassifyInputNode", "IntentClassifyNode", "ApplyIntentClassifyResultNode":
 		return "intent"
-	case "QueryRewriteNode", "RewriteEvaluateNode", "RewriteIdentityNode", "BuildRewritePromptInputNode", "RewritePromptNode", "RewriteModelNode", "ApplyRewriteNode":
-		return "rewrite"
-	case "KnowledgeRetrieverNode", "PrepareRetrieveQueryNode", "RetrieverNode", "ApplyRetrieveNode", "OptionalRerankNode":
+	case "PrepareReturnPolicyRAGInputNode", "ReturnPolicyRAGNode", "ApplyReturnPolicyRAGResultNode", "PrepareProductRAGInputNode", "ProductRAGNode", "ApplyProductRAGResultNode", "PrepareFallbackRAGInputNode", "FallbackRAGNode", "ApplyFallbackRAGResultNode":
 		return "retrieval"
 	case "CallOrderServiceNode", "CallInventoryServiceNode", "CallProductServiceNode", "CallReturnOrderServiceNode", "CallAfterSaleServiceNode", "PrepareSerialToolMessageNode", "PrepareParallelReadonlyToolMessageNode", "ToolsNode", "ApplyToolMessagesNode":
 		return "tool"

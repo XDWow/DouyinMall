@@ -1,4 +1,4 @@
-package usecase
+﻿package usecase
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
@@ -30,3 +30,4 @@ func messageOutputFromDomain(message domain.Message) MessageOutput {
 		CreatedAt:  message.CreatedAt,
 	}
 }
+

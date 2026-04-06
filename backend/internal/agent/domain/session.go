@@ -1,4 +1,4 @@
-package domain
+﻿package domain
 
 import "time"
 
@@ -69,3 +69,4 @@ type InterruptInfo struct {
 	CheckpointID string
 	RerunNodes   []string
 }
+

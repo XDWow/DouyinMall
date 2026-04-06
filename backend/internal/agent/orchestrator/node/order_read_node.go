@@ -5,42 +5,39 @@ import (
 	"strconv"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-type OrderReadNodeDeps struct {
+// OrderReadInput 描述订单查询节点的输入。
+type OrderReadInput struct {
+	Slots map[string]any
+}
+
+// OrderReadNode 负责生成订单查询所需的工具调用计划。
+type OrderReadNode struct {
 	RegistryHasTool ToolRegistryCheck
-	ApplyToolPlans  ToolPlanApplier
 }
 
-type OrderReadNode struct{ deps OrderReadNodeDeps }
-
-func NewOrderReadNode(deps OrderReadNodeDeps) *OrderReadNode {
-	return &OrderReadNode{deps: deps}
+func NewOrderReadNode(registryHasTool ToolRegistryCheck) *OrderReadNode {
+	return &OrderReadNode{RegistryHasTool: registryHasTool}
 }
 
-func (n *OrderReadNode) BuildQuery(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
-	state.Session.ReadOnly = true
-	if n.deps.RegistryHasTool == nil || !n.deps.RegistryHasTool(ctx, "query_order") {
-		state.Session.FinalAnswer = "Order query service is unavailable. Handing off to a human agent."
-		state.Session.NeedHandoff = true
-		state.Session.HandoffReason = "order_service_unavailable"
-		graphstate.BindConversationState(ctx, state)
-		return state, nil
+// Invoke 完成订单查询前的计划构建。
+func (n *OrderReadNode) Invoke(ctx context.Context, input OrderReadInput) (*ToolPlanResult, error) {
+	result := &ToolPlanResult{ReadOnly: true}
+	if n.RegistryHasTool == nil || !n.RegistryHasTool(ctx, "query_order") {
+		result.FinalAnswer = "订单查询服务暂时不可用，已为你转人工处理。"
+		result.NeedHandoff = true
+		result.HandoffReason = "order_service_unavailable"
+		return result, nil
 	}
+
 	plans := []domain.ToolCallPlan{{Name: "query_order", Arguments: map[string]any{"limit": 5}}}
-	if orderID := graphstate.SlotString(state, "order_id"); orderID != "" {
+	if orderID := slotString(input.Slots, "order_id"); orderID != "" {
 		if value, err := strconv.ParseInt(orderID, 10, 64); err == nil {
 			plans[0].Arguments["order_id"] = value
 			plans[0].Arguments["limit"] = 1
 		}
 	}
-	return n.deps.ApplyToolPlans(ctx, state, plans)
-}
-
-func (n *OrderReadNode) ApplyResult(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
-	support.HydrateToolResults(state)
-	graphstate.BindConversationState(ctx, state)
-	return state, nil
+	result.Plans = plans
+	return result, nil
 }

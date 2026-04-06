@@ -80,7 +80,7 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 		ReturnExchangeApply: cfg.FeatureFlags.ReturnExchangeApply,
 	}
 
-	components, err := agentioc.InitComponents(ctx, cfg, dao, rdb, workflowCfg.RetrieveTopK)
+	components, err := agentioc.InitComponents(ctx, cfg, dao, rdb)
 	if err != nil {
 		return nil, err
 	}
@@ -88,10 +88,12 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 	graphRuntime, err := customergraph.NewRuntime(ctx, workflowCfg, customergraph.Dependencies{
 		Model:           components.Model,
 		Embedder:        components.Embedder,
-		Retriever:       components.Retriever,
+		KnowledgeBase:   components.KnowledgeBase,
+		Skills:          components.Skills,
 		Registry:        components.Registry,
 		Memory:          components.Memory,
 		ExactCache:      components.ExactCache,
+		SemanticCache:   components.SemanticCache,
 		RateLimiter:     components.RateLimiter,
 		CheckpointStore: components.CheckpointStore,
 		Prompts:         components.Prompts,
@@ -384,8 +386,19 @@ func overrideWorkflowConfig(dst *customergraph.Config, src agentconfig.WorkflowC
 	if src.ConversationWindow > 0 {
 		dst.ConversationWindow = src.ConversationWindow
 	}
-	if src.L0CacheTTLSeconds > 0 {
-		dst.L0CacheTTL = time.Duration(src.L0CacheTTLSeconds) * time.Second
+	if src.ExactCacheTTLSeconds > 0 {
+		dst.ExactCacheTTL = time.Duration(src.ExactCacheTTLSeconds) * time.Second
+	} else if src.L0CacheTTLSeconds > 0 {
+		dst.ExactCacheTTL = time.Duration(src.L0CacheTTLSeconds) * time.Second
+	}
+	if src.SemanticCacheTTLSeconds > 0 {
+		dst.SemanticCacheTTL = time.Duration(src.SemanticCacheTTLSeconds) * time.Second
+	}
+	if src.SemanticCacheScore > 0 {
+		dst.SemanticCacheScore = src.SemanticCacheScore
+	}
+	if src.SemanticCacheTopK > 0 {
+		dst.SemanticCacheTopK = src.SemanticCacheTopK
 	}
 	if src.RetrieveTopK > 0 {
 		dst.RetrieveTopK = src.RetrieveTopK

@@ -2,57 +2,85 @@ package node
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/cloudwego/eino/schema"
+	"github.com/google/uuid"
 
-	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 )
 
-type ToolExecNodeDeps struct {
+// ToolExecNode 负责校验并执行工具调用计划。
+type ToolExecNode struct {
 	Registry *agenttool.Registry
 }
 
-type ToolExecNode struct{ deps ToolExecNodeDeps }
-
-func NewToolExecNode(deps ToolExecNodeDeps) *ToolExecNode {
-	return &ToolExecNode{deps: deps}
+func NewToolExecNode(registry *agenttool.Registry) *ToolExecNode {
+	return &ToolExecNode{Registry: registry}
 }
 
-func (n *ToolExecNode) PrepareSerialMessage(ctx context.Context, state *orchestratorstate.ConversationState) (*schema.Message, error) {
-	return n.prepareMessage(ctx, state, agenttool.ToolExecutionSerial)
+type ToolExecutionInput struct {
+	CallMessage *schema.Message
+	Plans       []domain.ToolCallPlan
+	Mode        agenttool.ToolExecutionMode
 }
 
-func (n *ToolExecNode) PrepareParallelReadOnlyMessage(ctx context.Context, state *orchestratorstate.ConversationState) (*schema.Message, error) {
-	return n.prepareMessage(ctx, state, agenttool.ToolExecutionParallelReadOnly)
-}
+func (n *ToolExecNode) Invoke(ctx context.Context, input ToolExecutionInput) ([]*schema.Message, error) {
+	if n.Registry == nil {
+		return nil, fmt.Errorf("工具注册表未配置")
+	}
+	if len(input.Plans) == 0 && input.CallMessage == nil {
+		return nil, nil
+	}
 
-func (n *ToolExecNode) ApplyMessages(ctx context.Context, messages []*schema.Message) (*orchestratorstate.ConversationState, error) {
-	state := orchestratorstate.ConversationStateFromContext(ctx)
-	if state == nil {
-		return nil, fmt.Errorf("state is required")
+	callMessage := input.CallMessage
+	if callMessage == nil {
+		msg, err := createToolCallMessage(input.Plans)
+		if err != nil {
+			return nil, err
+		}
+		callMessage = msg
 	}
-	state.Tool.ToolMessages = messages
-	support.HydrateToolResults(state)
-	orchestratorstate.BindConversationState(ctx, state)
-	return state, nil
-}
-
-func (n *ToolExecNode) prepareMessage(ctx context.Context, state *orchestratorstate.ConversationState, mode agenttool.ToolExecutionMode) (*schema.Message, error) {
-	if state == nil {
-		return nil, fmt.Errorf("state is required")
+	if callMessage == nil {
+		return nil, nil
 	}
-	if state.Tool.DecisionMessage == nil || len(state.Tool.Plans) == 0 {
-		return nil, fmt.Errorf("tool decision message is required")
-	}
-	if n.deps.Registry == nil {
-		return nil, fmt.Errorf("tool registry is not configured")
-	}
-	if err := n.deps.Registry.ValidatePlans(state.Tool.Plans, mode); err != nil {
+	if err := n.Registry.ValidatePlans(input.Plans, input.Mode); err != nil {
 		return nil, err
 	}
-	orchestratorstate.BindConversationState(ctx, state)
-	return state.Tool.DecisionMessage, nil
+
+	toolsNode, err := n.Registry.ToolsNode(input.Mode)
+	if err != nil {
+		return nil, err
+	}
+	return toolsNode.Invoke(ctx, callMessage)
+}
+
+func createToolCallMessage(plans []domain.ToolCallPlan) (*schema.Message, error) {
+	if len(plans) == 0 {
+		return nil, nil
+	}
+
+	toolCalls := make([]schema.ToolCall, 0, len(plans))
+	for _, plan := range plans {
+		rawJSON := strings.TrimSpace(plan.RawJSON)
+		if rawJSON == "" {
+			payload, err := json.Marshal(plan.Arguments)
+			if err != nil {
+				return nil, err
+			}
+			rawJSON = string(payload)
+		}
+		toolCalls = append(toolCalls, schema.ToolCall{
+			ID:   "call_" + uuid.NewString(),
+			Type: "function",
+			Function: schema.FunctionCall{
+				Name:      plan.Name,
+				Arguments: rawJSON,
+			},
+		})
+	}
+	return schema.AssistantMessage("", toolCalls), nil
 }

@@ -2,31 +2,45 @@ package node
 
 import (
 	"context"
-	"fmt"
 
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
+// RouteInput 描述业务路由阶段的输入。
+type RouteInput struct {
+	Intent          graphstate.IntentResult
+	FeatureFlags    graphstate.FeatureFlags
+	AwaitingConfirm bool
+}
+
+// RouteNode 负责根据意图和功能开关选择后续业务子图。
 type RouteNode struct{}
 
 func NewRouteNode() *RouteNode { return &RouteNode{} }
 
-func (n *RouteNode) Invoke(ctx context.Context, state *graphstate.ConversationState) (*graphstate.ConversationState, error) {
-	if state == nil {
-		return nil, fmt.Errorf("state is required")
-	}
-	ss := graphstate.EnsureSessionState(state)
-	route := support.RouteFromIntent(ss.Intent)
-	if ss.AwaitingConfirm {
+type RouteResult struct {
+	Route     graphstate.WorkflowRoute
+	ErrorCode string
+	ReadOnly  bool
+}
+
+// Invoke 计算当前请求的业务路由。
+func (n *RouteNode) Invoke(_ context.Context, input RouteInput) (*RouteResult, error) {
+	route := support.RouteFromIntent(input.Intent.Intent)
+	if input.AwaitingConfirm {
 		route = graphstate.RouteReturnExchangeApply
 	}
-	if !support.RouteEnabled(ss.FeatureFlags, route) {
+
+	errorCode := ""
+	if !support.RouteEnabled(input.FeatureFlags, route) {
 		route = graphstate.RouteFallback
-		ss.ErrorCode = "feature_disabled"
+		errorCode = "feature_disabled"
 	}
-	ss.Route = route
-	ss.ReadOnly = route != graphstate.RouteReturnExchangeApply && route != graphstate.RouteAddToCart
-	graphstate.BindConversationState(ctx, state)
-	return state, nil
+
+	return &RouteResult{
+		Route:     route,
+		ErrorCode: errorCode,
+		ReadOnly:  route != graphstate.RouteReturnExchangeApply && route != graphstate.RouteAddToCart,
+	}, nil
 }

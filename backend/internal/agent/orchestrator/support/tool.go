@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
@@ -12,19 +13,35 @@ func HydrateToolResults(state *orchestratorstate.ConversationState) {
 		return
 	}
 	ss := orchestratorstate.EnsureSessionState(state)
-	if ss.Slots == nil {
-		ss.Slots = map[string]any{}
+	HydrateToolResultsIntoSlots(ss.Slots, state.ToolExecutions())
+}
+
+// HydrateToolResultsFromExecutions 保留给仍使用 ConversationState 的主流程节点。
+func HydrateToolResultsFromExecutions(state *orchestratorstate.ConversationState, executions []domain.ToolExecution) {
+	if state == nil {
+		return
 	}
-	if ss.Slots["tool_results"] == nil {
-		ss.Slots["tool_results"] = map[string]any{}
+	ss := orchestratorstate.EnsureSessionState(state)
+	HydrateToolResultsIntoSlots(ss.Slots, executions)
+}
+
+// HydrateToolResultsIntoSlots 把工具执行结果显式写回槽位。
+// 这样业务子图内部只需持有 slots，而不必临时构造 ConversationState。
+func HydrateToolResultsIntoSlots(slots map[string]any, executions []domain.ToolExecution) {
+	if slots == nil {
+		return
 	}
-	target, _ := ss.Slots["tool_results"].(map[string]any)
-	for _, exec := range state.ToolExecutions() {
+	root, _ := slots["tool_results"].(map[string]any)
+	if root == nil {
+		root = map[string]any{}
+		slots["tool_results"] = root
+	}
+	for _, exec := range executions {
 		var payload any
 		if json.Unmarshal([]byte(exec.Result), &payload) != nil {
 			payload = map[string]any{"raw": exec.Result}
 		}
-		target[exec.Name] = payload
+		root[exec.Name] = payload
 	}
 }
 
@@ -32,7 +49,14 @@ func ToolResultMap(state *orchestratorstate.ConversationState, toolName string) 
 	if state == nil {
 		return nil
 	}
-	root, _ := state.Session.Slots["tool_results"].(map[string]any)
+	return ToolResultMapFromSlots(state.Session.Slots, toolName)
+}
+
+func ToolResultMapFromSlots(slots map[string]any, toolName string) map[string]any {
+	if len(slots) == 0 {
+		return nil
+	}
+	root, _ := slots["tool_results"].(map[string]any)
 	if root == nil {
 		return nil
 	}
@@ -40,12 +64,12 @@ func ToolResultMap(state *orchestratorstate.ConversationState, toolName string) 
 	return result
 }
 
-func ResetToolDecision(state *orchestratorstate.ConversationState) {
+func ResetToolState(state *orchestratorstate.ConversationState) {
 	if state == nil {
 		return
 	}
 	state.Tool.Plans = nil
-	state.Tool.DecisionMessage = nil
+	state.Tool.CallMessage = nil
 	state.Tool.ToolMessages = nil
 }
 
@@ -67,7 +91,14 @@ func HasToolPlan(state *orchestratorstate.ConversationState, names ...string) bo
 }
 
 func ToolResultRecord(state *orchestratorstate.ConversationState, toolName string) map[string]any {
-	result := ToolResultMap(state, toolName)
+	if state == nil {
+		return nil
+	}
+	return ToolResultRecordFromSlots(state.Session.Slots, toolName)
+}
+
+func ToolResultRecordFromSlots(slots map[string]any, toolName string) map[string]any {
+	result := ToolResultMapFromSlots(slots, toolName)
 	if len(result) == 0 {
 		return nil
 	}
@@ -111,4 +142,3 @@ func ToolResultBool(record map[string]any, keys ...string) (bool, bool) {
 	}
 	return false, false
 }
-

@@ -1,4 +1,4 @@
-package grpc
+﻿package grpc
 
 import (
 	"context"
@@ -353,3 +353,4 @@ func containsAny(text string, values ...string) bool {
 	}
 	return false
 }
+

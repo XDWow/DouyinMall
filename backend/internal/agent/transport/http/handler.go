@@ -1,4 +1,4 @@
-package http
+﻿package http
 
 import (
 	"net/http"
@@ -159,3 +159,4 @@ func firstPositive(values ...int64) int64 {
 	}
 	return 0
 }
+

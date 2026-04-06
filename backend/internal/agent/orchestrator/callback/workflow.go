@@ -25,22 +25,24 @@ type stateKey struct{}
 type callbackState struct {
 	node      string
 	startedAt time.Time
-	state      *orchestratorstate.ConversationState
+	state     *orchestratorstate.ConversationState
 	span      trace.Span
 }
 
 var nodeNameSet = map[string]struct{}{
-	"AccessGuardNode": {}, "SessionLoadNode": {}, "L0ExactCacheNode": {}, "IntentClassifyChain": {}, "BuildIntentPromptInputNode": {},
-	"IntentPromptNode": {}, "IntentModelNode": {}, "ApplyIntentNode": {}, "SlotExtractNode": {}, "SlotCheckNode": {}, "AskUserNode": {},
+	"AccessGuardNode": {}, "SessionLoadNode": {}, "CachePolicyNode": {}, "MultiLevelCacheNode": {}, "PrepareIntentClassifyInputNode": {}, "IntentClassifyNode": {}, "ApplyIntentClassifyResultNode": {},
+	"PrepareReturnPolicyRAGInputNode": {}, "ReturnPolicyRAGNode": {}, "ApplyReturnPolicyRAGResultNode": {},
+	"SlotExtractNode": {}, "SlotCheckNode": {}, "AskUserNode": {},
+	"OrderQueryGraph": {}, "InventoryGraph": {}, "ProductInfoGraph": {}, "AddToCartGraph": {}, "ReturnExchangeGraph": {}, "FallbackGraph": {},
+	"PrepareProductRAGInputNode": {}, "ProductRAGNode": {}, "ApplyProductRAGResultNode": {},
+	"PrepareFallbackRAGInputNode": {}, "FallbackRAGNode": {}, "ApplyFallbackRAGResultNode": {},
 	"RouteNode": {}, "OrderQueryWorkflow": {}, "ReturnPolicyRAGWorkflow": {}, "InventoryWorkflow": {}, "ProductInfoWorkflow": {},
 	"ReturnExchangeApplyWorkflow": {}, "FallbackWorkflow": {}, "BuildOrderQueryNode": {}, "CallOrderServiceNode": {},
 	"OrderToolResultNode": {}, "BuildInventoryQueryNode": {}, "CallInventoryServiceNode": {}, "InventoryToolResultNode": {},
 	"BuildProductInfoNode": {}, "CallProductServiceNode": {}, "ProductToolResultNode": {}, "GetOrderDetailNode": {},
 	"CallReturnOrderServiceNode": {}, "ReturnOrderResultNode": {}, "EligibilityCheckNode": {}, "ConfirmSummaryNode": {}, "BuildAfterSaleSubmitNode": {},
 	"CallAfterSaleServiceNode": {}, "SubmitAfterSaleNode": {},
-	"FallbackResolveNode": {}, "QueryRewriteNode": {}, "RewriteEvaluateNode": {}, "RewriteIdentityNode": {}, "BuildRewritePromptInputNode": {},
-	"RewritePromptNode": {}, "RewriteModelNode": {}, "ApplyRewriteNode": {}, "KnowledgeRetrieverNode": {}, "PrepareRetrieveQueryNode": {},
-	"RetrieverNode": {}, "ApplyRetrieveNode": {}, "OptionalRerankNode": {}, "ProductDocWorkflowNode": {}, "PrepareSerialToolMessageNode": {},
+	"FallbackResolveNode": {}, "PrepareSerialToolMessageNode": {},
 	"PrepareParallelReadonlyToolMessageNode": {}, "ToolsNode": {}, "ApplyToolMessagesNode": {}, "ResponseRenderNode": {}, "CacheWritebackNode": {},
 }
 
@@ -150,4 +152,3 @@ func callbackStreamWriter(state *orchestratorstate.ConversationState) orchestrat
 	}
 	return state.StreamWriter
 }
-

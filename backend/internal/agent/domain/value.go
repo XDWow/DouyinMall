@@ -1,4 +1,4 @@
-package domain
+﻿package domain
 
 type Intent string
 
@@ -37,3 +37,4 @@ const (
 	SessionStatusClosed SessionStatus = "closed"
 	SessionStatusHuman  SessionStatus = "human"
 )
+

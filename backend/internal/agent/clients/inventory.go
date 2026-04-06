@@ -1,3 +1,4 @@
-package clients
+﻿package clients
 
 type InventoryClient interface{}
+
