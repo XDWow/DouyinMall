@@ -9,15 +9,18 @@ import (
 )
 
 type Product struct {
-	Id           int64    `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`                     // 鍟嗗搧ID
-	Name         string   `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`                  // 鍟嗗搧鍚嶇О
-	Description  string   `protobuf:"bytes,3,opt,name=description" json:"description,omitempty"`    // 鍟嗗搧鎻忚堪
-	Picture      string   `protobuf:"bytes,4,opt,name=picture" json:"picture,omitempty"`            // 鍟嗗搧鍥剧墖鍦板潃
-	SliderImgs   []string `protobuf:"bytes,5,rep,name=sliderImgs" json:"sliderImgs,omitempty"`      // 鍟嗗搧杞挱鍥惧湴鍧€
-	Price        int64    `protobuf:"varint,6,opt,name=price" json:"price,omitempty"`               // 鍟嗗搧浠锋牸锛堝崟浣嶏細鍒嗭級
-	Currency     string   `protobuf:"bytes,11,opt,name=currency" json:"currency,omitempty"`         // 鍟嗗搧璐у竵锛堝 "CNY", "USD"锛?	Categories   []string `protobuf:"bytes,7,rep,name=categories" json:"categories,omitempty"`      // 鍟嗗搧鍒嗙被
-	InStock      bool     `protobuf:"varint,8,opt,name=in_stock" json:"in_stock,omitempty"`         // 鏄惁鏈夎揣锛堢敤浜庢悳绱㈢瓑鍦烘櫙锛屼笉鏄剧ず鍏蜂綋搴撳瓨鏁伴噺锛?	MerchantID   int64    `protobuf:"varint,9,opt,name=merchantID" json:"merchantID,omitempty"`     // 鍟嗗搧鎵€灞炲晢瀹禝D
-	MerchantName string   `protobuf:"bytes,10,opt,name=merchantName" json:"merchantName,omitempty"` // 鍟嗗搧鎵€灞炲晢瀹跺悕绉?}
+	Id           int64    `protobuf:"varint,1,opt,name=id" json:"id,omitempty"`
+	Name         string   `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`
+	Description  string   `protobuf:"bytes,3,opt,name=description" json:"description,omitempty"`
+	Picture      string   `protobuf:"bytes,4,opt,name=picture" json:"picture,omitempty"`
+	SliderImgs   []string `protobuf:"bytes,5,rep,name=sliderImgs" json:"sliderImgs,omitempty"`
+	Price        int64    `protobuf:"varint,6,opt,name=price" json:"price,omitempty"`
+	Currency     string   `protobuf:"bytes,11,opt,name=currency" json:"currency,omitempty"`
+	Categories   []string `protobuf:"bytes,7,rep,name=categories" json:"categories,omitempty"`
+	InStock      bool     `protobuf:"varint,8,opt,name=in_stock" json:"in_stock,omitempty"`
+	MerchantID   int64    `protobuf:"varint,9,opt,name=merchantID" json:"merchantID,omitempty"`
+	MerchantName string   `protobuf:"bytes,10,opt,name=merchantName" json:"merchantName,omitempty"`
+}
 
 func (x *Product) Reset() { *x = Product{} }
 
@@ -195,8 +198,7 @@ func (x *DeleteProductReq) GetUserId() int64 {
 	return 0
 }
 
-type DeleteProductResp struct {
-}
+type DeleteProductResp struct{}
 
 func (x *DeleteProductResp) Reset() { *x = DeleteProductResp{} }
 
@@ -295,5 +297,3 @@ type ProductService interface {
 	UpdateProduct(ctx context.Context, req *UpdateProductReq) (res *UpdateProductResp, err error)
 	DeleteProduct(ctx context.Context, req *DeleteProductReq) (res *DeleteProductResp, err error)
 }
-
-

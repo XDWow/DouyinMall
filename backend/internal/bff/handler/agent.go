@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AgentHandler BFF 灞?HTTP 澶勭悊鍣紝浠ｇ悊鍓嶇璇锋眰鍒?Agent gRPC 寰湇鍔?
 type AgentHandler struct {
 	agentClient  agentservice.Client
 	streamClient agentservice.StreamClient
@@ -22,7 +21,6 @@ func NewAgentHandler(agentClient agentservice.Client, streamClient agentservice.
 	return &AgentHandler{agentClient: agentClient, streamClient: streamClient}
 }
 
-// RegisterRoutes 娉ㄥ唽璺敱鍒?gin 寮曟搸
 func (h *AgentHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/chat", h.SendMessage)
 	rg.POST("/chat/stream", h.SendMessageStream)
@@ -32,65 +30,52 @@ func (h *AgentHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.DELETE("/session", h.ClearSession)
 }
 
-// ==================== 鍚屾瀵硅瘽 ====================
-
 type chatReq struct {
 	SessionID string `json:"session_id" binding:"required"`
 	Message   string `json:"message" binding:"required"`
 }
 
-// SendMessage POST /agent/api/chat 鈥?鍚屾瀵硅瘽
 func (h *AgentHandler) SendMessage(c *gin.Context) {
 	var req chatReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "鍙傛暟閿欒: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "请求参数错误: " + err.Error()})
 		return
 	}
 
-	userID := getUserID(c)
-
 	resp, err := h.agentClient.SendMessage(c.Request.Context(), &agentv1.ChatRequest{
 		SessionId: req.SessionID,
-		UserId:    userID,
+		UserId:    getUserID(c),
 		Message:   req.Message,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "鏈嶅姟璋冪敤澶辫触"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "发送消息失败"})
 		return
 	}
 
 	c.JSON(http.StatusOK, ginx.Result{Code: 0, Data: toChatResp(resp)})
 }
 
-// ==================== 娴佸紡瀵硅瘽锛圫SE锛?===================
-
-// SendMessageStream POST /agent/api/chat/stream 鈥?SSE 娴佸紡瀵硅瘽
-// 浜嬩欢绫诲瀷锛歴tage锛堥樁娈垫帹閫侊級銆乨elta锛堟枃鏈閲忥級銆乨one锛堢粨鏉燂紝鎼哄甫瀹屾暣鍝嶅簲锛夈€乪rror
 func (h *AgentHandler) SendMessageStream(c *gin.Context) {
 	var req chatReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "鍙傛暟閿欒: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "请求参数错误: " + err.Error()})
 		return
 	}
 
-	userID := getUserID(c)
-
-	// 寤虹珛 gRPC server-side streaming
 	stream, err := h.streamClient.SendMessageStream(c.Request.Context(), &agentv1.ChatRequest{
 		SessionId: req.SessionID,
-		UserId:    userID,
+		UserId:    getUserID(c),
 		Message:   req.Message,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "寤虹珛娴佸紡杩炴帴澶辫触"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "建立流式连接失败"})
 		return
 	}
 
-	// 璁剧疆 SSE 澶?
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no") // 鍏抽棴 Nginx 缂撳啿
+	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
 	flusher, ok := c.Writer.(http.Flusher)
@@ -100,12 +85,12 @@ func (h *AgentHandler) SendMessageStream(c *gin.Context) {
 	}
 
 	for {
-		chunk, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
+		chunk, recvErr := stream.Recv()
+		if recvErr != nil {
+			if recvErr == io.EOF {
 				break
 			}
-			writeSSE(c.Writer, flusher, "error", map[string]string{"msg": "娴佸紡璇诲彇澶辫触"})
+			writeSSE(c.Writer, flusher, "error", map[string]string{"msg": "流式消息接收失败"})
 			break
 		}
 
@@ -121,38 +106,30 @@ func (h *AgentHandler) SendMessageStream(c *gin.Context) {
 	}
 }
 
-// ==================== 浼氳瘽绠＄悊 ====================
-
 type createSessionReq struct {
 	Channel string `json:"channel" binding:"required"`
 }
 
-// CreateSession POST /agent/api/session 鈥?鍒涘缓鏂颁細璇?
 func (h *AgentHandler) CreateSession(c *gin.Context) {
 	var req createSessionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "鍙傛暟閿欒: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "请求参数错误: " + err.Error()})
 		return
 	}
 
-	userID := getUserID(c)
-
 	resp, err := h.agentClient.CreateSession(c.Request.Context(), &agentv1.CreateSessionRequest{
-		UserId:  userID,
+		UserId:  getUserID(c),
 		Channel: req.Channel,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "鍒涘缓浼氳瘽澶辫触"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "创建会话失败"})
 		return
 	}
 
 	c.JSON(http.StatusOK, ginx.Result{Code: 0, Data: gin.H{"session_id": resp.GetSessionId()}})
 }
 
-// ListSessions GET /agent/api/sessions?limit=10&offset=0 鈥?浼氳瘽鍒楄〃
 func (h *AgentHandler) ListSessions(c *gin.Context) {
-	userID := getUserID(c)
-
 	limit := int32(10)
 	offset := int32(0)
 	if v, err := parseInt32Query(c, "limit"); err == nil && v > 0 {
@@ -163,12 +140,12 @@ func (h *AgentHandler) ListSessions(c *gin.Context) {
 	}
 
 	resp, err := h.agentClient.ListSessions(c.Request.Context(), &agentv1.ListSessionsRequest{
-		UserId: userID,
+		UserId: getUserID(c),
 		Limit:  limit,
 		Offset: offset,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "鑾峰彇浼氳瘽鍒楄〃澶辫触"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "查询会话列表失败"})
 		return
 	}
 
@@ -189,11 +166,10 @@ func (h *AgentHandler) ListSessions(c *gin.Context) {
 	}})
 }
 
-// GetChatHistory GET /agent/api/history?session_id=xxx&limit=20&offset=0 鈥?瀵硅瘽鍘嗗彶
 func (h *AgentHandler) GetChatHistory(c *gin.Context) {
 	sessionID := c.Query("session_id")
 	if sessionID == "" {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "session_id 涓嶈兘涓虹┖"})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "session_id 不能为空"})
 		return
 	}
 
@@ -212,7 +188,7 @@ func (h *AgentHandler) GetChatHistory(c *gin.Context) {
 		Offset:    offset,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "鑾峰彇瀵硅瘽鍘嗗彶澶辫触"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "查询对话历史失败"})
 		return
 	}
 
@@ -235,11 +211,10 @@ func (h *AgentHandler) GetChatHistory(c *gin.Context) {
 	}})
 }
 
-// ClearSession DELETE /agent/api/session?session_id=xxx 鈥?娓呯┖浼氳瘽
 func (h *AgentHandler) ClearSession(c *gin.Context) {
 	sessionID := c.Query("session_id")
 	if sessionID == "" {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "session_id 涓嶈兘涓虹┖"})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "session_id 不能为空"})
 		return
 	}
 
@@ -247,16 +222,13 @@ func (h *AgentHandler) ClearSession(c *gin.Context) {
 		SessionId: sessionID,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "娓呯┖浼氳瘽澶辫触"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "清空会话失败"})
 		return
 	}
 
 	c.JSON(http.StatusOK, ginx.Result{Code: 0, Data: gin.H{"success": resp.GetSuccess()}})
 }
 
-// ==================== 杈呭姪鍑芥暟 ====================
-
-// getUserID 浠?gin context 涓彁鍙?JWT 瑙ｆ瀽鍚庣殑 user_id
 func getUserID(c *gin.Context) int64 {
 	claims, exists := c.Get("claims")
 	if !exists {
@@ -278,14 +250,12 @@ func parseInt32Query(c *gin.Context, key string) (int32, error) {
 	return n, err
 }
 
-// writeSSE 鍐欏叆涓€鏉?SSE 浜嬩欢
 func writeSSE(w http.ResponseWriter, flusher http.Flusher, event string, data any) {
 	payload, _ := json.Marshal(data)
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, payload)
 	flusher.Flush()
 }
 
-// toChatResp 灏?gRPC ChatResponse 杞负鍓嶇鍙嬪ソ鐨?JSON 缁撴瀯
 func toChatResp(resp *agentv1.ChatResponse) gin.H {
 	if resp == nil {
 		return gin.H{}
@@ -297,7 +267,6 @@ func toChatResp(resp *agentv1.ChatResponse) gin.H {
 		"suggested_questions": resp.GetSuggestedQuestions(),
 	}
 
-	// 鐭ヨ瘑寮曠敤
 	if refs := resp.GetKnowledge(); len(refs) > 0 {
 		knowledge := make([]gin.H, 0, len(refs))
 		for _, ref := range refs {
@@ -312,7 +281,6 @@ func toChatResp(resp *agentv1.ChatResponse) gin.H {
 		result["knowledge"] = knowledge
 	}
 
-	// 杞汉宸ユ憳瑕?
 	if h := resp.GetHandoff(); h != nil {
 		result["handoff"] = gin.H{
 			"core_issue":        h.GetCoreIssue(),
@@ -325,5 +293,3 @@ func toChatResp(resp *agentv1.ChatResponse) gin.H {
 
 	return result
 }
-
-

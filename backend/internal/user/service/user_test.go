@@ -75,7 +75,7 @@ func TestUserService_Signup(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "閭宸插瓨鍦?,
+			name: "邮箱已存在",
 			user: domain.User{
 				Email:    "duplicate@example.com",
 				Password: "password123",

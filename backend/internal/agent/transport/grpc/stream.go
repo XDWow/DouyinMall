@@ -48,11 +48,11 @@ func (w *StreamWriter) Send(ctx context.Context, event orchestratorstate.StreamE
 
 func normalizeStage(node string) string {
 	switch node {
-	case "CachePreCheckNode", "L0ExactCacheNode", "L1SemanticCacheNode":
+	case "CachePreCheckNode", "L0ExactCacheNode":
 		return "cache"
 	case "QueryRewriteNode", "IntentClassifyNode", "GlobalSlotExtractNode", "GlobalSlotCheckNode", "RouteNode", "PrepareSkillSelectInputNode", "SkillSelectNode", "ApplySkillSelectResultNode":
 		return "intent"
-	case "PrepareReturnPolicyRAGInputNode", "ReturnPolicyRAGNode", "ApplyReturnPolicyRAGResultNode", "PrepareProductRAGInputNode", "ProductRAGNode", "ApplyProductRAGResultNode", "PrepareFallbackRAGInputNode", "FallbackRAGNode", "ApplyFallbackRAGResultNode", "PrepareBaseQAInputNode", "BaseQAGraph", "ApplyBaseQAResultNode":
+	case "PrepareReturnPolicyInputNode", "ReturnPolicyGraph", "ApplyReturnPolicyResultNode", "PrepareBaseQAInputNode", "BaseQAGraph", "ApplyBaseQAResultNode":
 		return "retrieval"
 	case "PrepareOrderQueryInputNode", "OrderQueryGraph", "ApplyOrderQueryResultNode", "PrepareInventoryInputNode", "InventoryGraph", "ApplyInventoryResultNode", "PrepareProductInfoInputNode", "ProductInfoGraph", "ApplyProductInfoResultNode", "PrepareAddToCartInputNode", "AddToCartGraph", "ApplyAddToCartResultNode", "PrepareReturnExchangeInputNode", "ReturnExchangeGraph", "ApplyReturnExchangeResultNode":
 		return "tool"

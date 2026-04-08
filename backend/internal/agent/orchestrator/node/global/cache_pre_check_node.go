@@ -41,9 +41,6 @@ func (n *CachePreCheckNode) Invoke(_ context.Context, input CachePreCheckInput) 
 	}
 
 	return &CachePreCheckResult{
-		AllowExact:    allowExactCache(intent, message),
-		AllowSemantic: true,
-		IntentBucket:  cacheIntentBucket(intent),
-		Scope:         cacheScopeForIntent(intent),
+		AllowExact: allowExactCache(intent, message),
 	}, nil
 }

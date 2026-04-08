@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	ErrTokenExpired = errors.New("token宸茶繃鏈?)
-	ErrTokenInvalid = errors.New("token鏃犳晥")
+	ErrTokenExpired = errors.New("token expired")
+	ErrTokenInvalid = errors.New("token invalid")
 )
 
 type TokenType string
@@ -41,7 +41,6 @@ func NewJWTManager(accessSecret, refreshSecret string, accessExpiry, refreshExpi
 	}
 }
 
-// GenerateTokenPair 鐢熸垚 access token 鍜?refresh token
 func (m *JWTManager) GenerateTokenPair(userID int64) (accessToken, refreshToken string, err error) {
 	accessToken, err = m.generateToken(userID, AccessToken, m.accessSecret, m.accessExpiry)
 	if err != nil {
@@ -71,12 +70,10 @@ func (m *JWTManager) generateToken(userID int64, tokenType TokenType, secret []b
 	return token.SignedString(secret)
 }
 
-// ParseAccessToken 瑙ｆ瀽 access token
 func (m *JWTManager) ParseAccessToken(tokenString string) (*Claims, error) {
 	return m.parseToken(tokenString, m.accessSecret, AccessToken)
 }
 
-// ParseRefreshToken 瑙ｆ瀽 refresh token
 func (m *JWTManager) ParseRefreshToken(tokenString string) (*Claims, error) {
 	return m.parseToken(tokenString, m.refreshSecret, RefreshToken)
 }
@@ -85,7 +82,6 @@ func (m *JWTManager) parseToken(tokenString string, secret []byte, expectedType 
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return secret, nil
 	})
-
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrTokenExpired
@@ -97,22 +93,16 @@ func (m *JWTManager) parseToken(tokenString string, secret []byte, expectedType 
 	if !ok || !token.Valid {
 		return nil, ErrTokenInvalid
 	}
-
 	if claims.TokenType != expectedType {
 		return nil, ErrTokenInvalid
 	}
-
 	return claims, nil
 }
 
-// RefreshAccessToken 浣跨敤 refresh token 鍒锋柊 access token
 func (m *JWTManager) RefreshAccessToken(refreshTokenString string) (newAccessToken, newRefreshToken string, err error) {
 	claims, err := m.ParseRefreshToken(refreshTokenString)
 	if err != nil {
 		return "", "", err
 	}
-
 	return m.GenerateTokenPair(claims.UserID)
 }
-
-

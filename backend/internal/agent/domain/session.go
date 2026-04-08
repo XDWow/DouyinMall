@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/cloudwego/eino/schema"
+)
 
 type Message struct {
 	ID         string
@@ -18,10 +22,10 @@ type Session struct {
 	Status      SessionStatus
 	LastMessage string
 	TotalTurns  int
-	// Slots 保存会话级槽位，供多轮对话持续复用。
-	Slots     map[string]any
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Slots       map[string]any
+	RecentMessages []*schema.Message
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type KnowledgeRef struct {

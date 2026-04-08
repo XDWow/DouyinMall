@@ -1,4 +1,4 @@
-package fallback
+package returnpolicy
 
 import (
 	"context"
@@ -7,13 +7,11 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	fallbacknode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/fallback"
 	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-// Input 描述兜底子图的入口。
 type Input struct {
 	TenantID     string
 	UserID       int64
@@ -21,12 +19,10 @@ type Input struct {
 	TraceID      string
 	CheckpointID string
 	RawQuery     string
-	Intent       string
 	History      []*schema.Message
-	FinalAnswer  string
+	Intent       string
 }
 
-// Output 描述兜底子图的出口。
 type Output struct {
 	CacheHit    bool
 	HitLevel    string
@@ -36,19 +32,15 @@ type Output struct {
 	Documents   []*schema.Document
 }
 
-// Build 组装兜底子图。
-// 它会优先尝试知识库检索；如果没有形成明确回答，再走兜底文案生成。
-func Build(
-	_ context.Context,
-	ragNode *ragnode.RAGNode,
-	baseQANode *fallbacknode.BaseQANode,
-	l1Cache *globalnode.L1SemanticCacheNode,
-) (compose.AnyGraph, error) {
+func Build(_ context.Context, ragNode *ragnode.RAGNode, l1Cache *globalnode.L1SemanticCacheNode) (compose.AnyGraph, error) {
+	if ragNode == nil && l1Cache == nil {
+		return nil, nil
+	}
+
 	g := compose.NewGraph[Input, Output]()
-	if err := g.AddLambdaNode("ExecuteBaseQAFlowNode", compose.InvokableLambda(
+	if err := g.AddLambdaNode("ExecuteReturnPolicyFlowNode", compose.InvokableLambda(
 		func(ctx context.Context, input Input) (Output, error) {
-			out := Output{FinalAnswer: input.FinalAnswer}
-			policy := globalnode.ResolveSemanticCachePolicy(orchestratorstate.RouteBaseQA, input.RawQuery)
+			policy := globalnode.ResolveSemanticCachePolicy(orchestratorstate.RouteReturnPolicy, input.RawQuery)
 			if policy.AllowRead && l1Cache != nil {
 				cacheResult, cacheErr := l1Cache.Invoke(ctx, globalnode.L1SemanticCacheInput{
 					TenantID:     input.TenantID,
@@ -74,41 +66,31 @@ func Build(
 				}
 			}
 
-			if ragNode != nil {
-				ragResult, err := ragNode.Invoke(ctx, ragnode.Input{
-					Message: input.RawQuery,
-					History: append([]*schema.Message(nil), input.History...),
-					Intent:  input.Intent,
-				})
-				if err != nil {
-					return Output{}, err
-				}
-				if ragResult != nil {
-					out.Query = ragResult.Query
-					out.Documents = append([]*schema.Document(nil), ragResult.Documents...)
-				}
+			out := Output{}
+			if ragNode == nil {
+				return out, nil
 			}
 
-			if baseQANode != nil {
-				result, err := baseQANode.Invoke(ctx, fallbacknode.BaseQAInput{
-					FinalAnswer: out.FinalAnswer,
-					Documents:   append([]*schema.Document(nil), out.Documents...),
-				})
-				if err != nil {
-					return Output{}, err
-				}
-				if result != nil {
-					out.FinalAnswer = result.FinalAnswer
-				}
+			ragResult, ragErr := ragNode.Invoke(ctx, ragnode.Input{
+				Message: input.RawQuery,
+				History: append([]*schema.Message(nil), input.History...),
+				Intent:  input.Intent,
+			})
+			if ragErr != nil {
+				return Output{}, ragErr
+			}
+			if ragResult != nil {
+				out.Query = ragResult.Query
+				out.Documents = append([]*schema.Document(nil), ragResult.Documents...)
 			}
 			return out, nil
-		}), compose.WithNodeName("ExecuteBaseQAFlowNode")); err != nil {
+		}), compose.WithNodeName("ExecuteReturnPolicyFlowNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge(compose.START, "ExecuteBaseQAFlowNode"); err != nil {
+	if err := g.AddEdge(compose.START, "ExecuteReturnPolicyFlowNode"); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge("ExecuteBaseQAFlowNode", compose.END); err != nil {
+	if err := g.AddEdge("ExecuteReturnPolicyFlowNode", compose.END); err != nil {
 		return nil, err
 	}
 	return g, nil

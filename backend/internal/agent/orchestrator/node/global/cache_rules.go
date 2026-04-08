@@ -5,9 +5,16 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
+	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 const cacheHitExact = "exact"
+
+type SemanticCachePolicy struct {
+	AllowRead    bool
+	IntentBucket string
+	Scope        cache.CacheScope
+}
 
 func detectCacheIntent(message string) domain.Intent {
 	msg := normalizeCacheQuery(message)
@@ -41,6 +48,42 @@ func cacheIntentBucket(intent domain.Intent) string {
 		return string(domain.IntentProductInfo)
 	default:
 		return string(domain.IntentFallback)
+	}
+}
+
+func ResolveSemanticCachePolicy(route graphstate.WorkflowRoute, message string) SemanticCachePolicy {
+	msg := normalizeCacheQuery(message)
+	if msg == "" {
+		return SemanticCachePolicy{}
+	}
+
+	switch route {
+	case graphstate.RouteReturnPolicy:
+		return SemanticCachePolicy{
+			AllowRead:    true,
+			IntentBucket: cacheIntentBucket(domain.IntentReturnPolicy),
+			Scope:        cacheScopeForIntent(domain.IntentReturnPolicy),
+		}
+	case graphstate.RouteProductInfo:
+		if !isStableProductKnowledgeQuery(msg) {
+			return SemanticCachePolicy{}
+		}
+		return SemanticCachePolicy{
+			AllowRead:    true,
+			IntentBucket: cacheIntentBucket(domain.IntentProductInfo),
+			Scope:        cacheScopeForIntent(domain.IntentProductInfo),
+		}
+	case graphstate.RouteBaseQA:
+		if isBaseQADynamicQuery(msg) {
+			return SemanticCachePolicy{}
+		}
+		return SemanticCachePolicy{
+			AllowRead:    true,
+			IntentBucket: cacheIntentBucket(domain.IntentFallback),
+			Scope:        cache.CacheScopeTenantPublic,
+		}
+	default:
+		return SemanticCachePolicy{}
 	}
 }
 
@@ -146,6 +189,22 @@ func isDynamicOrActionQuery(message string) bool {
 		"补货", "还能买", "能买吗", "卖完了吗",
 		"提交申请", "发起申请", "取消订单", "改地址", "修改地址",
 		"trackorder", "orderstatus", "shipmentstatus",
+	)
+}
+
+func isBaseQADynamicQuery(message string) bool {
+	if isAddToCartQuery(message) || isInventoryQuery(message) || isAfterSaleApplyQuery(message) {
+		return true
+	}
+
+	return containsAny(message,
+		"查询订单", "查一下订单", "查下订单",
+		"查询物流", "查一下物流", "查下物流",
+		"看物流", "看一下物流", "看下物流",
+		"订单状态", "物流状态", "发货了吗",
+		"当前状态", "进度", "什么时候发货", "什么时候到",
+		"取消订单", "改地址", "修改地址",
+		"checkorder", "trackorder", "orderstatus", "shipmentstatus",
 	)
 }
 

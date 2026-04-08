@@ -113,7 +113,7 @@ type Dependencies struct {
 	ExactCache      cache.ExactCache
 	SemanticCache   cache.SemanticCache
 	RateLimiter     cache.RateLimiter
-	CheckpointStore cache.CheckpointStore
+	CheckpointStore compose.CheckPointStore
 	Prompts         *PromptSet
 	Logger          logger.LoggerV1
 	Metrics         *Metrics
@@ -132,7 +132,7 @@ type Runtime struct {
 	exactCache      cache.ExactCache
 	semanticCache   cache.SemanticCache
 	rateLimiter     cache.RateLimiter
-	checkpointStore cache.CheckpointStore
+	checkpointStore compose.CheckPointStore
 	prompts         *PromptSet
 	logger          logger.LoggerV1
 	metrics         *Metrics

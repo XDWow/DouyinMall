@@ -6,25 +6,36 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	productnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/product"
+	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
+	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
 // Input 描述商品咨询子图的入口。
 type Input struct {
-	Slots    map[string]any
-	RawQuery string
-	History  []*schema.Message
-	Intent   string
-	Recorder *agenttool.SafeExecutionRecorder
+	TenantID     string
+	UserID       int64
+	SessionID    string
+	TraceID      string
+	CheckpointID string
+	Slots        map[string]any
+	RawQuery     string
+	History      []*schema.Message
+	Intent       string
+	Recorder     *agenttool.SafeExecutionRecorder
 }
 
 // Output 描述商品咨询子图的出口。
 type Output struct {
+	CacheHit      bool
+	HitLevel      string
+	Response      *domain.ChatResult
 	FinalAnswer   string
 	NeedHandoff   bool
 	HandoffReason string
@@ -36,7 +47,13 @@ type Output struct {
 
 // Build 组装商品咨询子图。
 // 这段流程会先走商品工具查询，再按需要补一段知识库检索。
-func Build(_ context.Context, registry *agenttool.Registry, productNode *productnode.ProductInfoNode, ragNode *ragnode.RAGNode) (compose.AnyGraph, error) {
+func Build(
+	_ context.Context,
+	registry *agenttool.Registry,
+	productNode *productnode.ProductInfoNode,
+	ragNode *ragnode.RAGNode,
+	l1Cache *globalnode.L1SemanticCacheNode,
+) (compose.AnyGraph, error) {
 	if productNode == nil {
 		return nil, nil
 	}
@@ -48,6 +65,32 @@ func Build(_ context.Context, registry *agenttool.Registry, productNode *product
 			slots := cloneSlots(input.Slots)
 			if slots == nil {
 				slots = map[string]any{}
+			}
+
+			policy := globalnode.ResolveSemanticCachePolicy(orchestratorstate.RouteProductInfo, input.RawQuery)
+			if policy.AllowRead && l1Cache != nil {
+				cacheResult, cacheErr := l1Cache.Invoke(ctx, globalnode.L1SemanticCacheInput{
+					TenantID:     input.TenantID,
+					UserID:       input.UserID,
+					Query:        input.RawQuery,
+					SessionID:    input.SessionID,
+					TraceID:      input.TraceID,
+					CheckpointID: input.CheckpointID,
+					IntentBucket: policy.IntentBucket,
+					Scope:        policy.Scope,
+					AllowRead:    true,
+				})
+				if cacheErr != nil {
+					return Output{}, cacheErr
+				}
+				if cacheResult != nil && cacheResult.CacheHit {
+					return Output{
+						CacheHit:    true,
+						HitLevel:    cacheResult.HitLevel,
+						Response:    cacheResult.Response,
+						FinalAnswer: cacheResult.FinalAnswer,
+					}, nil
+				}
 			}
 
 			result, err := productNode.Invoke(ctx, productnode.ProductInfoInput{

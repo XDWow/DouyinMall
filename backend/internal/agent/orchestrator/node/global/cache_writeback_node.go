@@ -57,11 +57,7 @@ func (n *CacheWritebackService) Write(ctx context.Context, state *graphstate.Sta
 	}
 
 	cacheIntent := n.cacheIntent(state, resp)
-	if !n.shouldWritebackCache(state, cacheIntent) {
-		return nil
-	}
-
-	if n.ExactCache != nil && n.ExactCacheTTL > 0 {
+	if n.ExactCache != nil && n.ExactCacheTTL > 0 && n.shouldWriteExactCache(state, cacheIntent) {
 		_ = n.ExactCache.Store(ctx, &cache.ExactCacheItem{
 			TenantID: state.Session.TenantID,
 			UserID:   state.Request.UserID,
@@ -70,20 +66,20 @@ func (n *CacheWritebackService) Write(ctx context.Context, state *graphstate.Sta
 		}, n.ExactCacheTTL)
 	}
 
-	if n.SemanticCache != nil && n.Embedder != nil && n.SemanticCacheTTL > 0 {
+	policy := ResolveSemanticCachePolicy(state.Session.Route, state.Session.RawQuery)
+	if n.SemanticCache != nil && n.Embedder != nil && n.SemanticCacheTTL > 0 && n.shouldWriteSemanticCache(state, policy) {
 		query := strings.TrimSpace(firstNonEmpty(state.Rewrite.Query, state.Session.RawQuery))
 		if query != "" {
 			if vector, err := n.embedQuery(ctx, query); err == nil && len(vector) > 0 {
-				scope := cacheScopeForIntent(cacheIntent)
 				userID := int64(0)
-				if scope == cache.CacheScopeTenantUser {
+				if policy.Scope == cache.CacheScopeTenantUser {
 					userID = state.Request.UserID
 				}
 				_ = n.SemanticCache.Store(ctx, &cache.SemanticCacheItem{
 					TenantID:     state.Session.TenantID,
 					UserID:       userID,
-					IntentBucket: cacheIntentBucket(cacheIntent),
-					Scope:        scope,
+					IntentBucket: policy.IntentBucket,
+					Scope:        policy.Scope,
 					Query:        query,
 					Response:     *resp,
 					Vector:       vector,
@@ -105,7 +101,7 @@ func (n *CacheWritebackService) cacheIntent(state *graphstate.State, resp *domai
 	return detectCacheIntent(state.Session.RawQuery)
 }
 
-func (n *CacheWritebackService) shouldWritebackCache(state *graphstate.State, intent domain.Intent) bool {
+func (n *CacheWritebackService) shouldWriteExactCache(state *graphstate.State, intent domain.Intent) bool {
 	if state != nil && state.Answer.CacheableHint != nil && !*state.Answer.CacheableHint {
 		return false
 	}
@@ -118,6 +114,24 @@ func (n *CacheWritebackService) shouldWritebackCache(state *graphstate.State, in
 		return msg != "" && isStableProductKnowledgeQuery(msg) && !hasDynamicCacheTool(state)
 	default:
 		return false
+	}
+}
+
+func (n *CacheWritebackService) shouldWriteSemanticCache(state *graphstate.State, policy SemanticCachePolicy) bool {
+	if !policy.AllowRead {
+		return false
+	}
+	if state != nil && state.Answer.CacheableHint != nil && !*state.Answer.CacheableHint {
+		return false
+	}
+
+	switch state.Session.Route {
+	case graphstate.RouteProductInfo:
+		return !hasDynamicCacheTool(state)
+	case graphstate.RouteBaseQA:
+		return len(state.Retrieval.Documents) > 0
+	default:
+		return true
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	aftersalenode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/aftersale"
 	cartnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/cart"
@@ -25,6 +24,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/orderquery"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/productinfo"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/returnexchange"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/returnpolicy"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
@@ -35,7 +35,7 @@ type Config struct {
 
 type Builder struct {
 	Config          Config
-	CheckpointStore cache.CheckpointStore
+	CheckpointStore compose.CheckPointStore
 
 	Registry *agenttool.Registry
 
@@ -201,37 +201,6 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 		return err
 	}
 
-	if err := g.AddLambdaNode("L1SemanticCacheNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
-			if b.L1SemanticCache == nil {
-				return state, nil
-			}
-			result, err := b.L1SemanticCache.Invoke(ctx, globalnode.L1SemanticCacheInput{
-				TenantID:     state.Session.TenantID,
-				UserID:       state.Request.UserID,
-				Query:        state.Session.RawQuery,
-				SessionID:    state.Request.SessionID,
-				TraceID:      state.TraceID,
-				CheckpointID: state.Checkpoint,
-				IntentBucket: state.Cache.IntentBucket,
-				Scope:        cache.CacheScope(state.Cache.Scope),
-				AllowRead:    state.Cache.AllowSemantic,
-			})
-			if err != nil {
-				return nil, err
-			}
-			if result.CacheHit {
-				state.Response = result.Response
-				state.Session.CacheHitLevel = result.HitLevel
-				state.Session.FinalAnswer = result.FinalAnswer
-				state.Session.Intent = result.Intent
-				state.Session.Route = result.Route
-			}
-			return state, nil
-		}), compose.WithNodeName("L1SemanticCacheNode")); err != nil {
-		return err
-	}
-
 	if b.QueryRewrite != nil {
 		if err := g.AddLambdaNode("QueryRewriteNode", compose.InvokableLambda(b.QueryRewrite.Invoke), compose.WithNodeName("QueryRewriteNode")); err != nil {
 			return err
@@ -244,35 +213,41 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 		}
 	}
 
-	if err := g.AddLambdaNode("PrepareReturnPolicyRAGInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.State) (orchestratorragnode.Input, error) {
+	if err := g.AddLambdaNode("PrepareReturnPolicyInputNode", compose.InvokableLambda(
+		func(_ context.Context, state *orchestratorstate.State) (returnpolicy.Input, error) {
 			if state == nil {
-				return orchestratorragnode.Input{}, fmt.Errorf("state is nil")
+				return returnpolicy.Input{}, fmt.Errorf("state is nil")
 			}
-			return orchestratorragnode.Input{
-				Message: state.Session.RawQuery,
-				History: append([]*schema.Message(nil), state.Session.Messages...),
-				Intent:  string(state.Session.Intent),
+			return returnpolicy.Input{
+				TenantID:     state.Session.TenantID,
+				UserID:       state.Request.UserID,
+				SessionID:    state.Request.SessionID,
+				TraceID:      state.TraceID,
+				CheckpointID: state.Checkpoint,
+				RawQuery:     state.Session.RawQuery,
+				History:      append([]*schema.Message(nil), state.Session.Messages...),
+				Intent:       string(state.Session.Intent),
 			}, nil
-		}), compose.WithNodeName("PrepareReturnPolicyRAGInputNode")); err != nil {
+		}), compose.WithNodeName("PrepareReturnPolicyInputNode")); err != nil {
 		return err
 	}
 
-	if b.RAG != nil {
-		if err := g.AddLambdaNode("ReturnPolicyRAGNode", compose.InvokableLambda(b.RAG.Invoke), compose.WithNodeName("ReturnPolicyRAGNode")); err != nil {
-			return err
-		}
-	}
-
-	if err := g.AddLambdaNode("ApplyReturnPolicyRAGResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result *orchestratorragnode.Result) (*orchestratorstate.State, error) {
+	if err := g.AddLambdaNode("ApplyReturnPolicyResultNode", compose.InvokableLambda(
+		func(ctx context.Context, result returnpolicy.Output) (*orchestratorstate.State, error) {
 			var current *orchestratorstate.State
 			if err := orchestratorstate.ProcessState(ctx, func(state *orchestratorstate.State) error {
 				if state == nil {
 					return fmt.Errorf("state is nil")
 				}
 				current = state
-				if result == nil {
+				if result.CacheHit {
+					state.Response = result.Response
+					state.Session.CacheHitLevel = result.HitLevel
+					state.Session.FinalAnswer = result.FinalAnswer
+					if result.Response != nil {
+						state.Session.Intent = result.Response.Intent
+					}
+					state.Session.Route = orchestratorstate.RouteReturnPolicy
 					return nil
 				}
 				state.Rewrite.Query = result.Query
@@ -287,7 +262,7 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				return nil, fmt.Errorf("state is nil")
 			}
 			return current, nil
-		}), compose.WithNodeName("ApplyReturnPolicyRAGResultNode")); err != nil {
+		}), compose.WithNodeName("ApplyReturnPolicyResultNode")); err != nil {
 		return err
 	}
 
@@ -348,11 +323,16 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				return productinfo.Input{}, fmt.Errorf("state is nil")
 			}
 			return productinfo.Input{
-				Slots:    cloneSlots(state.Session.Slots),
-				RawQuery: state.Session.RawQuery,
-				History:  append([]*schema.Message(nil), state.Session.Messages...),
-				Intent:   string(state.Session.Intent),
-				Recorder: state.Recorder,
+				TenantID:     state.Session.TenantID,
+				UserID:       state.Request.UserID,
+				SessionID:    state.Request.SessionID,
+				TraceID:      state.TraceID,
+				CheckpointID: state.Checkpoint,
+				Slots:        cloneSlots(state.Session.Slots),
+				RawQuery:     state.Session.RawQuery,
+				History:      append([]*schema.Message(nil), state.Session.Messages...),
+				Intent:       string(state.Session.Intent),
+				Recorder:     state.Recorder,
 			}, nil
 		}), compose.WithNodeName("PrepareProductInfoInputNode")); err != nil {
 		return err
@@ -365,6 +345,16 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 					return fmt.Errorf("state is nil")
 				}
 				current = state
+				if result.CacheHit {
+					state.Response = result.Response
+					state.Session.CacheHitLevel = result.HitLevel
+					state.Session.FinalAnswer = result.FinalAnswer
+					if result.Response != nil {
+						state.Session.Intent = result.Response.Intent
+					}
+					state.Session.Route = orchestratorstate.RouteProductInfo
+					return nil
+				}
 				state.Session.FinalAnswer = result.FinalAnswer
 				state.Session.NeedHandoff = result.NeedHandoff
 				state.Session.HandoffReason = result.HandoffReason
@@ -447,10 +437,15 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				return baseqa.Input{}, fmt.Errorf("state is nil")
 			}
 			return baseqa.Input{
-				RawQuery:    state.Session.RawQuery,
-				Intent:      string(state.Session.Intent),
-				History:     append([]*schema.Message(nil), state.Session.Messages...),
-				FinalAnswer: state.Session.FinalAnswer,
+				TenantID:     state.Session.TenantID,
+				UserID:       state.Request.UserID,
+				SessionID:    state.Request.SessionID,
+				TraceID:      state.TraceID,
+				CheckpointID: state.Checkpoint,
+				RawQuery:     state.Session.RawQuery,
+				Intent:       string(state.Session.Intent),
+				History:      append([]*schema.Message(nil), state.Session.Messages...),
+				FinalAnswer:  state.Session.FinalAnswer,
 			}, nil
 		}), compose.WithNodeName("PrepareBaseQAInputNode")); err != nil {
 		return err
@@ -463,11 +458,21 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 					return fmt.Errorf("state is nil")
 				}
 				current = state
+				if result.CacheHit {
+					state.Response = result.Response
+					state.Session.CacheHitLevel = result.HitLevel
+					state.Session.FinalAnswer = result.FinalAnswer
+					if result.Response != nil {
+						state.Session.Intent = result.Response.Intent
+					}
+					state.Session.Route = orchestratorstate.RouteBaseQA
+					return nil
+				}
 				state.Session.FinalAnswer = result.FinalAnswer
 				state.Rewrite.Query = result.Query
 				state.Rewrite.Reason = ""
 				state.Retrieval.Documents = append([]*schema.Document(nil), result.Documents...)
-				state.Answer.CacheableHint = boolPtr(false)
+				state.Answer.CacheableHint = boolPtr(len(result.Documents) > 0)
 				return nil
 			}); err != nil {
 				return nil, err
@@ -600,12 +605,15 @@ func (b *Builder) addSubgraphs(ctx context.Context, g *compose.Graph[map[string]
 	subgraphs := []subgraphEntry{
 		{"OrderQueryGraph", func() (compose.AnyGraph, error) { return orderquery.Build(ctx, b.Registry, b.OrderRead) }},
 		{"InventoryGraph", func() (compose.AnyGraph, error) { return inventory.Build(ctx, b.Registry, b.InventoryRead) }},
-		{"ProductInfoGraph", func() (compose.AnyGraph, error) { return productinfo.Build(ctx, b.Registry, b.ProductInfo, b.RAG) }},
+		{"ProductInfoGraph", func() (compose.AnyGraph, error) {
+			return productinfo.Build(ctx, b.Registry, b.ProductInfo, b.RAG, b.L1SemanticCache)
+		}},
 		{"AddToCartGraph", func() (compose.AnyGraph, error) { return addtocart.Build(ctx, b.Registry, b.AddToCart) }},
+		{"ReturnPolicyGraph", func() (compose.AnyGraph, error) { return returnpolicy.Build(ctx, b.RAG, b.L1SemanticCache) }},
 		{"ReturnExchangeGraph", func() (compose.AnyGraph, error) {
 			return returnexchange.Build(ctx, b.Registry, b.ReturnExchangeQuery, b.EligibilityCheck, b.ConfirmSummary, b.SubmitAfterSale)
 		}},
-		{"BaseQAGraph", func() (compose.AnyGraph, error) { return baseqa.Build(ctx, b.RAG, b.BaseQA) }},
+		{"BaseQAGraph", func() (compose.AnyGraph, error) { return baseqa.Build(ctx, b.RAG, b.BaseQA, b.L1SemanticCache) }},
 	}
 
 	for _, entry := range subgraphs {
@@ -628,7 +636,6 @@ func (b *Builder) addEdges(g *compose.Graph[map[string]any, *orchestratorstate.S
 		{compose.START, "AccessGuardNode"},
 		{"SessionLoadNode", "CachePreCheckNode"},
 		{"CachePreCheckNode", "L0ExactCacheNode"},
-		{"L0ExactCacheNode", "L1SemanticCacheNode"},
 		{"QueryRewriteNode", "IntentClassifyNode"},
 		{"IntentClassifyNode", "GlobalSlotExtractNode"},
 		{"GlobalSlotExtractNode", "GlobalSlotCheckNode"},
@@ -648,9 +655,9 @@ func (b *Builder) addEdges(g *compose.Graph[map[string]any, *orchestratorstate.S
 		{"PrepareAddToCartInputNode", "AddToCartGraph"},
 		{"AddToCartGraph", "ApplyAddToCartResultNode"},
 		{"ApplyAddToCartResultNode", "FinalizeNode"},
-		{"PrepareReturnPolicyRAGInputNode", "ReturnPolicyRAGNode"},
-		{"ReturnPolicyRAGNode", "ApplyReturnPolicyRAGResultNode"},
-		{"ApplyReturnPolicyRAGResultNode", "FinalizeNode"},
+		{"PrepareReturnPolicyInputNode", "ReturnPolicyGraph"},
+		{"ReturnPolicyGraph", "ApplyReturnPolicyResultNode"},
+		{"ApplyReturnPolicyResultNode", "FinalizeNode"},
 		{"PrepareReturnExchangeInputNode", "ReturnExchangeGraph"},
 		{"ReturnExchangeGraph", "ApplyReturnExchangeResultNode"},
 		{"ApplyReturnExchangeResultNode", "FinalizeNode"},
@@ -686,23 +693,6 @@ func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstat
 	}
 
 	if err := g.AddBranch("L0ExactCacheNode", compose.NewGraphBranch(
-		func(ctx context.Context, _ *orchestratorstate.State) (string, error) {
-			var state *orchestratorstate.State
-			_ = compose.ProcessState(ctx, func(_ context.Context, current *orchestratorstate.State) error {
-				state = current
-				return nil
-			})
-			if state != nil && state.Session.CacheHitLevel != "" {
-				return "FinalizeNode", nil
-			}
-			return "L1SemanticCacheNode", nil
-		},
-		map[string]bool{"FinalizeNode": true, "L1SemanticCacheNode": true},
-	)); err != nil {
-		return err
-	}
-
-	if err := g.AddBranch("L1SemanticCacheNode", compose.NewGraphBranch(
 		func(ctx context.Context, _ *orchestratorstate.State) (string, error) {
 			var state *orchestratorstate.State
 			_ = compose.ProcessState(ctx, func(_ context.Context, current *orchestratorstate.State) error {
@@ -782,7 +772,7 @@ func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstat
 			case orchestratorstate.RouteAddToCart:
 				return "PrepareAddToCartInputNode", nil
 			case orchestratorstate.RouteReturnPolicy:
-				return "PrepareReturnPolicyRAGInputNode", nil
+				return "PrepareReturnPolicyInputNode", nil
 			case orchestratorstate.RouteReturnExchangeApply:
 				return "PrepareReturnExchangeInputNode", nil
 			default:
@@ -790,13 +780,13 @@ func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstat
 			}
 		},
 		map[string]bool{
-			"PrepareOrderQueryInputNode":      true,
-			"PrepareInventoryInputNode":       true,
-			"PrepareProductInfoInputNode":     true,
-			"PrepareAddToCartInputNode":       true,
-			"PrepareReturnPolicyRAGInputNode": true,
-			"PrepareReturnExchangeInputNode":  true,
-			"PrepareBaseQAInputNode":          true,
+			"PrepareOrderQueryInputNode":     true,
+			"PrepareInventoryInputNode":      true,
+			"PrepareProductInfoInputNode":    true,
+			"PrepareAddToCartInputNode":      true,
+			"PrepareReturnPolicyInputNode":   true,
+			"PrepareReturnExchangeInputNode": true,
+			"PrepareBaseQAInputNode":         true,
 		},
 	)); err != nil {
 		return err

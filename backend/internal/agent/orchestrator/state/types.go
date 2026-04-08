@@ -102,6 +102,7 @@ type IntentResult struct {
 	Confidence  float64           `json:"confidence"`
 	Entities    map[string]string `json:"entities,omitempty"`
 	NeedRewrite bool              `json:"need_rewrite"`
+	NeedHandoff bool              `json:"need_handoff"`
 	Reason      string            `json:"reason,omitempty"`
 }
 
@@ -140,6 +141,8 @@ type AnswerResult struct {
 	Source        string  `json:"source,omitempty"`
 	CacheableHint *bool   `json:"cacheable_hint,omitempty"`
 	Streamed      bool    `json:"streamed,omitempty"`
+	NeedHandoff   bool    `json:"need_handoff"`
+	HandoffReason string  `json:"handoff_reason,omitempty"`
 }
 
 type InterruptState struct {

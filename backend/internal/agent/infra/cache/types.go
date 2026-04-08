@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cloudwego/eino/compose"
-
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
 
@@ -65,8 +63,4 @@ type ExactCache interface {
 
 type RateLimiter interface {
 	AllowUser(ctx context.Context, userID int64, limit int64, window time.Duration) (bool, error)
-}
-
-type CheckpointStore interface {
-	compose.CheckPointStore
 }

@@ -17,6 +17,7 @@ import (
 	agentsession "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 	"github.com/cloudwego/eino/components/embedding"
 	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/compose"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -33,7 +34,7 @@ type Components struct {
 	ExactCache      agentcache.ExactCache
 	SemanticCache   agentcache.SemanticCache
 	RateLimiter     agentcache.RateLimiter
-	CheckpointStore agentcache.CheckpointStore
+	CheckpointStore compose.CheckPointStore
 	Prompts         *agentprompt.Set
 	Metrics         *orchestrator.Metrics
 }

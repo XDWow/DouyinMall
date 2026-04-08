@@ -21,19 +21,17 @@ type persistentRoundWriter interface {
 	SaveRoundPersistent(ctx context.Context, session domain.Session, userMessage domain.Message, assistantMessage domain.Message) error
 }
 
-// Service 是会话领域的应用服务，负责会话装载、窗口裁剪和会话轮次写入。
+// Service is the session application service. It loads conversation context,
+// trims recent history, and persists completed turns.
 type Service struct {
-	repo domainrepo.SessionRepository
-	// maxTurns 控制注入给模型的最近对话窗口。
+	repo     domainrepo.SessionRepository
 	maxTurns int
 }
 
-// NewService 创建 SessionService。maxTurns<=0 表示不裁剪对话窗口。
 func NewService(repo domainrepo.SessionRepository, maxTurns int) *Service {
 	return &Service{repo: repo, maxTurns: maxTurns}
 }
 
-// LoadSession 加载会话元信息和完整消息历史。
 func (s *Service) LoadSession(ctx context.Context, sessionID string) (*domain.Session, []domain.Message, error) {
 	if s == nil || s.repo == nil {
 		return nil, nil, nil
@@ -41,23 +39,31 @@ func (s *Service) LoadSession(ctx context.Context, sessionID string) (*domain.Se
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, nil, fmt.Errorf("session_id is required")
 	}
-	return s.repo.Load(ctx, sessionID)
+
+	meta, messages, err := s.repo.Load(ctx, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if meta == nil {
+		return nil, nil, nil
+	}
+
+	meta.RecentMessages = MessagesToSchema(WindowMessages(messages, s.maxTurns))
+	return meta, messages, nil
 }
 
-// CreateSession 创建新的会话记录。
 func (s *Service) CreateSession(ctx context.Context, session domain.Session) error {
 	if s == nil || s.repo == nil {
 		return nil
 	}
+	session.RecentMessages = nil
 	return s.repo.Create(ctx, session)
 }
 
-// RecentSchemaMessages 返回裁剪后的最近对话窗口，并转换成 eino 消息。
 func (s *Service) RecentSchemaMessages(messages []domain.Message) []*schema.Message {
 	return MessagesToSchema(WindowMessages(messages, s.maxTurns))
 }
 
-// SaveTurn 持久化一轮 user/assistant 对话。
 func (s *Service) SaveTurn(
 	ctx context.Context,
 	session domain.Session,
@@ -96,7 +102,6 @@ func (s *Service) SaveTurnPersistent(
 	return s.repo.SaveRound(ctx, session, userMsg, assistantMsg)
 }
 
-// AllMessages 返回完整消息历史。
 func (s *Service) AllMessages(ctx context.Context, sessionID string) ([]domain.Message, error) {
 	if s == nil || s.repo == nil {
 		return nil, nil
@@ -107,7 +112,6 @@ func (s *Service) AllMessages(ctx context.Context, sessionID string) ([]domain.M
 	return s.repo.LoadAllMessages(ctx, sessionID)
 }
 
-// ListSessions 返回用户的会话列表。
 func (s *Service) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
 	if s == nil || s.repo == nil {
 		return nil, 0, nil
@@ -115,7 +119,6 @@ func (s *Service) ListSessions(ctx context.Context, userID int64, limit, offset 
 	return s.repo.ListByUser(ctx, userID, limit, offset)
 }
 
-// Clear 清理会话及其消息。
 func (s *Service) Clear(ctx context.Context, sessionID string) error {
 	if s == nil || s.repo == nil {
 		return nil
@@ -126,7 +129,6 @@ func (s *Service) Clear(ctx context.Context, sessionID string) error {
 	return s.repo.Clear(ctx, sessionID)
 }
 
-// NewUserMessage 构造用户侧消息。
 func NewUserMessage(sessionID, content string) domain.Message {
 	return domain.Message{
 		ID:        uuid.NewString(),
@@ -137,7 +139,6 @@ func NewUserMessage(sessionID, content string) domain.Message {
 	}
 }
 
-// NewAssistantMessage 构造助手侧消息。
 func NewAssistantMessage(sessionID, content string, intent domain.Intent, confidence float64) domain.Message {
 	return domain.Message{
 		ID:         uuid.NewString(),
@@ -150,7 +151,6 @@ func NewAssistantMessage(sessionID, content string, intent domain.Intent, confid
 	}
 }
 
-// Truncate 将文本裁剪到指定长度。
 func Truncate(value string, limit int) string {
 	runes := []rune(value)
 	if len(runes) <= limit {
@@ -159,7 +159,6 @@ func Truncate(value string, limit int) string {
 	return string(runes[:limit]) + "..."
 }
 
-// WindowMessages 保留最近 maxTurns 轮对话。
 func WindowMessages(messages []domain.Message, maxTurns int) []domain.Message {
 	if maxTurns <= 0 || len(messages) == 0 {
 		return messages
@@ -171,7 +170,6 @@ func WindowMessages(messages []domain.Message, maxTurns int) []domain.Message {
 	return append([]domain.Message(nil), messages...)
 }
 
-// MessagesToSchema 将 domain 消息转换成 eino 消息。
 func MessagesToSchema(messages []domain.Message) []*schema.Message {
 	if len(messages) == 0 {
 		return nil
@@ -183,7 +181,6 @@ func MessagesToSchema(messages []domain.Message) []*schema.Message {
 	return out
 }
 
-// ToSchemaMessage 将单条 domain 消息转换成 eino 消息。
 func ToSchemaMessage(msg domain.Message) *schema.Message {
 	switch msg.Role {
 	case domain.RoleAssistant:
@@ -197,7 +194,6 @@ func ToSchemaMessage(msg domain.Message) *schema.Message {
 	}
 }
 
-// ToSchemaRole 将 domain 角色映射到 eino 角色。
 func ToSchemaRole(role domain.Role) schema.RoleType {
 	switch role {
 	case domain.RoleAssistant:

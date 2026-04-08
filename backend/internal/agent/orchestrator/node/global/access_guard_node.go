@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudwego/eino/compose"
+
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 )
 
@@ -19,10 +21,10 @@ type AccessGuardNode struct {
 	DefaultTenantID    string
 	RateLimitPerMinute int64
 	RateLimiter        cache.RateLimiter
-	CheckpointStore    cache.CheckpointStore
+	CheckpointStore    compose.CheckPointStore
 }
 
-func NewAccessGuardNode(defaultTenantID string, rateLimitPerMinute int64, rateLimiter cache.RateLimiter, checkpointStore cache.CheckpointStore) *AccessGuardNode {
+func NewAccessGuardNode(defaultTenantID string, rateLimitPerMinute int64, rateLimiter cache.RateLimiter, checkpointStore compose.CheckPointStore) *AccessGuardNode {
 	return &AccessGuardNode{
 		DefaultTenantID:    defaultTenantID,
 		RateLimitPerMinute: rateLimitPerMinute,

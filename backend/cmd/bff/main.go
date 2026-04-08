@@ -20,27 +20,26 @@ func main() {
 		if addr == "" {
 			addr = ":8080"
 		}
-		fmt.Printf("BFF HTTP 鏈嶅姟鍚姩鍦? %s\n", addr)
+		fmt.Printf("BFF HTTP server listening on %s\n", addr)
 		if err := app.Server.Start(); err != nil {
-			panic(fmt.Errorf("HTTP 鏈嶅姟鍚姩澶辫触: %w", err))
+			panic(fmt.Errorf("HTTP server exited with error: %w", err))
 		}
 	}()
 
-	// 浼橀泤閫€鍑?
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	fmt.Println("BFF 鏈嶅姟宸插叧闂?)
+	fmt.Println("BFF server stopped")
 }
 
 func initViper() {
-	cfile := pflag.String("config",
-		"internal/bff/config/dev.yaml", "閰嶇疆鏂囦欢璺緞")
+	configFile := pflag.String("config", "internal/bff/config/dev.yaml", "BFF config file path")
 	pflag.Parse()
-	viper.SetConfigFile(*cfile)
+
+	viper.SetConfigFile(*configFile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w", err))
+		panic(fmt.Errorf("read config failed: %w", err))
 	}
 
 	viper.AutomaticEnv()
@@ -48,5 +47,3 @@ func initViper() {
 	viper.BindEnv("http.addr", "HTTP_ADDR")
 	viper.BindEnv("jwt.access_secret", "JWT_ACCESS_SECRET")
 }
-
-

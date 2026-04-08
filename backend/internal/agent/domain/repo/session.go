@@ -15,4 +15,3 @@ type SessionRepository interface {
 	Clear(ctx context.Context, sessionID string) error
 	ListByUser(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error)
 }
-

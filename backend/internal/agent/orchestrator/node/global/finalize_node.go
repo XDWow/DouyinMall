@@ -91,7 +91,10 @@ func (n *FinalizeNode) Invoke(ctx context.Context, state *graphstate.State) (*gr
 
 	resp.Reply = reply
 	if resp.Intent == domain.IntentUnknown {
-		resp.Intent = state.Session.Intent
+		resp.Intent = state.Intent.Intent // Prioritize current turn's intent
+	}
+	if resp.Intent == domain.IntentUnknown {
+		resp.Intent = state.Session.Intent // Fallback to session's intent
 	}
 	resp.Confidence = confidence
 	if len(resp.References) == 0 {
@@ -101,10 +104,13 @@ func (n *FinalizeNode) Invoke(ctx context.Context, state *graphstate.State) (*gr
 		resp.ToolExecutions = state.ToolExecutions()
 	}
 	if !resp.NeedHandoff {
-		resp.NeedHandoff = state.Session.NeedHandoff
+		resp.NeedHandoff = state.Intent.NeedHandoff // Prioritize current turn's handoff decision
+	}
+	if !resp.NeedHandoff {
+		resp.NeedHandoff = state.Answer.NeedHandoff // Fallback to answer's handoff
 	}
 	if strings.TrimSpace(resp.HandoffReason) == "" {
-		resp.HandoffReason = state.Session.HandoffReason
+		resp.HandoffReason = state.Answer.HandoffReason
 	}
 	resp.Trace.TraceID = state.TraceID
 	resp.Trace.CheckpointID = state.Checkpoint

@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudwego/eino/components/embedding"
+	"github.com/cloudwego/eino/schema"
+
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
@@ -34,20 +37,14 @@ func TestCachePreCheckNodeInvoke(t *testing.T) {
 			wantSemantic: false,
 		},
 		{
-			name:         "stable return policy query can use both cache levels",
-			message:      "what is the return policy",
-			wantExact:    true,
-			wantSemantic: true,
-			wantBucket:   string(domain.IntentReturnPolicy),
-			wantScope:    cache.CacheScopeTenantPublic,
+			name:      "stable return policy query can use both cache levels",
+			message:   "what is the return policy",
+			wantExact: true,
 		},
 		{
-			name:         "stable product knowledge query can use both cache levels",
-			message:      "what material is this product made of",
-			wantExact:    true,
-			wantSemantic: true,
-			wantBucket:   string(domain.IntentProductInfo),
-			wantScope:    cache.CacheScopeTenantPublic,
+			name:      "stable product knowledge query can use both cache levels",
+			message:   "what material is this product made of",
+			wantExact: true,
 		},
 		{
 			name:         "price query is not treated as stable knowledge",
@@ -196,6 +193,49 @@ func TestCacheWritebackServiceRespectsCacheGate(t *testing.T) {
 			t.Fatalf("expected no cache writes, got %d", exact.storeCalls)
 		}
 	})
+
+	t.Run("base qa knowledge writes semantic cache without exact cache", func(t *testing.T) {
+		exact := &stubExactCache{}
+		semantic := &stubSemanticCache{}
+		writer := NewCacheWritebackService(exact, semantic, stubEmbedder{}, time.Minute, time.Minute, nil)
+		state := graphstate.NewState(domain.ChatCommand{
+			SessionID: "sess_baseqa_semantic",
+			UserID:    5,
+			Message:   "what are your shipping time rules",
+		}, nil, graphstate.InitOptions{})
+		state.Session.TenantID = "tenant_1"
+		state.Session.Intent = domain.IntentFallback
+		state.Session.Route = graphstate.RouteBaseQA
+		state.Session.ReadOnly = true
+		state.Answer.CacheableHint = testBoolPtr(true)
+		state.Retrieval.Documents = []*schema.Document{{ID: "doc_shipping"}}
+		state.Response = &domain.ChatResult{
+			SessionID:  state.Request.SessionID,
+			Reply:      "standard delivery usually takes 3 to 5 business days.",
+			Intent:     domain.IntentFallback,
+			Status:     domain.ReplyStatusAnswered,
+			Confidence: 0.91,
+		}
+
+		if err := writer.Write(context.Background(), state); err != nil {
+			t.Fatalf("Write() error = %v", err)
+		}
+		if exact.storeCalls != 0 {
+			t.Fatalf("expected no exact cache writes, got %d", exact.storeCalls)
+		}
+		if semantic.storeCalls != 1 {
+			t.Fatalf("expected one semantic cache write, got %d", semantic.storeCalls)
+		}
+		if semantic.lastItem == nil {
+			t.Fatal("expected stored semantic cache item")
+		}
+		if semantic.lastItem.IntentBucket != string(domain.IntentFallback) {
+			t.Fatalf("semantic cache bucket = %q", semantic.lastItem.IntentBucket)
+		}
+		if semantic.lastItem.Scope != cache.CacheScopeTenantPublic {
+			t.Fatalf("semantic cache scope = %q", semantic.lastItem.Scope)
+		}
+	})
 }
 
 type stubExactCache struct {
@@ -211,6 +251,27 @@ func (s *stubExactCache) Store(_ context.Context, item *cache.ExactCacheItem, _ 
 	s.storeCalls++
 	s.lastItem = item
 	return nil
+}
+
+type stubSemanticCache struct {
+	storeCalls int
+	lastItem   *cache.SemanticCacheItem
+}
+
+func (s *stubSemanticCache) Lookup(context.Context, cache.SemanticCacheLookup) (*cache.SemanticCacheItem, error) {
+	return nil, nil
+}
+
+func (s *stubSemanticCache) Store(_ context.Context, item *cache.SemanticCacheItem, _ time.Duration) error {
+	s.storeCalls++
+	s.lastItem = item
+	return nil
+}
+
+type stubEmbedder struct{}
+
+func (stubEmbedder) EmbedStrings(context.Context, []string, ...embedding.Option) ([][]float64, error) {
+	return [][]float64{{0.1, 0.2, 0.3}}, nil
 }
 
 func testBoolPtr(value bool) *bool {
