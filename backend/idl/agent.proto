@@ -30,6 +30,8 @@ message ChatRequest {
   string session_id = 1;
   int64  user_id    = 2;
   string message    = 3;
+  string resume_token = 4;
+  map<string,string> metadata = 5;
 }
 
 message ChatResponse {
@@ -37,6 +39,10 @@ message ChatResponse {
   IntentType            intent             = 2;  // 识别出的意图
   reserved               3;                      // 原 confidence 字段已移除（内部指标，由 Prometheus 记录，不对外暴露）
   reserved              "confidence";
+  string                session_id         = 8;
+  string                trace_id           = 9;
+  string                checkpoint_id      = 10;
+  repeated string       rerun_nodes        = 11;
   repeated KnowledgeRef knowledge          = 4;  // 命中的知识条目（透明可解释）
   repeated ToolExec     tool_execs         = 5;  // 本次触发的工具调用链（Phase 2）
   repeated string       suggested_questions = 6; // 主动推荐的关联问题（2~3 个）

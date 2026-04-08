@@ -7,7 +7,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
+	inventorynode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/inventory"
+	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 )
 
@@ -26,18 +27,18 @@ type Output struct {
 }
 
 // Build 组装库存查询子图。
-func Build(ctx context.Context, registry *agenttool.Registry, node *orchestratornode.InventoryReadNode) (compose.AnyGraph, error) {
+func Build(ctx context.Context, registry *agenttool.Registry, node *inventorynode.InventoryReadNode) (compose.AnyGraph, error) {
 	if node == nil {
 		return nil, nil
 	}
 
 	_ = ctx
-	toolExecNode := orchestratornode.NewToolExecNode(registry)
+	toolExecNode := sharednode.NewToolExecNode(registry)
 
 	g := compose.NewGraph[Input, Output]()
 	if err := g.AddLambdaNode("ExecuteInventoryFlowNode", compose.InvokableLambda(
 		func(ctx context.Context, input Input) (Output, error) {
-			result, err := node.Invoke(ctx, orchestratornode.InventoryReadInput{Slots: cloneSlots(input.Slots)})
+			result, err := node.Invoke(ctx, inventorynode.InventoryReadInput{Slots: cloneSlots(input.Slots)})
 			if err != nil {
 				return Output{}, err
 			}
@@ -56,7 +57,7 @@ func Build(ctx context.Context, registry *agenttool.Registry, node *orchestrator
 			if err != nil {
 				return Output{}, err
 			}
-			messages, err := toolExecNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+			messages, err := toolExecNode.Invoke(ctx, sharednode.ToolExecutionInput{
 				Plans:       result.Plans,
 				CallMessage: callMessage,
 				Mode:        agenttool.ToolExecutionSerial,

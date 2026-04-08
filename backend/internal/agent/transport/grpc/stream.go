@@ -48,17 +48,17 @@ func (w *StreamWriter) Send(ctx context.Context, event orchestratorstate.StreamE
 
 func normalizeStage(node string) string {
 	switch node {
-	case "CachePolicyNode", "MultiLevelCacheNode":
+	case "CachePreCheckNode", "L0ExactCacheNode", "L1SemanticCacheNode":
 		return "cache"
-	case "PrepareIntentClassifyInputNode", "IntentClassifyNode", "ApplyIntentClassifyResultNode":
+	case "QueryRewriteNode", "IntentClassifyNode", "GlobalSlotExtractNode", "GlobalSlotCheckNode", "RouteNode", "PrepareSkillSelectInputNode", "SkillSelectNode", "ApplySkillSelectResultNode":
 		return "intent"
-	case "PrepareReturnPolicyRAGInputNode", "ReturnPolicyRAGNode", "ApplyReturnPolicyRAGResultNode", "PrepareProductRAGInputNode", "ProductRAGNode", "ApplyProductRAGResultNode", "PrepareFallbackRAGInputNode", "FallbackRAGNode", "ApplyFallbackRAGResultNode":
+	case "PrepareReturnPolicyRAGInputNode", "ReturnPolicyRAGNode", "ApplyReturnPolicyRAGResultNode", "PrepareProductRAGInputNode", "ProductRAGNode", "ApplyProductRAGResultNode", "PrepareFallbackRAGInputNode", "FallbackRAGNode", "ApplyFallbackRAGResultNode", "PrepareBaseQAInputNode", "BaseQAGraph", "ApplyBaseQAResultNode":
 		return "retrieval"
-	case "CallOrderServiceNode", "CallInventoryServiceNode", "CallProductServiceNode", "CallReturnOrderServiceNode", "CallAfterSaleServiceNode", "PrepareSerialToolMessageNode", "PrepareParallelReadonlyToolMessageNode", "ToolsNode", "ApplyToolMessagesNode":
+	case "PrepareOrderQueryInputNode", "OrderQueryGraph", "ApplyOrderQueryResultNode", "PrepareInventoryInputNode", "InventoryGraph", "ApplyInventoryResultNode", "PrepareProductInfoInputNode", "ProductInfoGraph", "ApplyProductInfoResultNode", "PrepareAddToCartInputNode", "AddToCartGraph", "ApplyAddToCartResultNode", "PrepareReturnExchangeInputNode", "ReturnExchangeGraph", "ApplyReturnExchangeResultNode":
 		return "tool"
-	case "ResponseRenderNode":
+	case "FinalizeNode":
 		return "generating"
-	case "ConfirmSummaryNode":
+	case "AskUserNode":
 		return "handoff"
 	default:
 		return ""

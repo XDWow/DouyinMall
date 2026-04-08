@@ -3,40 +3,43 @@ package cache
 import (
 	"context"
 	"crypto/sha1"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
-	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/cloudwego/eino/compose"
+
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
 
 const (
-	semanticIndexKeyPrefix = "agent:semantic:index"
-	semanticItemKeyPrefix  = "agent:semantic:item:"
-	exactItemKeyPrefix     = "agent:exact:item:"
-	checkpointKeyPrefix    = "agent:checkpoint:"
-	rateKeyPrefix          = "agent:rate:"
+	semanticItemKeyPrefix = "agent:semantic:item:"
+	semanticIndexName     = "agent:semantic:index"
+	exactItemKeyPrefix    = "agent:exact:item:"
+	checkpointKeyPrefix   = "agent:checkpoint:"
+	rateKeyPrefix         = "agent:rate:"
 )
 
 type RedisExactCache struct {
-	rdb redis.Cmdable
+	store Store
 }
 
-func NewRedisExactCache(rdb redis.Cmdable) *RedisExactCache {
-	return &RedisExactCache{rdb: rdb}
+func NewRedisExactCache(store Store) *RedisExactCache {
+	return &RedisExactCache{store: store}
 }
 
 func (c *RedisExactCache) Lookup(ctx context.Context, tenantID string, userID int64, query string) (*ExactCacheItem, error) {
-	key := exactCacheKey(tenantID, userID, query)
-	raw, err := c.rdb.Get(ctx, key).Bytes()
-	if err != nil {
-		if err == redis.Nil {
-			return nil, nil
-		}
+	if c == nil || c.store == nil {
+		return nil, nil
+	}
+	raw, err := c.store.Get(ctx, exactCacheKey(tenantID, userID, query))
+	if err != nil || len(raw) == 0 {
 		return nil, err
 	}
 
@@ -48,7 +51,7 @@ func (c *RedisExactCache) Lookup(ctx context.Context, tenantID string, userID in
 }
 
 func (c *RedisExactCache) Store(ctx context.Context, item *ExactCacheItem, ttl time.Duration) error {
-	if item == nil {
+	if c == nil || c.store == nil || item == nil {
 		return nil
 	}
 	if item.CreatedAt.IsZero() {
@@ -58,72 +61,69 @@ func (c *RedisExactCache) Store(ctx context.Context, item *ExactCacheItem, ttl t
 	if err != nil {
 		return err
 	}
-	return c.rdb.Set(ctx, exactCacheKey(item.TenantID, item.UserID, item.Query), raw, ttl).Err()
+	return c.store.Set(ctx, exactCacheKey(item.TenantID, item.UserID, item.Query), raw, ttl)
 }
 
 type RedisSemanticCache struct {
-	rdb      redis.Cmdable
-	maxItems int64
+	store Store
 }
 
-func NewRedisSemanticCache(rdb redis.Cmdable) *RedisSemanticCache {
-	return &RedisSemanticCache{
-		rdb:      rdb,
-		maxItems: 256,
-	}
+func NewRedisSemanticCache(store Store) *RedisSemanticCache {
+	return &RedisSemanticCache{store: store}
 }
 
 func (c *RedisSemanticCache) Lookup(ctx context.Context, req SemanticCacheLookup) (*SemanticCacheItem, error) {
-	if len(req.Vector) == 0 {
+	if c == nil || c.store == nil || len(req.Vector) == 0 {
 		return nil, nil
 	}
 	if req.Limit <= 0 {
 		req.Limit = 20
 	}
-	// Redis 这一层的“分桶”就是先按 tenant + scope + intent bucket 拿到对应索引，
-	// 避免把所有语义缓存都混在一起比较。
-	indexKey := semanticIndexKey(req.TenantID, req.UserID, req.IntentBucket, req.Scope)
-
-	ids, err := c.rdb.ZRevRange(ctx, indexKey, 0, int64(req.Limit-1)).Result()
-	if err != nil && err != redis.Nil {
+	if err := c.ensureIndex(ctx, len(req.Vector)); err != nil {
 		return nil, err
 	}
 
-	type candidate struct {
-		item  *SemanticCacheItem
-		score float64
-	}
-	candidates := make([]candidate, 0, len(ids))
-	for _, id := range ids {
-		raw, err := c.rdb.Get(ctx, semanticItemKeyPrefix+id).Bytes()
-		if err != nil {
-			continue
+	queryText := buildSemanticQuery(req)
+	rawResult, err := c.store.Search(
+		ctx,
+		semanticIndexName,
+		queryText,
+		"PARAMS", 2, "vector", vectorBytes(req.Vector),
+		"SORTBY", "vector_distance", "ASC",
+		"RETURN", 8,
+		"query", "response", "tenant", "user_id", "intent_bucket", "scope", "created_at", "vector_distance",
+		"LIMIT", 0, req.Limit,
+		"DIALECT", 2,
+	)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unknown index name") {
+			return nil, nil
 		}
-
-		var item SemanticCacheItem
-		if err := json.Unmarshal(raw, &item); err != nil {
-			continue
-		}
-		if !matchesSemanticLookup(item, req) {
-			continue
-		}
-		score := cosineSimilarity(item.Vector, req.Vector)
-		if score >= req.Threshold {
-			candidates = append(candidates, candidate{item: &item, score: score})
-		}
+		return nil, err
 	}
 
-	if len(candidates) == 0 {
+	hits, err := parseSearchResults(rawResult)
+	if err != nil {
+		return nil, err
+	}
+	if len(hits) == 0 {
 		return nil, nil
 	}
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].score > candidates[j].score
-	})
-	return candidates[0].item, nil
+
+	for _, hit := range hits {
+		if hit == nil || hit.Item == nil || !matchesSemanticLookup(*hit.Item, req) {
+			continue
+		}
+		if hit.Similarity >= req.Threshold {
+			hit.Item.Response.Trace.CacheHit = true
+			return hit.Item, nil
+		}
+	}
+	return nil, nil
 }
 
 func (c *RedisSemanticCache) Store(ctx context.Context, item *SemanticCacheItem, ttl time.Duration) error {
-	if item == nil {
+	if c == nil || c.store == nil || item == nil || len(item.Vector) == 0 {
 		return nil
 	}
 	if item.ID == "" {
@@ -132,69 +132,86 @@ func (c *RedisSemanticCache) Store(ctx context.Context, item *SemanticCacheItem,
 	if item.CreatedAt.IsZero() {
 		item.CreatedAt = time.Now()
 	}
+	if err := c.ensureIndex(ctx, len(item.Vector)); err != nil {
+		return err
+	}
 
-	payload, err := json.Marshal(item)
+	response, err := json.Marshal(item.Response)
 	if err != nil {
 		return err
 	}
 
-	pipe := c.rdb.Pipeline()
-	pipe.Set(ctx, semanticItemKeyPrefix+item.ID, payload, ttl)
-	pipe.ZAdd(ctx, semanticIndexKey(item.TenantID, item.UserID, item.IntentBucket, item.Scope), redis.Z{
-		Score:  float64(item.CreatedAt.UnixMilli()),
-		Member: item.ID,
+	return c.store.HashSet(ctx, semanticItemKeyPrefix+item.ID, map[string]any{
+		"tenant":        item.TenantID,
+		"user_id":       item.UserID,
+		"intent_bucket": item.IntentBucket,
+		"scope":         item.Scope,
+		"query":         item.Query,
+		"response":      response,
+		"created_at":    item.CreatedAt.UnixMilli(),
+		"embedding":     vectorBytes(item.Vector),
+	}, ttl)
+}
+
+func (c *RedisSemanticCache) ensureIndex(ctx context.Context, dimension int) error {
+	return c.store.CreateVectorIndex(ctx, VectorIndexSpec{
+		Name:           semanticIndexName,
+		Prefix:         semanticItemKeyPrefix,
+		Dimension:      dimension,
+		DistanceMetric: "COSINE",
 	})
-	pipe.ZRemRangeByRank(ctx, semanticIndexKey(item.TenantID, item.UserID, item.IntentBucket, item.Scope), 0, -(c.maxItems + 1))
-	_, err = pipe.Exec(ctx)
-	return err
 }
 
 type RedisRateLimiter struct {
-	rdb redis.Cmdable
+	store Store
 }
 
-func NewRedisRateLimiter(rdb redis.Cmdable) *RedisRateLimiter {
-	return &RedisRateLimiter{rdb: rdb}
+func NewRedisRateLimiter(store Store) *RedisRateLimiter {
+	return &RedisRateLimiter{store: store}
 }
 
 func (r *RedisRateLimiter) AllowUser(ctx context.Context, userID int64, limit int64, window time.Duration) (bool, error) {
-	key := fmt.Sprintf("%s%d", rateKeyPrefix, userID)
-	count, err := r.rdb.Incr(ctx, key).Result()
+	if r == nil || r.store == nil {
+		return true, nil
+	}
+	count, err := r.store.IncrWithTTL(ctx, fmt.Sprintf("%s%d", rateKeyPrefix, userID), window)
 	if err != nil {
 		return false, err
-	}
-	if count == 1 {
-		_ = r.rdb.Expire(ctx, key, window).Err()
 	}
 	return count <= limit, nil
 }
 
 type RedisCheckpointStore struct {
-	rdb redis.Cmdable
-	ttl time.Duration
+	store Store
+	ttl   time.Duration
 }
 
-func NewRedisCheckpointStore(rdb redis.Cmdable, ttl time.Duration) *RedisCheckpointStore {
+func NewRedisCheckpointStore(store Store, ttl time.Duration) *RedisCheckpointStore {
 	if ttl <= 0 {
 		ttl = 7 * 24 * time.Hour
 	}
-	return &RedisCheckpointStore{rdb: rdb, ttl: ttl}
+	return &RedisCheckpointStore{store: store, ttl: ttl}
 }
 
 func (s *RedisCheckpointStore) Get(ctx context.Context, checkPointID string) ([]byte, bool, error) {
-	data, err := s.rdb.Get(ctx, checkpointKeyPrefix+checkPointID).Bytes()
-	if err != nil {
-		if err == redis.Nil {
-			return nil, false, nil
-		}
+	if s == nil || s.store == nil {
+		return nil, false, nil
+	}
+	data, err := s.store.Get(ctx, checkpointKeyPrefix+checkPointID)
+	if err != nil || len(data) == 0 {
 		return nil, false, err
 	}
 	return data, true, nil
 }
 
 func (s *RedisCheckpointStore) Set(ctx context.Context, checkPointID string, checkPoint []byte) error {
-	return s.rdb.Set(ctx, checkpointKeyPrefix+checkPointID, checkPoint, s.ttl).Err()
+	if s == nil || s.store == nil {
+		return nil
+	}
+	return s.store.Set(ctx, checkpointKeyPrefix+checkPointID, checkPoint, s.ttl)
 }
+
+var _ compose.CheckPointStore = (*RedisCheckpointStore)(nil)
 
 func cosineSimilarity(a, b []float64) float64 {
 	if len(a) == 0 || len(b) == 0 || len(a) != len(b) {
@@ -232,36 +249,18 @@ func exactCacheKey(tenantID string, userID int64, query string) string {
 }
 
 func normalizeExactQuery(query string) string {
-	query = strings.NewReplacer(
-		"，", " ",
-		"。", " ",
-		"？", " ",
-		"！", " ",
-		"：", " ",
-		"；", " ",
-		",", " ",
-		".", " ",
-		"?", " ",
-		"!", " ",
-		":", " ",
-		";", " ",
-		"(", " ",
-		")", " ",
-		"（", " ",
-		"）", " ",
-	).Replace(query)
 	query = strings.ToLower(strings.TrimSpace(query))
+	query = strings.Map(func(r rune) rune {
+		switch {
+		case unicode.IsSpace(r):
+			return ' '
+		case unicode.IsPunct(r), unicode.IsSymbol(r):
+			return ' '
+		default:
+			return r
+		}
+	}, query)
 	return strings.Join(strings.Fields(query), " ")
-}
-
-func semanticIndexKey(tenantID string, userID int64, intentBucket string, scope CacheScope) string {
-	bucket := strings.TrimSpace(intentBucket)
-	if bucket == "" {
-		bucket = "fallback"
-	}
-	raw := fmt.Sprintf("%s:%s:%s:%d", scope, tenantID, bucket, scopedUserID(scope, userID))
-	sum := sha1.Sum([]byte(raw))
-	return semanticIndexKeyPrefix + ":" + hex.EncodeToString(sum[:8])
 }
 
 func scopedUserID(scope CacheScope, userID int64) int64 {
@@ -282,4 +281,162 @@ func matchesSemanticLookup(item SemanticCacheItem, req SemanticCacheLookup) bool
 		return false
 	}
 	return scopedUserID(item.Scope, item.UserID) == scopedUserID(req.Scope, req.UserID)
+}
+
+func buildSemanticQuery(req SemanticCacheLookup) string {
+	scope := escapeTagValue(string(req.Scope))
+	tenantID := escapeTagValue(req.TenantID)
+	intentBucket := escapeTagValue(req.IntentBucket)
+	if intentBucket == "" {
+		intentBucket = "fallback"
+	}
+	filters := []string{
+		fmt.Sprintf("@tenant:{%s}", tenantID),
+		fmt.Sprintf("@scope:{%s}", scope),
+		fmt.Sprintf("@intent_bucket:{%s}", intentBucket),
+		fmt.Sprintf("@user_id:[%d %d]", scopedUserID(req.Scope, req.UserID), scopedUserID(req.Scope, req.UserID)),
+	}
+	return fmt.Sprintf("(%s)=>[KNN %d @embedding $vector AS vector_distance]", strings.Join(filters, " "), req.Limit)
+}
+
+func escapeTagValue(value string) string {
+	replacer := strings.NewReplacer(
+		"-", "\\-",
+		"{", "\\{",
+		"}", "\\}",
+		"[", "\\[",
+		"]", "\\]",
+		"(", "\\(",
+		")", "\\)",
+		"|", "\\|",
+		" ", "\\ ",
+		",", "\\,",
+		".", "\\.",
+		":", "\\:",
+		";", "\\;",
+		"!", "\\!",
+		"@", "\\@",
+		"#", "\\#",
+		"$", "\\$",
+		"%", "\\%",
+		"^", "\\^",
+		"&", "\\&",
+		"*", "\\*",
+		"~", "\\~",
+		"'", "\\'",
+		"\"", "\\\"",
+	)
+	return replacer.Replace(strings.TrimSpace(value))
+}
+
+func vectorBytes(vector []float64) []byte {
+	buf := make([]byte, len(vector)*8)
+	for i, value := range vector {
+		binary.LittleEndian.PutUint64(buf[i*8:], math.Float64bits(value))
+	}
+	return buf
+}
+
+type semanticSearchHit struct {
+	Item       *SemanticCacheItem
+	Similarity float64
+}
+
+func parseSearchResults(raw any) ([]*semanticSearchHit, error) {
+	values, ok := raw.([]any)
+	if !ok || len(values) < 3 {
+		return nil, nil
+	}
+	items := make([]*semanticSearchHit, 0, (len(values)-1)/2)
+	for i := 1; i+1 < len(values); i += 2 {
+		key := asString(values[i])
+		fields, ok := values[i+1].([]any)
+		if !ok {
+			continue
+		}
+		item, similarity, err := semanticItemFromFields(key, fields)
+		if err != nil {
+			return nil, err
+		}
+		if item != nil {
+			items = append(items, &semanticSearchHit{
+				Item:       item,
+				Similarity: similarity,
+			})
+		}
+	}
+	return items, nil
+}
+
+func semanticItemFromFields(key string, fields []any) (*SemanticCacheItem, float64, error) {
+	values := make(map[string]string, len(fields)/2)
+	for i := 0; i+1 < len(fields); i += 2 {
+		values[asString(fields[i])] = asString(fields[i+1])
+	}
+
+	var response domain.ChatResult
+	if raw := values["response"]; strings.TrimSpace(raw) != "" {
+		if err := json.Unmarshal([]byte(raw), &response); err != nil {
+			return nil, 0, err
+		}
+	}
+
+	userID, _ := strconv.ParseInt(values["user_id"], 10, 64)
+	createdAtMillis, _ := strconv.ParseInt(values["created_at"], 10, 64)
+	similarity := similarityFromDistance(values["vector_distance"])
+
+	item := &SemanticCacheItem{
+		ID:           strings.TrimPrefix(key, semanticItemKeyPrefix),
+		TenantID:     values["tenant"],
+		UserID:       userID,
+		IntentBucket: values["intent_bucket"],
+		Scope:        CacheScope(values["scope"]),
+		Query:        values["query"],
+		Response:     response,
+		CreatedAt:    time.UnixMilli(createdAtMillis),
+		Vector:       nil,
+	}
+	item.Response.Confidence = maxFloat(item.Response.Confidence, similarity)
+	return item, similarity, nil
+}
+
+func parseRedisFloat(value string) float64 {
+	if strings.TrimSpace(value) == "" {
+		return 0
+	}
+	result, _ := strconv.ParseFloat(value, 64)
+	return result
+}
+
+func similarityFromDistance(value string) float64 {
+	distance := parseRedisFloat(value)
+	similarity := 1 - distance
+	if similarity < 0 {
+		return 0
+	}
+	if similarity > 1 {
+		return 1
+	}
+	return similarity
+}
+
+func asString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+func maxFloat(values ...float64) float64 {
+	var max float64
+	for _, value := range values {
+		if value > max {
+			max = value
+		}
+	}
+	return max
 }

@@ -1,4 +1,4 @@
-﻿package domain
+package domain
 
 import "time"
 
@@ -18,8 +18,10 @@ type Session struct {
 	Status      SessionStatus
 	LastMessage string
 	TotalTurns  int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// Slots 保存会话级槽位，供多轮对话持续复用。
+	Slots     map[string]any
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type KnowledgeRef struct {
@@ -69,4 +71,3 @@ type InterruptInfo struct {
 	CheckpointID string
 	RerunNodes   []string
 }
-

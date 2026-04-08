@@ -2,31 +2,34 @@ package support
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-func HydrateToolResults(state *orchestratorstate.ConversationState) {
+func HydrateToolResults(state *orchestratorstate.State) {
 	if state == nil {
 		return
 	}
-	ss := orchestratorstate.EnsureSessionState(state)
+	ss := &state.Session
 	HydrateToolResultsIntoSlots(ss.Slots, state.ToolExecutions())
+	HydrateCurrentRefs(ss)
 }
 
-// HydrateToolResultsFromExecutions 保留给仍使用 ConversationState 的主流程节点。
-func HydrateToolResultsFromExecutions(state *orchestratorstate.ConversationState, executions []domain.ToolExecution) {
+// HydrateToolResultsFromExecutions 保留给主流程节点在已有执行结果时复用。
+func HydrateToolResultsFromExecutions(state *orchestratorstate.State, executions []domain.ToolExecution) {
 	if state == nil {
 		return
 	}
-	ss := orchestratorstate.EnsureSessionState(state)
+	ss := &state.Session
 	HydrateToolResultsIntoSlots(ss.Slots, executions)
+	HydrateCurrentRefs(ss)
 }
 
 // HydrateToolResultsIntoSlots 把工具执行结果显式写回槽位。
-// 这样业务子图内部只需持有 slots，而不必临时构造 ConversationState。
+// 这样业务子图内部只需持有 slots，而不必临时构造主流程状态。
 func HydrateToolResultsIntoSlots(slots map[string]any, executions []domain.ToolExecution) {
 	if slots == nil {
 		return
@@ -45,7 +48,7 @@ func HydrateToolResultsIntoSlots(slots map[string]any, executions []domain.ToolE
 	}
 }
 
-func ToolResultMap(state *orchestratorstate.ConversationState, toolName string) map[string]any {
+func ToolResultMap(state *orchestratorstate.State, toolName string) map[string]any {
 	if state == nil {
 		return nil
 	}
@@ -64,7 +67,7 @@ func ToolResultMapFromSlots(slots map[string]any, toolName string) map[string]an
 	return result
 }
 
-func ResetToolState(state *orchestratorstate.ConversationState) {
+func ResetToolState(state *orchestratorstate.State) {
 	if state == nil {
 		return
 	}
@@ -73,7 +76,7 @@ func ResetToolState(state *orchestratorstate.ConversationState) {
 	state.Tool.ToolMessages = nil
 }
 
-func HasToolPlan(state *orchestratorstate.ConversationState, names ...string) bool {
+func HasToolPlan(state *orchestratorstate.State, names ...string) bool {
 	if state == nil || len(state.Tool.Plans) == 0 {
 		return false
 	}
@@ -90,7 +93,7 @@ func HasToolPlan(state *orchestratorstate.ConversationState, names ...string) bo
 	return false
 }
 
-func ToolResultRecord(state *orchestratorstate.ConversationState, toolName string) map[string]any {
+func ToolResultRecord(state *orchestratorstate.State, toolName string) map[string]any {
 	if state == nil {
 		return nil
 	}
@@ -111,6 +114,55 @@ func ToolResultRecordFromSlots(slots map[string]any, toolName string) map[string
 		}
 	}
 	return result
+}
+
+func HydrateCurrentRefs(session *orchestratorstate.Session) {
+	if session == nil || len(session.Slots) == 0 {
+		return
+	}
+	if id := firstTrustedID(
+		ToolResultRecordFromSlots(session.Slots, "get_product"),
+		ToolResultMapFromSlots(session.Slots, "get_product"),
+	); id != "" {
+		session.CurrentRefs.ProductID = id
+	}
+	if id := firstTrustedID(
+		ToolResultRecordFromSlots(session.Slots, "query_order"),
+		ToolResultRecordFromSlots(session.Slots, "get_order"),
+		ToolResultMapFromSlots(session.Slots, "query_order"),
+	); id != "" {
+		session.CurrentRefs.OrderID = id
+	}
+	if session.CurrentRefs.ProductID != "" {
+		session.Slots["product_id"] = session.CurrentRefs.ProductID
+	}
+	if session.CurrentRefs.OrderID != "" {
+		session.Slots["order_id"] = session.CurrentRefs.OrderID
+	}
+}
+
+func firstTrustedID(records ...map[string]any) string {
+	for _, record := range records {
+		if len(record) == 0 {
+			continue
+		}
+		for _, key := range []string{"product_id", "order_id", "id"} {
+			if id := digitsOnly(fmt.Sprint(record[key])); id != "" {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+func digitsOnly(raw string) string {
+	var builder strings.Builder
+	for _, r := range raw {
+		if r >= '0' && r <= '9' {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }
 
 func ToolResultBool(record map[string]any, keys ...string) (bool, bool) {
@@ -141,4 +193,38 @@ func ToolResultBool(record map[string]any, keys ...string) (bool, bool) {
 		}
 	}
 	return false, false
+}
+
+// SelectedToolNames 收敛出当前轮真正相关的工具名称。
+// 有 plan / execution 时以运行期结果为准；否则回退到子图白名单。
+func SelectedToolNames(state *orchestratorstate.State) []string {
+	if state == nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	names := make([]string, 0, len(state.Tool.Plans)+len(state.ToolExecutions()))
+	appendName := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		if _, exists := seen[name]; exists {
+			return
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	for _, plan := range state.Tool.Plans {
+		appendName(plan.Name)
+	}
+	for _, exec := range state.ToolExecutions() {
+		appendName(exec.Name)
+	}
+	if len(names) > 0 {
+		return names
+	}
+	for _, name := range ToolNamesForRoute(state.Session.Route) {
+		appendName(name)
+	}
+	return names
 }

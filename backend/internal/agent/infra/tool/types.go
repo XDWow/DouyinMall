@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"time"
 
-	einotool "github.com/cloudwego/eino/components/tool"
-
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
 
@@ -42,9 +40,12 @@ type ToolPolicy struct {
 	RequiresOrdering bool
 }
 
-type registeredInvokableTool struct {
-	invokable einotool.InvokableTool
-	policy    ToolPolicy
+type ToolSummary struct {
+	Name             string
+	Description      string
+	InputSchema      string
+	ReadOnly         bool
+	RequiresOrdering bool
 }
 
 func toolArgumentsJSON(plan domain.ToolCallPlan) (string, error) {

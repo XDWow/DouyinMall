@@ -30,7 +30,7 @@ const (
 	RouteAddToCart           WorkflowRoute = "add_to_cart"
 	RouteReturnPolicy        WorkflowRoute = "return_policy"
 	RouteReturnExchangeApply WorkflowRoute = "return_exchange_apply"
-	RouteFallback            WorkflowRoute = "fallback"
+	RouteBaseQA              WorkflowRoute = "base_qa"
 )
 
 type FeatureFlags struct {
@@ -42,42 +42,45 @@ type FeatureFlags struct {
 	ReturnExchangeApply bool
 }
 
-type SessionState struct {
-	SessionID        string            `json:"session_id"`
-	UserID           int64             `json:"user_id"`
-	TenantID         string            `json:"tenant_id"`
-	RawQuery         string            `json:"raw_query"`
-	Messages         []*schema.Message `json:"messages,omitempty"`
-	Intent           domain.Intent     `json:"intent"`
-	IntentConfidence float64           `json:"intent_confidence"`
-	Route            WorkflowRoute     `json:"route"`
-	Slots            map[string]any    `json:"slots,omitempty"`
-	MissingSlots     []string          `json:"missing_slots,omitempty"`
-	AwaitingUser     bool              `json:"awaiting_user"`
-	AwaitingConfirm  bool              `json:"awaiting_confirm"`
-	FinalAnswer      string            `json:"final_answer,omitempty"`
-	ErrorCode        string            `json:"error_code,omitempty"`
-	CacheHitLevel    string            `json:"cache_hit_level,omitempty"`
-	KBVersion        string            `json:"kb_version,omitempty"`
-	FeatureFlags     FeatureFlags      `json:"feature_flags"`
-	ReadOnly         bool              `json:"read_only"`
-	ResumeFromCP     bool              `json:"resume_from_checkpoint"`
-	NeedHandoff      bool              `json:"need_handoff"`
-	HandoffReason    string            `json:"handoff_reason,omitempty"`
+type Session struct {
+	SessionID         string                      `json:"session_id"`
+	UserID            int64                       `json:"user_id"`
+	TenantID          string                      `json:"tenant_id"`
+	RawQuery          string                      `json:"raw_query"`
+	Messages          []*schema.Message           `json:"messages,omitempty"`
+	PendingSelections map[string]PendingSelection `json:"pending_selections,omitempty"`
+	CurrentRefs       CurrentRefs                 `json:"current_refs"`
+	Intent            domain.Intent               `json:"intent"`
+	IntentConfidence  float64                     `json:"intent_confidence"`
+	Route             WorkflowRoute               `json:"route"`
+	Slots             map[string]any              `json:"slots,omitempty"`
+	MissingSlots      []string                    `json:"missing_slots,omitempty"`
+	AwaitingUser      bool                        `json:"awaiting_user"`
+	AwaitingConfirm   bool                        `json:"awaiting_confirm"`
+	FinalAnswer       string                      `json:"final_answer,omitempty"`
+	ErrorCode         string                      `json:"error_code,omitempty"`
+	CacheHitLevel     string                      `json:"cache_hit_level,omitempty"`
+	KBVersion         string                      `json:"kb_version,omitempty"`
+	FeatureFlags      FeatureFlags                `json:"feature_flags"`
+	ReadOnly          bool                        `json:"read_only"`
+	ResumeFromCP      bool                        `json:"resume_from_checkpoint"`
+	NeedHandoff       bool                        `json:"need_handoff"`
+	HandoffReason     string                      `json:"handoff_reason,omitempty"`
 }
 
-type ConversationState struct {
+type State struct {
 	StartedAt   time.Time          `json:"-"`
 	TraceID     string             `json:"trace_id"`
 	Request     domain.ChatCommand `json:"request"`
 	SessionMeta *domain.Session    `json:"session_meta,omitempty"`
 	Response    *domain.ChatResult `json:"response,omitempty"`
 	Checkpoint  string             `json:"checkpoint,omitempty"`
+	Interrupt   *InterruptState    `json:"interrupt,omitempty"`
 
 	StreamWriter StreamWriter                     `json:"-"`
 	Recorder     *agenttool.SafeExecutionRecorder `json:"-"`
 
-	Session   SessionState    `json:"session"`
+	Session   Session         `json:"session"`
 	Cache     CacheState      `json:"cache"`
 	Intent    IntentResult    `json:"intent"`
 	Skill     SkillState      `json:"skill"`
@@ -107,6 +110,16 @@ type RewriteResult struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+type PendingSelection struct {
+	Kind    string            `json:"kind,omitempty"`
+	Options map[string]string `json:"options,omitempty"`
+}
+
+type CurrentRefs struct {
+	ProductID string `json:"product_id,omitempty"`
+	OrderID   string `json:"order_id,omitempty"`
+}
+
 type SkillState struct {
 	Names []string `json:"names,omitempty"`
 }
@@ -122,9 +135,15 @@ type ToolState struct {
 }
 
 type AnswerResult struct {
-	Reply      string  `json:"reply,omitempty"`
-	Confidence float64 `json:"confidence"`
-	Source     string  `json:"source,omitempty"`
+	Reply         string  `json:"reply,omitempty"`
+	Confidence    float64 `json:"confidence"`
+	Source        string  `json:"source,omitempty"`
+	CacheableHint *bool   `json:"cacheable_hint,omitempty"`
+	Streamed      bool    `json:"streamed,omitempty"`
+}
+
+type InterruptState struct {
+	Payload map[string]any `json:"payload,omitempty"`
 }
 
 type InitOptions struct {
@@ -132,8 +151,8 @@ type InitOptions struct {
 	FeatureFlags FeatureFlags
 }
 
-func ProcessConversationState(ctx context.Context, handler func(*ConversationState) error) error {
-	return compose.ProcessState[*ConversationState](ctx, func(_ context.Context, state *ConversationState) error {
+func ProcessState(ctx context.Context, handler func(*State) error) error {
+	return compose.ProcessState(ctx, func(_ context.Context, state *State) error {
 		if state == nil {
 			return nil
 		}

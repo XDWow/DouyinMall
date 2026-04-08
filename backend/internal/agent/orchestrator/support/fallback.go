@@ -6,7 +6,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-func FallbackAnswerFromDocuments(documents []*schema.Document) string {
+func BaseQAAnswerFromDocuments(documents []*schema.Document) string {
 	if len(documents) > 0 && documents[0] != nil {
 		doc := documents[0]
 		return fmt.Sprintf(

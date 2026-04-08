@@ -19,12 +19,12 @@ services:
       - douyinmall-net
 
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:latest
     container_name: douyinmall-redis
     restart: unless-stopped
     ports:
       - "16379:6379"
-    command: redis-server --appendonly yes
+    command: redis-stack-server --appendonly yes
     volumes:
       - redis-data:/data
     networks:

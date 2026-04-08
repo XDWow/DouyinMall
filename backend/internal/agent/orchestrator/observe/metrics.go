@@ -1,4 +1,4 @@
-﻿package observe
+package observe
 
 import (
 	"context"
@@ -95,7 +95,7 @@ func registerCollector(collector prometheus.Collector) {
 	}
 }
 
-func AppendTraceStep(state *orchestratorstate.ConversationState, node, status string, d time.Duration, detail string) {
+func AppendTraceStep(state *orchestratorstate.State, node, status string, d time.Duration, detail string) {
 	if state == nil {
 		return
 	}
@@ -124,5 +124,3 @@ func StartSpan(ctx context.Context, tracer trace.Tracer, name string) (context.C
 	}
 	return tracer.Start(ctx, name)
 }
-
-

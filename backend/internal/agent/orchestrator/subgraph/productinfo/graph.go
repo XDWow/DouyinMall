@@ -7,8 +7,9 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
-	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/rag"
+	productnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/product"
+	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
+	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
@@ -35,12 +36,12 @@ type Output struct {
 
 // Build 组装商品咨询子图。
 // 这段流程会先走商品工具查询，再按需要补一段知识库检索。
-func Build(_ context.Context, registry *agenttool.Registry, productNode *orchestratornode.ProductInfoNode, ragNode *ragnode.RAGNode) (compose.AnyGraph, error) {
+func Build(_ context.Context, registry *agenttool.Registry, productNode *productnode.ProductInfoNode, ragNode *ragnode.RAGNode) (compose.AnyGraph, error) {
 	if productNode == nil {
 		return nil, nil
 	}
 
-	toolExecNode := orchestratornode.NewToolExecNode(registry)
+	toolExecNode := sharednode.NewToolExecNode(registry)
 	g := compose.NewGraph[Input, Output]()
 	if err := g.AddLambdaNode("ExecuteProductInfoFlowNode", compose.InvokableLambda(
 		func(ctx context.Context, input Input) (Output, error) {
@@ -49,7 +50,7 @@ func Build(_ context.Context, registry *agenttool.Registry, productNode *orchest
 				slots = map[string]any{}
 			}
 
-			result, err := productNode.Invoke(ctx, orchestratornode.ProductInfoInput{
+			result, err := productNode.Invoke(ctx, productnode.ProductInfoInput{
 				Slots:    slots,
 				RawQuery: input.RawQuery,
 			})
@@ -68,7 +69,7 @@ func Build(_ context.Context, registry *agenttool.Registry, productNode *orchest
 				if callErr != nil {
 					return Output{}, callErr
 				}
-				messages, execErr := toolExecNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+				messages, execErr := toolExecNode.Invoke(ctx, sharednode.ToolExecutionInput{
 					Plans:       result.Plans,
 					CallMessage: callMessage,
 					Mode:        agenttool.ToolExecutionParallelReadOnly,

@@ -6,8 +6,8 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
-	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
-	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/rag"
+	fallbacknode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/fallback"
+	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 )
 
 // Input 描述兜底子图的入口。
@@ -27,9 +27,9 @@ type Output struct {
 
 // Build 组装兜底子图。
 // 它会优先尝试知识库检索；如果没有形成明确回答，再走兜底文案生成。
-func Build(_ context.Context, ragNode *ragnode.RAGNode, fallbackNode *orchestratornode.FallbackNode) (compose.AnyGraph, error) {
+func Build(_ context.Context, ragNode *ragnode.RAGNode, baseQANode *fallbacknode.BaseQANode) (compose.AnyGraph, error) {
 	g := compose.NewGraph[Input, Output]()
-	if err := g.AddLambdaNode("ExecuteFallbackFlowNode", compose.InvokableLambda(
+	if err := g.AddLambdaNode("ExecuteBaseQAFlowNode", compose.InvokableLambda(
 		func(ctx context.Context, input Input) (Output, error) {
 			out := Output{FinalAnswer: input.FinalAnswer}
 			if ragNode != nil {
@@ -47,8 +47,8 @@ func Build(_ context.Context, ragNode *ragnode.RAGNode, fallbackNode *orchestrat
 				}
 			}
 
-			if fallbackNode != nil {
-				result, err := fallbackNode.Invoke(ctx, orchestratornode.FallbackInput{
+			if baseQANode != nil {
+				result, err := baseQANode.Invoke(ctx, fallbacknode.BaseQAInput{
 					FinalAnswer: out.FinalAnswer,
 					Documents:   append([]*schema.Document(nil), out.Documents...),
 				})
@@ -60,13 +60,13 @@ func Build(_ context.Context, ragNode *ragnode.RAGNode, fallbackNode *orchestrat
 				}
 			}
 			return out, nil
-		}), compose.WithNodeName("ExecuteFallbackFlowNode")); err != nil {
+		}), compose.WithNodeName("ExecuteBaseQAFlowNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge(compose.START, "ExecuteFallbackFlowNode"); err != nil {
+	if err := g.AddEdge(compose.START, "ExecuteBaseQAFlowNode"); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge("ExecuteFallbackFlowNode", compose.END); err != nil {
+	if err := g.AddEdge("ExecuteBaseQAFlowNode", compose.END); err != nil {
 		return nil, err
 	}
 	return g, nil

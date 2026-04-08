@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"context"
@@ -8,25 +8,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-)
-
-const (
-	sessionMetaKeyPrefix = "agent:session:"
-	sessionMsgKeySuffix  = ":msgs"
-	sessionTTL           = 24 * time.Hour
+	agentcache "github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 )
 
 type SessionStore struct {
-	dao *DAO
-	rdb redis.Cmdable
+	dao   *DAO
+	cache agentcache.SessionCache
 }
 
-func NewSessionStore(dao *DAO, rdb redis.Cmdable) *SessionStore {
-	return &SessionStore{dao: dao, rdb: rdb}
+func NewSessionStore(dao *DAO, cache agentcache.SessionCache) *SessionStore {
+	return &SessionStore{dao: dao, cache: cache}
 }
 
 func (s *SessionStore) Load(ctx context.Context, sessionID string) (*domain.Session, []domain.Message, error) {
@@ -34,7 +28,7 @@ func (s *SessionStore) Load(ctx context.Context, sessionID string) (*domain.Sess
 		return nil, nil, fmt.Errorf("session_id is required")
 	}
 
-	if meta, messages, err := s.loadFromRedis(ctx, sessionID); err == nil && meta != nil {
+	if meta, messages, err := s.loadFromCache(ctx, sessionID); err == nil && meta != nil {
 		return meta, messages, nil
 	}
 
@@ -51,7 +45,7 @@ func (s *SessionStore) Load(ctx context.Context, sessionID string) (*domain.Sess
 		return nil, nil, err
 	}
 	meta := toDomainSession(&sessionDO)
-	_ = s.saveToRedis(ctx, meta, messages)
+	_ = s.saveToCache(ctx, meta, messages)
 	return &meta, messages, nil
 }
 
@@ -59,13 +53,11 @@ func (s *SessionStore) Create(ctx context.Context, session domain.Session) error
 	if err := s.dao.db.WithContext(ctx).Create(toSessionDO(session)).Error; err != nil {
 		return err
 	}
-	return s.saveToRedis(ctx, session, nil)
+	return s.saveToCache(ctx, session, nil)
 }
 
 func (s *SessionStore) Clear(ctx context.Context, sessionID string) error {
-	pipe := s.rdb.Pipeline()
-	pipe.Del(ctx, sessionMetaKeyPrefix+sessionID, sessionMetaKeyPrefix+sessionID+sessionMsgKeySuffix)
-	_, _ = pipe.Exec(ctx)
+	_ = s.deleteFromCache(ctx, sessionID)
 
 	if err := s.dao.db.WithContext(ctx).Where("session_id = ?", sessionID).Delete(&MessageDO{}).Error; err != nil {
 		return err
@@ -96,61 +88,25 @@ func (s *SessionStore) ListByUser(ctx context.Context, userID int64, limit, offs
 	return out, int(total), nil
 }
 
-func (s *SessionStore) loadFromRedis(ctx context.Context, sessionID string) (*domain.Session, []domain.Message, error) {
-	raw, err := s.rdb.Get(ctx, sessionMetaKeyPrefix+sessionID).Bytes()
-	if err != nil {
-		return nil, nil, err
+func (s *SessionStore) loadFromCache(ctx context.Context, sessionID string) (*domain.Session, []domain.Message, error) {
+	if s.cache == nil {
+		return nil, nil, nil
 	}
-	var session domain.Session
-	if err := json.Unmarshal(raw, &session); err != nil {
-		return nil, nil, err
-	}
-
-	messages := []domain.Message(nil)
-	messageRaws, err := s.rdb.LRange(ctx, sessionMetaKeyPrefix+sessionID+sessionMsgKeySuffix, 0, -1).Result()
-	if err == nil {
-		messages = make([]domain.Message, 0, len(messageRaws))
-		for _, rawMessage := range messageRaws {
-			var message domain.Message
-			if json.Unmarshal([]byte(rawMessage), &message) == nil {
-				messages = append(messages, message)
-			}
-		}
-	}
-	return &session, messages, nil
+	return s.cache.Load(ctx, sessionID)
 }
 
-func (s *SessionStore) saveToRedis(ctx context.Context, session domain.Session, messages []domain.Message) error {
-	meta, err := json.Marshal(session)
-	if err != nil {
-		return err
+func (s *SessionStore) saveToCache(ctx context.Context, session domain.Session, messages []domain.Message) error {
+	if s.cache == nil {
+		return nil
 	}
+	return s.cache.Save(ctx, session, messages)
+}
 
-	pipe := s.rdb.Pipeline()
-	pipe.Set(ctx, sessionMetaKeyPrefix+session.SessionID, meta, sessionTTL)
-	if len(messages) > 0 {
-		items := make([]any, 0, len(messages))
-		recent := messages
-		size := 10
-		if len(recent) > size {
-			recent = recent[len(recent)-size:]
-		}
-		for _, message := range recent {
-			raw, err := json.Marshal(message)
-			if err != nil {
-				continue
-			}
-			items = append(items, raw)
-		}
-		if len(items) > 0 {
-			msgKey := sessionMetaKeyPrefix + session.SessionID + sessionMsgKeySuffix
-			pipe.Del(ctx, msgKey)
-			pipe.RPush(ctx, msgKey, items...)
-			pipe.Expire(ctx, msgKey, sessionTTL)
-		}
+func (s *SessionStore) deleteFromCache(ctx context.Context, sessionID string) error {
+	if s.cache == nil {
+		return nil
 	}
-	_, err = pipe.Exec(ctx)
-	return err
+	return s.cache.Delete(ctx, sessionID)
 }
 
 func (s *SessionStore) SaveRound(ctx context.Context, session domain.Session, userMessage domain.Message, assistantMessage domain.Message) error {
@@ -164,11 +120,45 @@ func (s *SessionStore) SaveRound(ctx context.Context, session domain.Session, us
 	return s.saveMessages(ctx, session.SessionID, messages, &session)
 }
 
+func (s *SessionStore) SaveRoundPersistent(ctx context.Context, session domain.Session, userMessage domain.Message, assistantMessage domain.Message) error {
+	messages := make([]domain.Message, 0, 2)
+	if userMessage.Content != "" {
+		messages = append(messages, userMessage)
+	}
+	if assistantMessage.Content != "" {
+		messages = append(messages, assistantMessage)
+	}
+	return s.persistMessages(ctx, session.SessionID, messages, &session)
+}
+
+func (s *SessionStore) SaveCacheSnapshot(ctx context.Context, session domain.Session, messages []domain.Message) error {
+	return s.saveToCache(ctx, session, messages)
+}
+
 func (s *SessionStore) SaveMessages(ctx context.Context, sessionID string, messages []domain.Message) error {
 	return s.saveMessages(ctx, sessionID, messages, nil)
 }
 
 func (s *SessionStore) saveMessages(ctx context.Context, sessionID string, messages []domain.Message, session *domain.Session) error {
+	if err := s.persistMessages(ctx, sessionID, messages, session); err != nil {
+		return err
+	}
+	allMessages, err := s.LoadAllMessages(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if session == nil {
+		var sessionDO SessionDO
+		if err := s.dao.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&sessionDO).Error; err != nil {
+			return err
+		}
+		domainSession := toDomainSession(&sessionDO)
+		return s.saveToCache(ctx, domainSession, allMessages)
+	}
+	return s.saveToCache(ctx, *session, allMessages)
+}
+
+func (s *SessionStore) persistMessages(ctx context.Context, sessionID string, messages []domain.Message, session *domain.Session) error {
 	if strings.TrimSpace(sessionID) == "" {
 		return fmt.Errorf("session_id is required")
 	}
@@ -192,24 +182,13 @@ func (s *SessionStore) saveMessages(ctx context.Context, sessionID string, messa
 				"status":       string(session.Status),
 				"last_message": session.LastMessage,
 				"total_turns":  session.TotalTurns,
+				"slots_json":   marshalSlots(session.Slots),
 				"updated_at":   now,
 			}).Error; err != nil {
 			return err
 		}
 	}
-	allMessages, err := s.LoadAllMessages(ctx, sessionID)
-	if err != nil {
-		return err
-	}
-	if session == nil {
-		var sessionDO SessionDO
-		if err := s.dao.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&sessionDO).Error; err != nil {
-			return err
-		}
-		domainSession := toDomainSession(&sessionDO)
-		return s.saveToRedis(ctx, domainSession, allMessages)
-	}
-	return s.saveToRedis(ctx, *session, allMessages)
+	return nil
 }
 
 func (s *SessionStore) LoadAllMessages(ctx context.Context, sessionID string) ([]domain.Message, error) {
@@ -242,6 +221,7 @@ func toSessionDO(session domain.Session) *SessionDO {
 		Status:      string(session.Status),
 		LastMessage: session.LastMessage,
 		TotalTurns:  session.TotalTurns,
+		SlotsJSON:   marshalSlots(session.Slots),
 	}
 }
 
@@ -252,6 +232,7 @@ func toDomainSession(session *SessionDO) domain.Session {
 		Status:      domain.SessionStatus(session.Status),
 		LastMessage: session.LastMessage,
 		TotalTurns:  session.TotalTurns,
+		Slots:       unmarshalSlots(session.SlotsJSON),
 		CreatedAt:   session.CreatedAt,
 		UpdatedAt:   session.UpdatedAt,
 	}
@@ -268,3 +249,25 @@ func toMessageDO(message domain.Message) MessageDO {
 	}
 }
 
+// marshalSlots 把会话槽位序列化到 session 表，便于跨轮次恢复。
+func marshalSlots(slots map[string]any) string {
+	if len(slots) == 0 {
+		return ""
+	}
+	raw, err := json.Marshal(slots)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+func unmarshalSlots(raw string) map[string]any {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var slots map[string]any
+	if err := json.Unmarshal([]byte(raw), &slots); err != nil || len(slots) == 0 {
+		return nil
+	}
+	return slots
+}

@@ -7,14 +7,14 @@ import (
 
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
 	agentcache "github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	agentrag "github.com/XDWow/DouyinMall/backend/internal/agent/infra/knowledgebase"
 	agentllm "github.com/XDWow/DouyinMall/backend/internal/agent/infra/llm"
+	agentrag "github.com/XDWow/DouyinMall/backend/internal/agent/infra/rag"
 	agentrepository "github.com/XDWow/DouyinMall/backend/internal/agent/infra/repository"
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	agentmemory "github.com/XDWow/DouyinMall/backend/internal/agent/memory"
 	orchestrator "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator"
 	agentprompt "github.com/XDWow/DouyinMall/backend/internal/agent/prompt"
+	agentsession "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 	"github.com/cloudwego/eino/components/embedding"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/redis/go-redis/v9"
@@ -29,7 +29,7 @@ type Components struct {
 	KnowledgeBase   *agentrag.ManagedKnowledgeService
 	Skills          *agentskill.Registry
 	Registry        *agenttool.Registry
-	Memory          *agentmemory.Manager
+	SessionService  *agentsession.Service
 	ExactCache      agentcache.ExactCache
 	SemanticCache   agentcache.SemanticCache
 	RateLimiter     agentcache.RateLimiter
@@ -91,7 +91,8 @@ func InitComponents(
 		}
 	}
 
-	sessionRepo := agentrepository.NewSessionStore(dao, rdb)
+	store := agentcache.NewRedisStore(rdb)
+	sessionRepo := agentrepository.NewSessionStore(dao, agentcache.NewRedisSessionCache(store, 24*time.Hour, 10))
 	conversationWindow := cfg.Workflow.ConversationWindow
 	if conversationWindow <= 0 {
 		conversationWindow = 5
@@ -103,13 +104,13 @@ func InitComponents(
 		KnowledgeBase: knowledgeBase,
 		Skills:        skills,
 		Registry:      registry,
-		// Memory wraps the session repository and enforces the conversation
-		// window so the orchestrator doesn't need to know about persistence.
-		Memory:          agentmemory.New(sessionRepo, conversationWindow),
-		ExactCache:      agentcache.NewRedisExactCache(rdb),
-		SemanticCache:   agentcache.NewRedisSemanticCache(rdb),
-		RateLimiter:     agentcache.NewRedisRateLimiter(rdb),
-		CheckpointStore: agentcache.NewRedisCheckpointStore(rdb, secondsOrDefault(cfg.Workflow.CheckpointTTLSeconds, 7*24*time.Hour)),
+		// SessionService wraps the session repository and enforces the
+		// conversation window so the orchestrator doesn't need to know persistence details.
+		SessionService:  agentsession.NewService(sessionRepo, conversationWindow),
+		ExactCache:      agentcache.NewRedisExactCache(store),
+		SemanticCache:   agentcache.NewRedisSemanticCache(store),
+		RateLimiter:     agentcache.NewRedisRateLimiter(store),
+		CheckpointStore: agentcache.NewRedisCheckpointStore(store, secondsOrDefault(cfg.Workflow.CheckpointTTLSeconds, 7*24*time.Hour)),
 		Prompts:         agentprompt.NewDefault(),
 		Metrics:         orchestrator.NewMetrics("douyinmall_agent"),
 	}, nil

@@ -23,6 +23,11 @@ type Skill struct {
 	Body        string
 }
 
+type SkillSummary struct {
+	Name        string
+	Description string
+}
+
 type Registry struct {
 	skills map[string]Skill
 	order  []string
@@ -100,6 +105,35 @@ func (r *Registry) Load(names []string) []Skill {
 		}
 		seen[name] = struct{}{}
 		items = append(items, item)
+	}
+	return items
+}
+
+// SummariesByNames 只返回 skill 的名称和说明。
+// 当子图只需要给模型注入 metadata 时，不必把正文整段加载出来。
+func (r *Registry) SummariesByNames(names []string) []SkillSummary {
+	if r == nil || len(names) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(names))
+	items := make([]SkillSummary, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		item, ok := r.skills[name]
+		if !ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		items = append(items, SkillSummary{
+			Name:        item.Name,
+			Description: item.Description,
+		})
 	}
 	return items
 }
@@ -203,6 +237,25 @@ func RenderSkillText(skills []Skill) string {
 		}
 		builder.WriteString(item.Body)
 		builder.WriteString("\n\n")
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func RenderSkillSummaryText(skills []SkillSummary) string {
+	if len(skills) == 0 {
+		return "none"
+	}
+	var builder strings.Builder
+	for _, item := range skills {
+		builder.WriteString("## ")
+		builder.WriteString(item.Name)
+		builder.WriteString("\n")
+		if item.Description != "" {
+			builder.WriteString("说明：")
+			builder.WriteString(strings.TrimSpace(item.Description))
+			builder.WriteString("\n")
+		}
+		builder.WriteString("\n")
 	}
 	return strings.TrimSpace(builder.String())
 }

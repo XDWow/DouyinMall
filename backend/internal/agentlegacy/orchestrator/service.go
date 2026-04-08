@@ -21,7 +21,7 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/dto"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/memory"
+	memory "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/components/tools"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )

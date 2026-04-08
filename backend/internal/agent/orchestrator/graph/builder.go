@@ -10,61 +10,65 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
-	orchestratorragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/rag"
+	aftersalenode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/aftersale"
+	cartnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/cart"
+	baseqanode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/fallback"
+	inventorynode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/inventory"
+	ordernode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/order"
+	productnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/product"
+	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
+	orchestratorragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/addtocart"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/fallback"
+	baseqa "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/fallback"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/inventory"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/orderquery"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/productinfo"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/returnexchange"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
-	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// Config 控制主图级别的中断行为。
 type Config struct {
 	InterruptBeforeNodes []string
 	InterruptAfterNodes  []string
 }
 
-// Builder 负责组装主图和业务子图。
 type Builder struct {
 	Config          Config
 	CheckpointStore cache.CheckpointStore
 
 	Registry *agenttool.Registry
 
-	AccessGuard     *orchestratornode.AccessGuardNode
-	SessionLoad     *orchestratornode.SessionLoadNode
-	CachePolicy     *orchestratornode.CachePolicyNode
-	MultiLevelCache *orchestratornode.MultiLevelCacheNode
-	IntentClassify  *orchestratornode.IntentClassifyNode
-	SlotExtract     *orchestratornode.SlotExtractNode
-	SlotCheck       *orchestratornode.SlotCheckNode
-	AskUser         *orchestratornode.AskUserNode
-	Route           *orchestratornode.RouteNode
-	SkillSelect     *orchestratornode.SkillSelectNode
-	ResponseRender  *orchestratornode.ResponseRenderNode
-	CacheWriteback  *orchestratornode.CacheWritebackNode
+	AccessGuard       *globalnode.AccessGuardNode
+	SessionLoad       *globalnode.SessionLoadNode
+	CachePreCheck     *globalnode.CachePreCheckNode
+	L0ExactCache      *globalnode.L0ExactCacheNode
+	L1SemanticCache   *globalnode.L1SemanticCacheNode
+	QueryRewrite      *globalnode.QueryRewriteNode
+	IntentClassify    *globalnode.IntentClassifyNode
+	GlobalSlotExtract *globalnode.GlobalSlotExtractNode
+	GlobalSlotCheck   *globalnode.GlobalSlotCheckNode
+	AskUser           *globalnode.AskUserNode
+	Route             *globalnode.RouteNode
+	SkillSelect       *globalnode.SkillSelectNode
+	Finalize          *globalnode.FinalizeNode
 
-	OrderRead           *orchestratornode.OrderReadNode
-	InventoryRead       *orchestratornode.InventoryReadNode
-	ProductInfo         *orchestratornode.ProductInfoNode
-	AddToCart           *orchestratornode.AddToCartNode
-	ReturnExchangeQuery *orchestratornode.ReturnExchangeQueryNode
-	EligibilityCheck    *orchestratornode.EligibilityCheckNode
-	ConfirmSummary      *orchestratornode.ConfirmSummaryNode
-	SubmitAfterSale     *orchestratornode.SubmitAfterSaleNode
+	OrderRead           *ordernode.OrderReadNode
+	InventoryRead       *inventorynode.InventoryReadNode
+	ProductInfo         *productnode.ProductInfoNode
+	AddToCart           *cartnode.AddToCartNode
+	ReturnExchangeQuery *aftersalenode.ReturnExchangeQueryNode
+	EligibilityCheck    *aftersalenode.EligibilityCheckNode
+	ConfirmSummary      *aftersalenode.ConfirmSummaryNode
+	SubmitAfterSale     *aftersalenode.SubmitAfterSaleNode
 	RAG                 *orchestratorragnode.RAGNode
-	Fallback            *orchestratornode.FallbackNode
+	BaseQA              *baseqanode.BaseQANode
 }
 
-func (b *Builder) Build(ctx context.Context) (compose.Runnable[map[string]any, *orchestratorstate.ConversationState], error) {
-	g := compose.NewGraph[map[string]any, *orchestratorstate.ConversationState](
-		compose.WithGenLocalState(func(context.Context) *orchestratorstate.ConversationState {
-			return &orchestratorstate.ConversationState{}
+func (b *Builder) Build(ctx context.Context) (compose.Runnable[map[string]any, *orchestratorstate.State], error) {
+	g := compose.NewGraph[map[string]any, *orchestratorstate.State](
+		compose.WithGenLocalState(func(context.Context) *orchestratorstate.State {
+			return &orchestratorstate.State{}
 		}),
 	)
 
@@ -98,10 +102,10 @@ func (b *Builder) Build(ctx context.Context) (compose.Runnable[map[string]any, *
 	return g.Compile(ctx, opts...)
 }
 
-func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestratorstate.ConversationState]) error {
+func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestratorstate.State]) error {
 	if err := g.AddLambdaNode("AccessGuardNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.ConversationState) (*orchestratorstate.ConversationState, error) {
-			result, err := b.AccessGuard.Invoke(ctx, orchestratornode.AccessGuardInput{
+		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
+			result, err := b.AccessGuard.Invoke(ctx, globalnode.AccessGuardInput{
 				Message:     state.Request.Message,
 				UserID:      state.Request.UserID,
 				ResumeToken: state.Request.ResumeToken,
@@ -109,48 +113,49 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 			if err != nil {
 				return nil, err
 			}
-			session := orchestratorstate.EnsureSessionState(state)
-			session.UserID = result.UserID
+			session := &state.Session
+			session.UserID = state.Request.UserID
 			session.RawQuery = result.RawQuery
 			session.TenantID = result.TenantID
 			session.ResumeFromCP = result.ResumeFromCP
-			session.NeedHandoff = result.NeedHandoff
-			session.HandoffReason = result.HandoffReason
+			session.ErrorCode = result.ErrorCode
 			session.FinalAnswer = result.FinalAnswer
-			session.Route = result.Route
+			if result.ErrorCode != "" {
+				state.Answer.CacheableHint = boolPtr(false)
+			}
+			state.Interrupt = nil
 			return state, nil
 		}), compose.WithNodeName("AccessGuardNode"), compose.WithInputKey("flow")); err != nil {
 		return err
 	}
 
 	if err := g.AddLambdaNode("SessionLoadNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.ConversationState) (*orchestratorstate.ConversationState, error) {
-			result, err := b.SessionLoad.Invoke(ctx, orchestratornode.SessionLoadInput{
-				Request:     state.Request,
-				TraceID:     state.TraceID,
-				SessionMeta: state.SessionMeta,
+		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
+			result, err := b.SessionLoad.Invoke(ctx, globalnode.SessionLoadInput{
+				Request:       state.Request,
+				TraceID:       state.TraceID,
+				ExistingSlots: cloneSlots(state.Session.Slots),
 			})
 			if err != nil {
 				return nil, err
 			}
-			session := orchestratorstate.EnsureSessionState(state)
+			session := &state.Session
 			state.SessionMeta = result.SessionMeta
+			state.Request.SessionID = result.SessionID
 			session.SessionID = result.SessionID
-			if orchestratorstate.SlotString(state, "order_id") == "" && result.OrderID != "" {
-				orchestratorstate.SetSlot(state, "order_id", result.OrderID)
-			}
-			if orchestratorstate.SlotString(state, "product_id") == "" && result.ProductID != "" {
-				orchestratorstate.SetSlot(state, "product_id", result.ProductID)
-			}
+			state.Session.Messages = append([]*schema.Message(nil), result.RecentMessages...)
+			session.Slots = result.Slots
+			session.CurrentRefs = result.CurrentRefs
+			session.PendingSelections = clonePendingSelectionsState(result.PendingSelections)
 			state.EnsureResponse().SessionID = result.SessionID
 			return state, nil
 		}), compose.WithNodeName("SessionLoadNode")); err != nil {
 		return err
 	}
 
-	if err := g.AddLambdaNode("CachePolicyNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.ConversationState) (*orchestratorstate.ConversationState, error) {
-			result, err := b.CachePolicy.Invoke(ctx, orchestratornode.CachePolicyInput{
+	if err := g.AddLambdaNode("CachePreCheckNode", compose.InvokableLambda(
+		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
+			result, err := b.CachePreCheck.Invoke(ctx, globalnode.CachePreCheckInput{
 				TenantID:        state.Session.TenantID,
 				UserID:          state.Request.UserID,
 				Message:         state.Session.RawQuery,
@@ -166,25 +171,20 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 			state.Cache.IntentBucket = result.IntentBucket
 			state.Cache.Scope = string(result.Scope)
 			return state, nil
-		}), compose.WithNodeName("CachePolicyNode")); err != nil {
+		}), compose.WithNodeName("CachePreCheckNode")); err != nil {
 		return err
 	}
 
-	if err := g.AddLambdaNode("MultiLevelCacheNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.ConversationState) (*orchestratorstate.ConversationState, error) {
-			result, err := b.MultiLevelCache.Invoke(ctx, orchestratornode.MultiLevelCacheInput{
+	if err := g.AddLambdaNode("L0ExactCacheNode", compose.InvokableLambda(
+		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
+			result, err := b.L0ExactCache.Invoke(ctx, globalnode.L0ExactCacheInput{
 				TenantID:     state.Session.TenantID,
 				UserID:       state.Request.UserID,
 				RawQuery:     state.Session.RawQuery,
 				SessionID:    state.Request.SessionID,
 				TraceID:      state.TraceID,
 				CheckpointID: state.Checkpoint,
-				Policy: orchestratornode.CachePolicyResult{
-					AllowExact:    state.Cache.AllowExact,
-					AllowSemantic: state.Cache.AllowSemantic,
-					IntentBucket:  state.Cache.IntentBucket,
-					Scope:         cache.CacheScope(state.Cache.Scope),
-				},
+				AllowRead:    state.Cache.AllowExact,
 			})
 			if err != nil {
 				return nil, err
@@ -197,67 +197,61 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				state.Session.Route = result.Route
 			}
 			return state, nil
-		}), compose.WithNodeName("MultiLevelCacheNode")); err != nil {
+		}), compose.WithNodeName("L0ExactCacheNode")); err != nil {
 		return err
 	}
 
-	if err := g.AddLambdaNode("PrepareIntentClassifyInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (orchestratornode.IntentClassifyInput, error) {
-			if state == nil {
-				return orchestratornode.IntentClassifyInput{}, fmt.Errorf("对话状态不能为空")
+	if err := g.AddLambdaNode("L1SemanticCacheNode", compose.InvokableLambda(
+		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
+			if b.L1SemanticCache == nil {
+				return state, nil
 			}
-			return orchestratornode.IntentClassifyInput{
-				Message: state.Session.RawQuery,
-				History: orchestratorstate.RecentMessages(state),
-			}, nil
-		}), compose.WithNodeName("PrepareIntentClassifyInputNode")); err != nil {
+			result, err := b.L1SemanticCache.Invoke(ctx, globalnode.L1SemanticCacheInput{
+				TenantID:     state.Session.TenantID,
+				UserID:       state.Request.UserID,
+				Query:        state.Session.RawQuery,
+				SessionID:    state.Request.SessionID,
+				TraceID:      state.TraceID,
+				CheckpointID: state.Checkpoint,
+				IntentBucket: state.Cache.IntentBucket,
+				Scope:        cache.CacheScope(state.Cache.Scope),
+				AllowRead:    state.Cache.AllowSemantic,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if result.CacheHit {
+				state.Response = result.Response
+				state.Session.CacheHitLevel = result.HitLevel
+				state.Session.FinalAnswer = result.FinalAnswer
+				state.Session.Intent = result.Intent
+				state.Session.Route = result.Route
+			}
+			return state, nil
+		}), compose.WithNodeName("L1SemanticCacheNode")); err != nil {
 		return err
 	}
 
-	if b.IntentClassify != nil {
-		if err := g.AddLambdaNode("IntentClassifyNode", compose.InvokableLambda(b.IntentClassify.Invoke), compose.WithNodeName("IntentClassifyNode")); err != nil {
+	if b.QueryRewrite != nil {
+		if err := g.AddLambdaNode("QueryRewriteNode", compose.InvokableLambda(b.QueryRewrite.Invoke), compose.WithNodeName("QueryRewriteNode")); err != nil {
 			return err
 		}
 	}
 
-	if err := g.AddLambdaNode("ApplyIntentClassifyResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result *orchestratornode.IntentClassifyResult) (*orchestratorstate.ConversationState, error) {
-			var current *orchestratorstate.ConversationState
-			if err := orchestratorstate.ProcessConversationState(ctx, func(state *orchestratorstate.ConversationState) error {
-				if state == nil {
-					return fmt.Errorf("对话状态不能为空")
-				}
-				current = state
-				if result == nil {
-					return nil
-				}
-				state.Intent.Intent = result.Intent
-				state.Intent.Confidence = result.Confidence
-				state.Intent.Entities = result.Entities
-				state.Intent.NeedRewrite = result.NeedRewrite
-				state.Intent.Reason = result.Reason
-				state.Session.Intent = result.Intent
-				state.Session.IntentConfidence = result.Confidence
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-			if current == nil {
-				return nil, fmt.Errorf("对话状态不能为空")
-			}
-			return current, nil
-		}), compose.WithNodeName("ApplyIntentClassifyResultNode")); err != nil {
-		return err
+	if b.IntentClassify != nil {
+		if err := g.AddLambdaNode("IntentClassifyNode", compose.InvokableLambda(b.IntentClassify.Apply), compose.WithNodeName("IntentClassifyNode")); err != nil {
+			return err
+		}
 	}
 
 	if err := g.AddLambdaNode("PrepareReturnPolicyRAGInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (orchestratorragnode.Input, error) {
+		func(_ context.Context, state *orchestratorstate.State) (orchestratorragnode.Input, error) {
 			if state == nil {
-				return orchestratorragnode.Input{}, fmt.Errorf("对话状态不能为空")
+				return orchestratorragnode.Input{}, fmt.Errorf("state is nil")
 			}
 			return orchestratorragnode.Input{
 				Message: state.Session.RawQuery,
-				History: orchestratorstate.RecentMessages(state),
+				History: append([]*schema.Message(nil), state.Session.Messages...),
 				Intent:  string(state.Session.Intent),
 			}, nil
 		}), compose.WithNodeName("PrepareReturnPolicyRAGInputNode")); err != nil {
@@ -271,11 +265,11 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 	}
 
 	if err := g.AddLambdaNode("ApplyReturnPolicyRAGResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result *orchestratorragnode.Result) (*orchestratorstate.ConversationState, error) {
-			var current *orchestratorstate.ConversationState
-			if err := orchestratorstate.ProcessConversationState(ctx, func(state *orchestratorstate.ConversationState) error {
+		func(ctx context.Context, result *orchestratorragnode.Result) (*orchestratorstate.State, error) {
+			var current *orchestratorstate.State
+			if err := orchestratorstate.ProcessState(ctx, func(state *orchestratorstate.State) error {
 				if state == nil {
-					return fmt.Errorf("对话状态不能为空")
+					return fmt.Errorf("state is nil")
 				}
 				current = state
 				if result == nil {
@@ -284,12 +278,13 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				state.Rewrite.Query = result.Query
 				state.Rewrite.Reason = ""
 				state.Retrieval.Documents = append([]*schema.Document(nil), result.Documents...)
+				state.Answer.CacheableHint = boolPtr(true)
 				return nil
 			}); err != nil {
 				return nil, err
 			}
 			if current == nil {
-				return nil, fmt.Errorf("对话状态不能为空")
+				return nil, fmt.Errorf("state is nil")
 			}
 			return current, nil
 		}), compose.WithNodeName("ApplyReturnPolicyRAGResultNode")); err != nil {
@@ -297,41 +292,41 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 	}
 
 	if err := g.AddLambdaNode("PrepareOrderQueryInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (orderquery.Input, error) {
+		func(_ context.Context, state *orchestratorstate.State) (orderquery.Input, error) {
 			if state == nil {
-				return orderquery.Input{}, fmt.Errorf("对话状态不能为空")
+				return orderquery.Input{}, fmt.Errorf("state is nil")
 			}
 			return orderquery.Input{Slots: cloneSlots(state.Session.Slots)}, nil
 		}), compose.WithNodeName("PrepareOrderQueryInputNode")); err != nil {
 		return err
 	}
 	if err := g.AddLambdaNode("ApplyOrderQueryResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result orderquery.Output) (*orchestratorstate.ConversationState, error) {
-			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages)
+		func(ctx context.Context, result orderquery.Output) (*orchestratorstate.State, error) {
+			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages, false)
 		}), compose.WithNodeName("ApplyOrderQueryResultNode")); err != nil {
 		return err
 	}
 
 	if err := g.AddLambdaNode("PrepareInventoryInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (inventory.Input, error) {
+		func(_ context.Context, state *orchestratorstate.State) (inventory.Input, error) {
 			if state == nil {
-				return inventory.Input{}, fmt.Errorf("对话状态不能为空")
+				return inventory.Input{}, fmt.Errorf("state is nil")
 			}
 			return inventory.Input{Slots: cloneSlots(state.Session.Slots)}, nil
 		}), compose.WithNodeName("PrepareInventoryInputNode")); err != nil {
 		return err
 	}
 	if err := g.AddLambdaNode("ApplyInventoryResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result inventory.Output) (*orchestratorstate.ConversationState, error) {
-			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages)
+		func(ctx context.Context, result inventory.Output) (*orchestratorstate.State, error) {
+			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages, false)
 		}), compose.WithNodeName("ApplyInventoryResultNode")); err != nil {
 		return err
 	}
 
 	if err := g.AddLambdaNode("PrepareAddToCartInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (addtocart.Input, error) {
+		func(_ context.Context, state *orchestratorstate.State) (addtocart.Input, error) {
 			if state == nil {
-				return addtocart.Input{}, fmt.Errorf("对话状态不能为空")
+				return addtocart.Input{}, fmt.Errorf("state is nil")
 			}
 			return addtocart.Input{
 				Slots:    cloneSlots(state.Session.Slots),
@@ -341,21 +336,21 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 		return err
 	}
 	if err := g.AddLambdaNode("ApplyAddToCartResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result addtocart.Output) (*orchestratorstate.ConversationState, error) {
-			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages)
+		func(ctx context.Context, result addtocart.Output) (*orchestratorstate.State, error) {
+			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages, false)
 		}), compose.WithNodeName("ApplyAddToCartResultNode")); err != nil {
 		return err
 	}
 
 	if err := g.AddLambdaNode("PrepareProductInfoInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (productinfo.Input, error) {
+		func(_ context.Context, state *orchestratorstate.State) (productinfo.Input, error) {
 			if state == nil {
-				return productinfo.Input{}, fmt.Errorf("对话状态不能为空")
+				return productinfo.Input{}, fmt.Errorf("state is nil")
 			}
 			return productinfo.Input{
 				Slots:    cloneSlots(state.Session.Slots),
 				RawQuery: state.Session.RawQuery,
-				History:  orchestratorstate.RecentMessages(state),
+				History:  append([]*schema.Message(nil), state.Session.Messages...),
 				Intent:   string(state.Session.Intent),
 				Recorder: state.Recorder,
 			}, nil
@@ -363,11 +358,11 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 		return err
 	}
 	if err := g.AddLambdaNode("ApplyProductInfoResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result productinfo.Output) (*orchestratorstate.ConversationState, error) {
-			var current *orchestratorstate.ConversationState
-			if err := orchestratorstate.ProcessConversationState(ctx, func(state *orchestratorstate.ConversationState) error {
+		func(ctx context.Context, result productinfo.Output) (*orchestratorstate.State, error) {
+			var current *orchestratorstate.State
+			if err := orchestratorstate.ProcessState(ctx, func(state *orchestratorstate.State) error {
 				if state == nil {
-					return fmt.Errorf("对话状态不能为空")
+					return fmt.Errorf("state is nil")
 				}
 				current = state
 				state.Session.FinalAnswer = result.FinalAnswer
@@ -381,6 +376,7 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				state.Rewrite.Query = result.Query
 				state.Rewrite.Reason = ""
 				state.Retrieval.Documents = append([]*schema.Document(nil), result.Documents...)
+				state.Answer.CacheableHint = boolPtr(true)
 				return nil
 			}); err != nil {
 				return nil, err
@@ -391,9 +387,9 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 	}
 
 	if err := g.AddLambdaNode("PrepareReturnExchangeInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (returnexchange.Input, error) {
+		func(_ context.Context, state *orchestratorstate.State) (returnexchange.Input, error) {
 			if state == nil {
-				return returnexchange.Input{}, fmt.Errorf("对话状态不能为空")
+				return returnexchange.Input{}, fmt.Errorf("state is nil")
 			}
 			return returnexchange.Input{
 				Slots:    cloneSlots(state.Session.Slots),
@@ -405,11 +401,11 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 		return err
 	}
 	if err := g.AddLambdaNode("ApplyReturnExchangeResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result returnexchange.Output) (*orchestratorstate.ConversationState, error) {
-			var current *orchestratorstate.ConversationState
-			if err := orchestratorstate.ProcessConversationState(ctx, func(state *orchestratorstate.ConversationState) error {
+		func(ctx context.Context, result returnexchange.Output) (*orchestratorstate.State, error) {
+			var current *orchestratorstate.State
+			if err := orchestratorstate.ProcessState(ctx, func(state *orchestratorstate.State) error {
 				if state == nil {
-					return fmt.Errorf("对话状态不能为空")
+					return fmt.Errorf("state is nil")
 				}
 				current = state
 				state.Session.FinalAnswer = result.FinalAnswer
@@ -421,6 +417,7 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				state.Tool.CallMessage = nil
 				state.Tool.ToolMessages = append([]*schema.Message(nil), result.ToolMessages...)
 				support.HydrateToolResults(state)
+				state.Answer.CacheableHint = boolPtr(false)
 				return nil
 			}); err != nil {
 				return nil, err
@@ -432,103 +429,65 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				resp.Intent = current.Session.Intent
 				resp.Status = domain.ReplyStatusFallback
 				resp.Confidence = 0.9
-				if b.ConfirmSummary != nil && b.ConfirmSummary.PersistTurn != nil {
-					if err := b.ConfirmSummary.PersistTurn(ctx, current, reply, resp.Intent, resp.Confidence); err != nil && b.ConfirmSummary.Logger != nil {
-						b.ConfirmSummary.Logger.Warn("持久化确认轮次失败", logger.Error(err))
-					}
+				current.Session.FinalAnswer = reply
+				current.Answer.CacheableHint = boolPtr(false)
+				current.Interrupt = &orchestratorstate.InterruptState{
+					Payload: map[string]any{"confirm": true, "message": reply},
 				}
-				return current, compose.Interrupt(ctx, map[string]any{"confirm": true, "message": reply})
+				return current, nil
 			}
 			return current, nil
 		}), compose.WithNodeName("ApplyReturnExchangeResultNode")); err != nil {
 		return err
 	}
 
-	if err := g.AddLambdaNode("PrepareFallbackInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (fallback.Input, error) {
+	if err := g.AddLambdaNode("PrepareBaseQAInputNode", compose.InvokableLambda(
+		func(_ context.Context, state *orchestratorstate.State) (baseqa.Input, error) {
 			if state == nil {
-				return fallback.Input{}, fmt.Errorf("对话状态不能为空")
+				return baseqa.Input{}, fmt.Errorf("state is nil")
 			}
-			return fallback.Input{
+			return baseqa.Input{
 				RawQuery:    state.Session.RawQuery,
 				Intent:      string(state.Session.Intent),
-				History:     orchestratorstate.RecentMessages(state),
+				History:     append([]*schema.Message(nil), state.Session.Messages...),
 				FinalAnswer: state.Session.FinalAnswer,
 			}, nil
-		}), compose.WithNodeName("PrepareFallbackInputNode")); err != nil {
+		}), compose.WithNodeName("PrepareBaseQAInputNode")); err != nil {
 		return err
 	}
-	if err := g.AddLambdaNode("ApplyFallbackResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result fallback.Output) (*orchestratorstate.ConversationState, error) {
-			var current *orchestratorstate.ConversationState
-			if err := orchestratorstate.ProcessConversationState(ctx, func(state *orchestratorstate.ConversationState) error {
+	if err := g.AddLambdaNode("ApplyBaseQAResultNode", compose.InvokableLambda(
+		func(ctx context.Context, result baseqa.Output) (*orchestratorstate.State, error) {
+			var current *orchestratorstate.State
+			if err := orchestratorstate.ProcessState(ctx, func(state *orchestratorstate.State) error {
 				if state == nil {
-					return fmt.Errorf("对话状态不能为空")
+					return fmt.Errorf("state is nil")
 				}
 				current = state
 				state.Session.FinalAnswer = result.FinalAnswer
 				state.Rewrite.Query = result.Query
 				state.Rewrite.Reason = ""
 				state.Retrieval.Documents = append([]*schema.Document(nil), result.Documents...)
+				state.Answer.CacheableHint = boolPtr(false)
 				return nil
 			}); err != nil {
 				return nil, err
 			}
 			return current, nil
-		}), compose.WithNodeName("ApplyFallbackResultNode")); err != nil {
+		}), compose.WithNodeName("ApplyBaseQAResultNode")); err != nil {
 		return err
 	}
 
-	if err := g.AddLambdaNode("SlotExtractNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.ConversationState) (*orchestratorstate.ConversationState, error) {
-			result, err := b.SlotExtract.Invoke(ctx, orchestratornode.SlotExtractInput{
-				ExistingSlots:   state.Session.Slots,
-				RequestMetadata: state.Request.Metadata,
-				Intent:          state.Session.Intent,
-				IntentEntities:  state.Intent.Entities,
-				RawQuery:        state.Session.RawQuery,
-				AwaitingUser:    state.Session.AwaitingUser,
-				AwaitingConfirm: state.Session.AwaitingConfirm,
-				ResumeFromCP:    state.Session.ResumeFromCP,
-			})
-			if err != nil {
-				return nil, err
-			}
-			session := orchestratorstate.EnsureSessionState(state)
-			session.Slots = result.Slots
-			session.AwaitingUser = result.AwaitingUser
-			session.AwaitingConfirm = result.AwaitingConfirm
-			return state, nil
-		}), compose.WithNodeName("SlotExtractNode")); err != nil {
+	if err := g.AddLambdaNode("GlobalSlotExtractNode", compose.InvokableLambda(b.GlobalSlotExtract.Apply), compose.WithNodeName("GlobalSlotExtractNode")); err != nil {
 		return err
 	}
 
-	if err := g.AddLambdaNode("SlotCheckNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.ConversationState) (*orchestratorstate.ConversationState, error) {
-			result, err := b.SlotCheck.Invoke(ctx, orchestratornode.SlotCheckInput{
-				Intent:          state.Session.Intent,
-				Slots:           state.Session.Slots,
-				RawQuery:        state.Session.RawQuery,
-				AwaitingConfirm: state.Session.AwaitingConfirm,
-				NeedHandoff:     state.Session.NeedHandoff,
-			})
-			if err != nil {
-				return nil, err
-			}
-			session := orchestratorstate.EnsureSessionState(state)
-			session.MissingSlots = result.MissingSlots
-			session.AwaitingUser = result.AwaitingUser
-			if result.FinalAnswer != "" {
-				session.FinalAnswer = result.FinalAnswer
-			}
-			return state, nil
-		}), compose.WithNodeName("SlotCheckNode")); err != nil {
+	if err := g.AddLambdaNode("GlobalSlotCheckNode", compose.InvokableLambda(b.GlobalSlotCheck.Apply), compose.WithNodeName("GlobalSlotCheckNode")); err != nil {
 		return err
 	}
 
 	if err := g.AddLambdaNode("AskUserNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.ConversationState) (*orchestratorstate.ConversationState, error) {
-			result, err := b.AskUser.Invoke(ctx, orchestratornode.AskUserInput{
+		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
+			result, err := b.AskUser.Invoke(ctx, globalnode.AskUserInput{
 				Reply:            state.Session.FinalAnswer,
 				Intent:           state.Session.Intent,
 				IntentConfidence: state.Session.IntentConfidence,
@@ -542,22 +501,23 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 			resp.Intent = result.Intent
 			resp.Status = domain.ReplyStatusFallback
 			resp.Confidence = result.Confidence
-			if b.AskUser.PersistTurn != nil {
-				if err := b.AskUser.PersistTurn(ctx, state, result.Reply, result.Intent, result.Confidence); err != nil {
-					b.AskUser.Logger.Warn("持久化补槽追问失败", logger.Error(err))
-				}
+			state.Session.FinalAnswer = result.Reply
+			state.Session.AwaitingUser = true
+			state.Answer.CacheableHint = boolPtr(false)
+			state.Interrupt = &orchestratorstate.InterruptState{
+				Payload: map[string]any{
+					"missing_slots": result.MissingSlots,
+					"question":      result.Reply,
+				},
 			}
-			return state, compose.Interrupt(ctx, map[string]any{
-				"missing_slots": result.MissingSlots,
-				"question":      result.Reply,
-			})
+			return state, nil
 		}), compose.WithNodeName("AskUserNode")); err != nil {
 		return err
 	}
 
 	if err := g.AddLambdaNode("RouteNode", compose.InvokableLambda(
-		func(ctx context.Context, state *orchestratorstate.ConversationState) (*orchestratorstate.ConversationState, error) {
-			result, err := b.Route.Invoke(ctx, orchestratornode.RouteInput{
+		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
+			result, err := b.Route.Invoke(ctx, globalnode.RouteInput{
 				Intent:          state.Intent,
 				FeatureFlags:    state.Session.FeatureFlags,
 				AwaitingConfirm: state.Session.AwaitingConfirm,
@@ -565,7 +525,7 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 			if err != nil {
 				return nil, err
 			}
-			session := orchestratorstate.EnsureSessionState(state)
+			session := &state.Session
 			session.Route = result.Route
 			session.ErrorCode = result.ErrorCode
 			session.ReadOnly = result.ReadOnly
@@ -575,11 +535,11 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 	}
 
 	if err := g.AddLambdaNode("PrepareSkillSelectInputNode", compose.InvokableLambda(
-		func(_ context.Context, state *orchestratorstate.ConversationState) (orchestratornode.SkillSelectInput, error) {
+		func(_ context.Context, state *orchestratorstate.State) (globalnode.SkillSelectInput, error) {
 			if state == nil {
-				return orchestratornode.SkillSelectInput{}, fmt.Errorf("对话状态不能为空")
+				return globalnode.SkillSelectInput{}, fmt.Errorf("state is nil")
 			}
-			return orchestratornode.SkillSelectInput{
+			return globalnode.SkillSelectInput{
 				Route: state.Session.Route,
 			}, nil
 		}), compose.WithNodeName("PrepareSkillSelectInputNode")); err != nil {
@@ -593,11 +553,11 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 	}
 
 	if err := g.AddLambdaNode("ApplySkillSelectResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result *orchestratornode.SkillSelectResult) (*orchestratorstate.ConversationState, error) {
-			var current *orchestratorstate.ConversationState
-			if err := orchestratorstate.ProcessConversationState(ctx, func(state *orchestratorstate.ConversationState) error {
+		func(ctx context.Context, result *globalnode.SkillSelectResult) (*orchestratorstate.State, error) {
+			var current *orchestratorstate.State
+			if err := orchestratorstate.ProcessState(ctx, func(state *orchestratorstate.State) error {
 				if state == nil {
-					return fmt.Errorf("对话状态不能为空")
+					return fmt.Errorf("state is nil")
 				}
 				current = state
 				state.Skill.Names = nil
@@ -609,23 +569,29 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *orchestrato
 				return nil, err
 			}
 			if current == nil {
-				return nil, fmt.Errorf("对话状态不能为空")
+				return nil, fmt.Errorf("state is nil")
 			}
 			return current, nil
 		}), compose.WithNodeName("ApplySkillSelectResultNode")); err != nil {
 		return err
 	}
 
-	if err := g.AddLambdaNode("ResponseRenderNode", compose.InvokableLambda(b.ResponseRender.Invoke), compose.WithNodeName("ResponseRenderNode")); err != nil {
+	if err := g.AddLambdaNode("FinalizeNode", compose.InvokableLambda(b.Finalize.Invoke), compose.WithNodeName("FinalizeNode")); err != nil {
 		return err
 	}
-	if err := g.AddLambdaNode("CacheWritebackNode", compose.InvokableLambda(b.CacheWriteback.Invoke), compose.WithNodeName("CacheWritebackNode")); err != nil {
+	if err := g.AddLambdaNode("InterruptNode", compose.InvokableLambda(
+		func(ctx context.Context, state *orchestratorstate.State) (*orchestratorstate.State, error) {
+			if state == nil || state.Interrupt == nil || len(state.Interrupt.Payload) == 0 {
+				return state, nil
+			}
+			return state, compose.Interrupt(ctx, cloneSlots(state.Interrupt.Payload))
+		}), compose.WithNodeName("InterruptNode")); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (b *Builder) addSubgraphs(ctx context.Context, g *compose.Graph[map[string]any, *orchestratorstate.ConversationState]) error {
+func (b *Builder) addSubgraphs(ctx context.Context, g *compose.Graph[map[string]any, *orchestratorstate.State]) error {
 	type subgraphEntry struct {
 		name  string
 		build func() (compose.AnyGraph, error)
@@ -639,7 +605,7 @@ func (b *Builder) addSubgraphs(ctx context.Context, g *compose.Graph[map[string]
 		{"ReturnExchangeGraph", func() (compose.AnyGraph, error) {
 			return returnexchange.Build(ctx, b.Registry, b.ReturnExchangeQuery, b.EligibilityCheck, b.ConfirmSummary, b.SubmitAfterSale)
 		}},
-		{"FallbackGraph", func() (compose.AnyGraph, error) { return fallback.Build(ctx, b.RAG, b.Fallback) }},
+		{"BaseQAGraph", func() (compose.AnyGraph, error) { return baseqa.Build(ctx, b.RAG, b.BaseQA) }},
 	}
 
 	for _, entry := range subgraphs {
@@ -657,43 +623,41 @@ func (b *Builder) addSubgraphs(ctx context.Context, g *compose.Graph[map[string]
 	return nil
 }
 
-// 工作流看这里
-func (b *Builder) addEdges(g *compose.Graph[map[string]any, *orchestratorstate.ConversationState]) error {
+func (b *Builder) addEdges(g *compose.Graph[map[string]any, *orchestratorstate.State]) error {
 	edges := [][2]string{
 		{compose.START, "AccessGuardNode"},
-		{"AccessGuardNode", "SessionLoadNode"},
-		{"SessionLoadNode", "CachePolicyNode"},
-		{"CachePolicyNode", "MultiLevelCacheNode"},
-		{"PrepareIntentClassifyInputNode", "IntentClassifyNode"},
-		{"IntentClassifyNode", "ApplyIntentClassifyResultNode"},
-		{"ApplyIntentClassifyResultNode", "SlotExtractNode"},
-		{"SlotExtractNode", "SlotCheckNode"},
-		{"AskUserNode", compose.END},
+		{"SessionLoadNode", "CachePreCheckNode"},
+		{"CachePreCheckNode", "L0ExactCacheNode"},
+		{"L0ExactCacheNode", "L1SemanticCacheNode"},
+		{"QueryRewriteNode", "IntentClassifyNode"},
+		{"IntentClassifyNode", "GlobalSlotExtractNode"},
+		{"GlobalSlotExtractNode", "GlobalSlotCheckNode"},
+
+		{"AskUserNode", "FinalizeNode"},
 		{"PrepareSkillSelectInputNode", "SkillSelectNode"},
 		{"SkillSelectNode", "ApplySkillSelectResultNode"},
 		{"PrepareOrderQueryInputNode", "OrderQueryGraph"},
 		{"OrderQueryGraph", "ApplyOrderQueryResultNode"},
-		{"ApplyOrderQueryResultNode", "ResponseRenderNode"},
+		{"ApplyOrderQueryResultNode", "FinalizeNode"},
 		{"PrepareInventoryInputNode", "InventoryGraph"},
 		{"InventoryGraph", "ApplyInventoryResultNode"},
-		{"ApplyInventoryResultNode", "ResponseRenderNode"},
+		{"ApplyInventoryResultNode", "FinalizeNode"},
 		{"PrepareProductInfoInputNode", "ProductInfoGraph"},
 		{"ProductInfoGraph", "ApplyProductInfoResultNode"},
-		{"ApplyProductInfoResultNode", "ResponseRenderNode"},
+		{"ApplyProductInfoResultNode", "FinalizeNode"},
 		{"PrepareAddToCartInputNode", "AddToCartGraph"},
 		{"AddToCartGraph", "ApplyAddToCartResultNode"},
-		{"ApplyAddToCartResultNode", "ResponseRenderNode"},
+		{"ApplyAddToCartResultNode", "FinalizeNode"},
 		{"PrepareReturnPolicyRAGInputNode", "ReturnPolicyRAGNode"},
 		{"ReturnPolicyRAGNode", "ApplyReturnPolicyRAGResultNode"},
-		{"ApplyReturnPolicyRAGResultNode", "ResponseRenderNode"},
+		{"ApplyReturnPolicyRAGResultNode", "FinalizeNode"},
 		{"PrepareReturnExchangeInputNode", "ReturnExchangeGraph"},
 		{"ReturnExchangeGraph", "ApplyReturnExchangeResultNode"},
-		{"ApplyReturnExchangeResultNode", "ResponseRenderNode"},
-		{"PrepareFallbackInputNode", "FallbackGraph"},
-		{"FallbackGraph", "ApplyFallbackResultNode"},
-		{"ApplyFallbackResultNode", "ResponseRenderNode"},
-		{"ResponseRenderNode", "CacheWritebackNode"},
-		{"CacheWritebackNode", compose.END},
+		{"ApplyReturnExchangeResultNode", "FinalizeNode"},
+		{"PrepareBaseQAInputNode", "BaseQAGraph"},
+		{"BaseQAGraph", "ApplyBaseQAResultNode"},
+		{"ApplyBaseQAResultNode", "FinalizeNode"},
+		{"InterruptNode", compose.END},
 	}
 	for _, edge := range edges {
 		if err := g.AddEdge(edge[0], edge[1]); err != nil {
@@ -703,23 +667,65 @@ func (b *Builder) addEdges(g *compose.Graph[map[string]any, *orchestratorstate.C
 	return nil
 }
 
-func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstate.ConversationState]) error {
-	if err := g.AddBranch("MultiLevelCacheNode", compose.NewGraphBranch(
-		func(ctx context.Context, _ *orchestratorstate.ConversationState) (string, error) {
-			state := orchestratorstate.ConversationStateFromContext(ctx)
-			if state != nil && state.Session.CacheHitLevel != "" {
-				return "ResponseRenderNode", nil
+func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstate.State]) error {
+	if err := g.AddBranch("AccessGuardNode", compose.NewGraphBranch(
+		func(ctx context.Context, _ *orchestratorstate.State) (string, error) {
+			var state *orchestratorstate.State
+			_ = compose.ProcessState(ctx, func(_ context.Context, current *orchestratorstate.State) error {
+				state = current
+				return nil
+			})
+			if state != nil && state.Session.ErrorCode != "" {
+				return "FinalizeNode", nil
 			}
-			return "PrepareIntentClassifyInputNode", nil
+			return "SessionLoadNode", nil
 		},
-		map[string]bool{"ResponseRenderNode": true, "PrepareIntentClassifyInputNode": true},
+		map[string]bool{"FinalizeNode": true, "SessionLoadNode": true},
 	)); err != nil {
 		return err
 	}
 
-	if err := g.AddBranch("SlotCheckNode", compose.NewGraphBranch(
-		func(ctx context.Context, _ *orchestratorstate.ConversationState) (string, error) {
-			state := orchestratorstate.ConversationStateFromContext(ctx)
+	if err := g.AddBranch("L0ExactCacheNode", compose.NewGraphBranch(
+		func(ctx context.Context, _ *orchestratorstate.State) (string, error) {
+			var state *orchestratorstate.State
+			_ = compose.ProcessState(ctx, func(_ context.Context, current *orchestratorstate.State) error {
+				state = current
+				return nil
+			})
+			if state != nil && state.Session.CacheHitLevel != "" {
+				return "FinalizeNode", nil
+			}
+			return "L1SemanticCacheNode", nil
+		},
+		map[string]bool{"FinalizeNode": true, "L1SemanticCacheNode": true},
+	)); err != nil {
+		return err
+	}
+
+	if err := g.AddBranch("L1SemanticCacheNode", compose.NewGraphBranch(
+		func(ctx context.Context, _ *orchestratorstate.State) (string, error) {
+			var state *orchestratorstate.State
+			_ = compose.ProcessState(ctx, func(_ context.Context, current *orchestratorstate.State) error {
+				state = current
+				return nil
+			})
+			if state != nil && state.Session.CacheHitLevel != "" {
+				return "FinalizeNode", nil
+			}
+			return "QueryRewriteNode", nil
+		},
+		map[string]bool{"FinalizeNode": true, "QueryRewriteNode": true},
+	)); err != nil {
+		return err
+	}
+
+	if err := g.AddBranch("GlobalSlotCheckNode", compose.NewGraphBranch(
+		func(ctx context.Context, _ *orchestratorstate.State) (string, error) {
+			var state *orchestratorstate.State
+			_ = compose.ProcessState(ctx, func(_ context.Context, current *orchestratorstate.State) error {
+				state = current
+				return nil
+			})
 			if state != nil && state.Session.AwaitingUser {
 				return "AskUserNode", nil
 			}
@@ -731,7 +737,7 @@ func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstat
 	}
 
 	if err := g.AddBranch("RouteNode", compose.NewGraphBranch(
-		func(_ context.Context, _ *orchestratorstate.ConversationState) (string, error) {
+		func(_ context.Context, _ *orchestratorstate.State) (string, error) {
 			return "PrepareSkillSelectInputNode", nil
 		},
 		map[string]bool{"PrepareSkillSelectInputNode": true},
@@ -739,11 +745,32 @@ func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstat
 		return err
 	}
 
+	if err := g.AddBranch("FinalizeNode", compose.NewGraphBranch(
+		func(ctx context.Context, _ *orchestratorstate.State) (string, error) {
+			var state *orchestratorstate.State
+			_ = compose.ProcessState(ctx, func(_ context.Context, current *orchestratorstate.State) error {
+				state = current
+				return nil
+			})
+			if state != nil && state.Interrupt != nil && len(state.Interrupt.Payload) > 0 {
+				return "InterruptNode", nil
+			}
+			return compose.END, nil
+		},
+		map[string]bool{"InterruptNode": true, compose.END: true},
+	)); err != nil {
+		return err
+	}
+
 	if err := g.AddBranch("ApplySkillSelectResultNode", compose.NewGraphBranch(
-		func(ctx context.Context, _ *orchestratorstate.ConversationState) (string, error) {
-			state := orchestratorstate.ConversationStateFromContext(ctx)
+		func(ctx context.Context, _ *orchestratorstate.State) (string, error) {
+			var state *orchestratorstate.State
+			_ = compose.ProcessState(ctx, func(_ context.Context, current *orchestratorstate.State) error {
+				state = current
+				return nil
+			})
 			if state == nil {
-				return "PrepareFallbackInputNode", nil
+				return "PrepareBaseQAInputNode", nil
 			}
 			switch state.Session.Route {
 			case orchestratorstate.RouteOrderQuery:
@@ -759,7 +786,7 @@ func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstat
 			case orchestratorstate.RouteReturnExchangeApply:
 				return "PrepareReturnExchangeInputNode", nil
 			default:
-				return "PrepareFallbackInputNode", nil
+				return "PrepareBaseQAInputNode", nil
 			}
 		},
 		map[string]bool{
@@ -769,7 +796,7 @@ func (b *Builder) addBranches(g *compose.Graph[map[string]any, *orchestratorstat
 			"PrepareAddToCartInputNode":       true,
 			"PrepareReturnPolicyRAGInputNode": true,
 			"PrepareReturnExchangeInputNode":  true,
-			"PrepareFallbackInputNode":        true,
+			"PrepareBaseQAInputNode":          true,
 		},
 	)); err != nil {
 		return err
@@ -784,11 +811,12 @@ func applyToolFlowResult(
 	handoffReason string,
 	readOnly bool,
 	toolMessages []*schema.Message,
-) (*orchestratorstate.ConversationState, error) {
-	var current *orchestratorstate.ConversationState
-	if err := orchestratorstate.ProcessConversationState(ctx, func(state *orchestratorstate.ConversationState) error {
+	cacheableHint bool,
+) (*orchestratorstate.State, error) {
+	var current *orchestratorstate.State
+	if err := orchestratorstate.ProcessState(ctx, func(state *orchestratorstate.State) error {
 		if state == nil {
-			return fmt.Errorf("对话状态不能为空")
+			return fmt.Errorf("state is nil")
 		}
 		current = state
 		state.Session.FinalAnswer = finalAnswer
@@ -798,6 +826,7 @@ func applyToolFlowResult(
 		state.Tool.Plans = nil
 		state.Tool.CallMessage = nil
 		state.Tool.ToolMessages = append([]*schema.Message(nil), toolMessages...)
+		state.Answer.CacheableHint = boolPtr(cacheableHint)
 		support.HydrateToolResults(state)
 		return nil
 	}); err != nil {
@@ -815,4 +844,26 @@ func cloneSlots(input map[string]any) map[string]any {
 		result[key] = value
 	}
 	return result
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func clonePendingSelectionsState(input map[string]orchestratorstate.PendingSelection) map[string]orchestratorstate.PendingSelection {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]orchestratorstate.PendingSelection, len(input))
+	for key, selection := range input {
+		cloned := orchestratorstate.PendingSelection{Kind: selection.Kind}
+		if len(selection.Options) > 0 {
+			cloned.Options = make(map[string]string, len(selection.Options))
+			for optionKey, optionValue := range selection.Options {
+				cloned.Options[optionKey] = optionValue
+			}
+		}
+		out[key] = cloned
+	}
+	return out
 }

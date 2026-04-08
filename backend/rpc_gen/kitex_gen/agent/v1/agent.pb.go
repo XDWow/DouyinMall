@@ -157,9 +157,11 @@ func (x SessionStatus) String() string {
 }
 
 type ChatRequest struct {
-	SessionId string `protobuf:"bytes,1,opt,name=session_id" json:"session_id,omitempty"`
-	UserId    int64  `protobuf:"varint,2,opt,name=user_id" json:"user_id,omitempty"`
-	Message   string `protobuf:"bytes,3,opt,name=message" json:"message,omitempty"`
+	SessionId   string            `protobuf:"bytes,1,opt,name=session_id" json:"session_id,omitempty"`
+	UserId      int64             `protobuf:"varint,2,opt,name=user_id" json:"user_id,omitempty"`
+	Message     string            `protobuf:"bytes,3,opt,name=message" json:"message,omitempty"`
+	ResumeToken string            `protobuf:"bytes,4,opt,name=resume_token" json:"resume_token,omitempty"`
+	Metadata    map[string]string `protobuf:"bytes,5,rep,name=metadata" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 }
 
 func (x *ChatRequest) Reset() { *x = ChatRequest{} }
@@ -189,6 +191,20 @@ func (x *ChatRequest) GetMessage() string {
 	return ""
 }
 
+func (x *ChatRequest) GetResumeToken() string {
+	if x != nil {
+		return x.ResumeToken
+	}
+	return ""
+}
+
+func (x *ChatRequest) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 type ChatResponse struct {
 	Reply              string          `protobuf:"bytes,1,opt,name=reply" json:"reply,omitempty"`                             // AI 鍥炲鍐呭
 	Intent             IntentType      `protobuf:"varint,2,opt,name=intent" json:"intent,omitempty"`                          // 璇嗗埆鍑虹殑鎰忓浘
@@ -196,6 +212,10 @@ type ChatResponse struct {
 	ToolExecs          []*ToolExec     `protobuf:"bytes,5,rep,name=tool_execs" json:"tool_execs,omitempty"`                   // 鏈瑙﹀彂鐨勫伐鍏疯皟鐢ㄩ摼锛圥hase 2锛?
 	SuggestedQuestions []string        `protobuf:"bytes,6,rep,name=suggested_questions" json:"suggested_questions,omitempty"` // 涓诲姩鎺ㄨ崘鐨勫叧鑱旈棶棰橈紙2~3 涓級
 	Handoff            *HandoffSummary `protobuf:"bytes,7,opt,name=handoff" json:"handoff,omitempty"`                         // 杞汉宸ヤ氦鎺ユ憳瑕侊紙浠呰浆浜哄伐鏃堕檮甯︼級
+	SessionId          string          `protobuf:"bytes,8,opt,name=session_id" json:"session_id,omitempty"`
+	TraceId            string          `protobuf:"bytes,9,opt,name=trace_id" json:"trace_id,omitempty"`
+	CheckpointId       string          `protobuf:"bytes,10,opt,name=checkpoint_id" json:"checkpoint_id,omitempty"`
+	RerunNodes         []string        `protobuf:"bytes,11,rep,name=rerun_nodes" json:"rerun_nodes,omitempty"`
 }
 
 func (x *ChatResponse) Reset() { *x = ChatResponse{} }
@@ -242,6 +262,34 @@ func (x *ChatResponse) GetSuggestedQuestions() []string {
 func (x *ChatResponse) GetHandoff() *HandoffSummary {
 	if x != nil {
 		return x.Handoff
+	}
+	return nil
+}
+
+func (x *ChatResponse) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ChatResponse) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *ChatResponse) GetCheckpointId() string {
+	if x != nil {
+		return x.CheckpointId
+	}
+	return ""
+}
+
+func (x *ChatResponse) GetRerunNodes() []string {
+	if x != nil {
+		return x.RerunNodes
 	}
 	return nil
 }
@@ -790,5 +838,3 @@ type AgentService_SendMessageStreamServer interface {
 	streaming.Stream
 	Send(*ChatStreamChunk) error
 }
-
-

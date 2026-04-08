@@ -9,7 +9,8 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
+	cartnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/cart"
+	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
@@ -31,13 +32,13 @@ type Output struct {
 
 // Build 组装加购子图。
 // 这段流程会先生成加购计划，再执行工具，并根据工具结果补出最终回复。
-func Build(ctx context.Context, registry *agenttool.Registry, node *orchestratornode.AddToCartNode) (compose.AnyGraph, error) {
+func Build(ctx context.Context, registry *agenttool.Registry, node *cartnode.AddToCartNode) (compose.AnyGraph, error) {
 	if node == nil {
 		return nil, nil
 	}
 
 	_ = ctx
-	toolExecNode := orchestratornode.NewToolExecNode(registry)
+	toolExecNode := sharednode.NewToolExecNode(registry)
 
 	g := compose.NewGraph[Input, Output]()
 	if err := g.AddLambdaNode("ExecuteAddToCartFlowNode", compose.InvokableLambda(
@@ -47,7 +48,7 @@ func Build(ctx context.Context, registry *agenttool.Registry, node *orchestrator
 				slots = map[string]any{}
 			}
 
-			result, err := node.Invoke(ctx, orchestratornode.AddToCartInput{Slots: slots})
+			result, err := node.Invoke(ctx, cartnode.AddToCartInput{Slots: slots})
 			if err != nil {
 				return Output{}, err
 			}
@@ -66,7 +67,7 @@ func Build(ctx context.Context, registry *agenttool.Registry, node *orchestrator
 			if err != nil {
 				return Output{}, err
 			}
-			messages, err := toolExecNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+			messages, err := toolExecNode.Invoke(ctx, sharednode.ToolExecutionInput{
 				Plans:       result.Plans,
 				CallMessage: callMessage,
 				Mode:        agenttool.ToolExecutionSerial,
@@ -88,7 +89,7 @@ func Build(ctx context.Context, registry *agenttool.Registry, node *orchestrator
 							quantity = q
 						}
 					}
-					out.FinalAnswer = fmt.Sprintf("商品 %s 已加入购物车，数量 %d。", productID, quantity)
+					out.FinalAnswer = fmt.Sprintf("\u5546\u54c1 %s \u5df2\u52a0\u5165\u8d2d\u7269\u8f66\uff0c\u6570\u91cf %d\u3002", productID, quantity)
 				}
 			}
 			return out, nil

@@ -40,7 +40,7 @@ func TestStreamWriterSend(t *testing.T) {
 	err := writer.Send(context.Background(), orchestratorstate.StreamEvent{
 		Event: "node",
 		Data: map[string]any{
-			"node":   "ResponseRenderNode",
+			"node":   "FinalizeNode",
 			"status": "start",
 		},
 	})

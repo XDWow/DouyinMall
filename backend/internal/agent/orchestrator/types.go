@@ -12,18 +12,18 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	knowledgebase "github.com/XDWow/DouyinMall/backend/internal/agent/infra/knowledgebase"
+	rag "github.com/XDWow/DouyinMall/backend/internal/agent/infra/rag"
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	agentmemory "github.com/XDWow/DouyinMall/backend/internal/agent/memory"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	orchestratorprompt "github.com/XDWow/DouyinMall/backend/internal/agent/prompt"
+	agentsession "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
 func init() {
-	schema.RegisterName[*ConversationState]("agent_conversation_state_v2")
+	schema.RegisterName[*State]("agent_state_v2")
 	schema.RegisterName[*domain.Session]("agent_domain_session_v1")
 	schema.RegisterName[*domain.ChatResult]("agent_chat_result_v1")
 	schema.RegisterName[*cache.ExactCacheItem]("agent_exact_cache_item_v1")
@@ -39,15 +39,15 @@ const (
 	RouteInventory           = orchestratorstate.RouteInventory
 	RouteProductInfo         = orchestratorstate.RouteProductInfo
 	RouteReturnExchangeApply = orchestratorstate.RouteReturnExchangeApply
-	RouteFallback            = orchestratorstate.RouteFallback
+	RouteBaseQA              = orchestratorstate.RouteBaseQA
 )
 
 type FeatureFlags = orchestratorstate.FeatureFlags
 type StreamWriter = orchestratorstate.StreamWriter
 type PromptSet = orchestratorprompt.Set
 type Metrics = orchestratorobserve.Metrics
-type ConversationState = orchestratorstate.ConversationState
-type SessionState = orchestratorstate.SessionState
+type State = orchestratorstate.State
+type Session = orchestratorstate.Session
 type IntentResult = orchestratorstate.IntentResult
 type RewriteResult = orchestratorstate.RewriteResult
 type RetrievalResult = orchestratorstate.RetrievalResult
@@ -106,10 +106,10 @@ func DefaultConfig() Config {
 type Dependencies struct {
 	Model           model.ToolCallingChatModel
 	Embedder        embedding.Embedder
-	KnowledgeBase   *knowledgebase.ManagedKnowledgeService
+	KnowledgeBase   *rag.ManagedKnowledgeService
 	Skills          *agentskill.Registry
 	Registry        *agenttool.Registry
-	Memory          *agentmemory.Manager
+	SessionService  *agentsession.Service
 	ExactCache      cache.ExactCache
 	SemanticCache   cache.SemanticCache
 	RateLimiter     cache.RateLimiter
@@ -125,10 +125,10 @@ type Runtime struct {
 	cfg             Config
 	model           model.ToolCallingChatModel
 	embedder        embedding.Embedder
-	knowledgeBase   *knowledgebase.ManagedKnowledgeService
+	knowledgeBase   *rag.ManagedKnowledgeService
 	skills          *agentskill.Registry
 	registry        *agenttool.Registry
-	memory          *agentmemory.Manager
+	sessionService  *agentsession.Service
 	exactCache      cache.ExactCache
 	semanticCache   cache.SemanticCache
 	rateLimiter     cache.RateLimiter
@@ -138,7 +138,7 @@ type Runtime struct {
 	metrics         *Metrics
 	tracer          trace.Tracer
 	callbackHandler callbacks.Handler
-	runnable        compose.Runnable[map[string]any, *ConversationState]
+	runnable        compose.Runnable[map[string]any, *State]
 }
 
 func NewMetrics(namespace string) *Metrics {

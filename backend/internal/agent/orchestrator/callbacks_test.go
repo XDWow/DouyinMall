@@ -1,4 +1,4 @@
-﻿package orchestrator
+package orchestrator
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func TestWorkflowCallbackHandlerAppendsTraceStep(t *testing.T) {
 		Metrics: metrics,
 	}.New()
 
-	state := orchestratorstate.NewConversationState(domain.ChatCommand{Message: "hello"}, nil, orchestratorstate.InitOptions{})
+	state := orchestratorstate.NewState(domain.ChatCommand{Message: "hello"}, nil, orchestratorstate.InitOptions{})
 	info := &callbacks.RunInfo{Name: "IntentClassifyNode"}
 
 	ctx := handler.OnStart(context.Background(), info, state)
@@ -45,7 +45,7 @@ func TestWorkflowCallbackHandlerRecordsError(t *testing.T) {
 		Metrics: metrics,
 	}.New()
 
-	state := orchestratorstate.NewConversationState(domain.ChatCommand{Message: "hello"}, nil, orchestratorstate.InitOptions{})
+	state := orchestratorstate.NewState(domain.ChatCommand{Message: "hello"}, nil, orchestratorstate.InitOptions{})
 	info := &callbacks.RunInfo{Name: "ToolsNode"}
 	runErr := errors.New("tool failed")
 
@@ -63,4 +63,3 @@ func TestWorkflowCallbackHandlerRecordsError(t *testing.T) {
 		t.Fatalf("expected detail tool failed, got %s", step.Detail)
 	}
 }
-

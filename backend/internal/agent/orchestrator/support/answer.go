@@ -7,7 +7,7 @@ import (
 	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-func FallbackAnswer(state *graphstate.ConversationState) string {
+func BaseQAAnswer(state *graphstate.State) string {
 	if state != nil && len(state.Retrieval.Documents) > 0 {
 		doc := state.Retrieval.Documents[0]
 		return fmt.Sprintf(
@@ -19,7 +19,7 @@ func FallbackAnswer(state *graphstate.ConversationState) string {
 	return "我暂时还缺少足够信息，请稍后重试或转人工处理。"
 }
 
-func TemplateAnswer(state *graphstate.ConversationState) string {
+func TemplateAnswer(state *graphstate.State) string {
 	if state == nil {
 		return "我还需要更多上下文信息，请提供订单号或商品信息。"
 	}
@@ -51,7 +51,7 @@ func TemplateAnswer(state *graphstate.ConversationState) string {
 			}
 		}
 	}
-	return FallbackAnswer(state)
+	return BaseQAAnswer(state)
 }
 
 func NormalizeReply(reply string) string {
@@ -60,7 +60,7 @@ func NormalizeReply(reply string) string {
 	return reply
 }
 
-func EstimateConfidence(state *graphstate.ConversationState) float64 {
+func EstimateConfidence(state *graphstate.State) float64 {
 	score := Clamp01(state.Session.IntentConfidence) * 0.5
 	if len(state.Retrieval.Documents) > 0 {
 		score += Clamp01(state.Retrieval.Documents[0].Score()) * 0.2
@@ -83,12 +83,12 @@ func EstimateConfidence(state *graphstate.ConversationState) float64 {
 	return Clamp01(score)
 }
 
-func ShouldUseLLMAnswer(state *graphstate.ConversationState) bool {
+func ShouldUseLLMAnswer(state *graphstate.State) bool {
 	if state == nil || state.Session.NeedHandoff {
 		return false
 	}
 	switch state.Session.Route {
-	case graphstate.RouteReturnPolicy, graphstate.RouteFallback:
+	case graphstate.RouteReturnPolicy, graphstate.RouteBaseQA:
 		return len(state.Retrieval.Documents) > 0
 	case graphstate.RouteProductInfo:
 		return len(state.Retrieval.Documents) > 0 || len(state.ToolExecutions()) > 0

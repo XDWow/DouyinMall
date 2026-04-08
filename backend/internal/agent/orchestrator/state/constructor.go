@@ -10,21 +10,22 @@ import (
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 )
 
-func NewConversationState(req domain.ChatCommand, writer StreamWriter, opts InitOptions) *ConversationState {
+func NewState(req domain.ChatCommand, writer StreamWriter, opts InitOptions) *State {
 	traceID := uuid.NewString()
-	session := SessionState{
-		SessionID:    req.SessionID,
-		UserID:       req.UserID,
-		RawQuery:     strings.TrimSpace(req.Message),
-		Intent:       domain.IntentUnknown,
-		Route:        RouteUnknown,
-		Slots:        map[string]any{},
-		KBVersion:    opts.KBVersion,
-		FeatureFlags: opts.FeatureFlags,
-		ReadOnly:     true,
-		ResumeFromCP: strings.TrimSpace(req.ResumeToken) != "",
+	session := Session{
+		SessionID:         req.SessionID,
+		UserID:            req.UserID,
+		RawQuery:          strings.TrimSpace(req.Message),
+		PendingSelections: map[string]PendingSelection{},
+		Intent:            domain.IntentUnknown,
+		Route:             RouteUnknown,
+		Slots:             map[string]any{},
+		KBVersion:         opts.KBVersion,
+		FeatureFlags:      opts.FeatureFlags,
+		ReadOnly:          true,
+		ResumeFromCP:      strings.TrimSpace(req.ResumeToken) != "",
 	}
-	return &ConversationState{
+	return &State{
 		StartedAt:    time.Now(),
 		TraceID:      traceID,
 		Request:      req,
@@ -43,7 +44,7 @@ func NewConversationState(req domain.ChatCommand, writer StreamWriter, opts Init
 	}
 }
 
-func (s *ConversationState) EnsureResponse() *domain.ChatResult {
+func (s *State) EnsureResponse() *domain.ChatResult {
 	if s.Response == nil {
 		s.Response = &domain.ChatResult{
 			SessionID:   s.Request.SessionID,
@@ -61,7 +62,7 @@ func (s *ConversationState) EnsureResponse() *domain.ChatResult {
 	return s.Response
 }
 
-func (s *ConversationState) ToolExecutions() []domain.ToolExecution {
+func (s *State) ToolExecutions() []domain.ToolExecution {
 	if s == nil || s.Recorder == nil {
 		return nil
 	}

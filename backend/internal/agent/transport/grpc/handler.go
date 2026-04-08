@@ -1,4 +1,4 @@
-﻿package grpc
+package grpc
 
 import (
 	"context"
@@ -23,9 +23,11 @@ func NewHandler(usecase agentusecase.Service) *Handler {
 
 func (h *Handler) SendMessage(ctx context.Context, req *agentv1.ChatRequest) (*agentv1.ChatResponse, error) {
 	resp, err := h.usecase.Chat(ctx, agentusecase.ChatInput{
-		SessionID: req.GetSessionId(),
-		UserID:    req.GetUserId(),
-		Message:   req.GetMessage(),
+		SessionID:   req.GetSessionId(),
+		UserID:      req.GetUserId(),
+		Message:     req.GetMessage(),
+		ResumeToken: req.GetResumeToken(),
+		Metadata:    copyStringMap(req.GetMetadata()),
 	})
 	if err != nil {
 		return nil, err
@@ -35,9 +37,11 @@ func (h *Handler) SendMessage(ctx context.Context, req *agentv1.ChatRequest) (*a
 
 func (h *Handler) SendMessageStream(req *agentv1.ChatRequest, stream agentv1.AgentService_SendMessageStreamServer) error {
 	resp, err := h.usecase.ChatStream(stream.Context(), agentusecase.ChatInput{
-		SessionID: req.GetSessionId(),
-		UserID:    req.GetUserId(),
-		Message:   req.GetMessage(),
+		SessionID:   req.GetSessionId(),
+		UserID:      req.GetUserId(),
+		Message:     req.GetMessage(),
+		ResumeToken: req.GetResumeToken(),
+		Metadata:    copyStringMap(req.GetMetadata()),
 	}, NewStreamWriter(stream))
 	if err != nil {
 		return err
@@ -120,6 +124,9 @@ func toProtoChatResponse(resp *agentusecase.ChatOutput, userMessage string) *age
 		Knowledge:          make([]*agentv1.KnowledgeRef, 0, len(resp.References)),
 		ToolExecs:          make([]*agentv1.ToolExec, 0, len(resp.ToolExecutions)),
 		SuggestedQuestions: buildSuggestedQuestions(resp, userMessage),
+		SessionId:          resp.SessionID,
+		TraceId:            firstNonEmpty(resp.TraceID, resp.Trace.TraceID),
+		CheckpointId:       resp.Trace.CheckpointID,
 	}
 
 	for _, ref := range resp.References {
@@ -145,6 +152,10 @@ func toProtoChatResponse(resp *agentusecase.ChatOutput, userMessage string) *age
 
 	if resp.NeedHandoff {
 		result.Handoff = toProtoHandoff(resp, userMessage)
+	}
+	if resp.Interrupt != nil {
+		result.CheckpointId = firstNonEmpty(resp.Interrupt.CheckpointID, result.CheckpointId)
+		result.RerunNodes = append([]string(nil), resp.Interrupt.RerunNodes...)
 	}
 	return result
 }
@@ -255,6 +266,17 @@ func stringifyMap(values map[string]any) map[string]string {
 	return out
 }
 
+func copyStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
 func summarize(text string, size int) string {
 	runes := []rune(text)
 	if len(runes) <= size {
@@ -353,4 +375,3 @@ func containsAny(text string, values ...string) bool {
 	}
 	return false
 }
-

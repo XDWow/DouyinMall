@@ -11,7 +11,8 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
+	aftersalenode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/aftersale"
+	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
@@ -39,16 +40,16 @@ type Output struct {
 func Build(
 	_ context.Context,
 	registry *agenttool.Registry,
-	queryNode *orchestratornode.ReturnExchangeQueryNode,
-	eligibilityNode *orchestratornode.EligibilityCheckNode,
-	confirmNode *orchestratornode.ConfirmSummaryNode,
-	submitNode *orchestratornode.SubmitAfterSaleNode,
+	queryNode *aftersalenode.ReturnExchangeQueryNode,
+	eligibilityNode *aftersalenode.EligibilityCheckNode,
+	confirmNode *aftersalenode.ConfirmSummaryNode,
+	submitNode *aftersalenode.SubmitAfterSaleNode,
 ) (compose.AnyGraph, error) {
 	if queryNode == nil || eligibilityNode == nil || confirmNode == nil || submitNode == nil {
 		return nil, nil
 	}
 
-	toolExecNode := orchestratornode.NewToolExecNode(registry)
+	toolExecNode := sharednode.NewToolExecNode(registry)
 	g := compose.NewGraph[Input, Output]()
 	if err := g.AddLambdaNode("ExecuteReturnExchangeFlowNode", compose.InvokableLambda(
 		func(ctx context.Context, input Input) (Output, error) {
@@ -62,7 +63,7 @@ func Build(
 			readOnly := false
 			awaitingConfirm := false
 
-			queryResult, err := queryNode.Invoke(ctx, orchestratornode.ReturnExchangeQueryInput{Slots: slots})
+			queryResult, err := queryNode.Invoke(ctx, aftersalenode.ReturnExchangeQueryInput{Slots: slots})
 			if err != nil {
 				return Output{}, err
 			}
@@ -77,7 +78,7 @@ func Build(
 				if callErr != nil {
 					return Output{}, callErr
 				}
-				messages, execErr := toolExecNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+				messages, execErr := toolExecNode.Invoke(ctx, sharednode.ToolExecutionInput{
 					Plans:       queryResult.Plans,
 					CallMessage: callMessage,
 					Mode:        agenttool.ToolExecutionSerial,
@@ -91,7 +92,7 @@ func Build(
 				}
 			}
 
-			eligibilityResult, err := eligibilityNode.Invoke(ctx, orchestratornode.EligibilityCheckInput{
+			eligibilityResult, err := eligibilityNode.Invoke(ctx, aftersalenode.EligibilityCheckInput{
 				Message:          input.Message,
 				Slots:            slots,
 				NeedHandoff:      needHandoff,
@@ -111,7 +112,7 @@ func Build(
 			confirmStatus := eligibilityResult.ConfirmStatus
 
 			if awaitingConfirm {
-				confirmResult, confirmErr := confirmNode.Invoke(ctx, orchestratornode.ConfirmSummaryInput{
+				confirmResult, confirmErr := confirmNode.Invoke(ctx, aftersalenode.ConfirmSummaryInput{
 					Reply:  finalAnswer,
 					Intent: input.Intent,
 				})
@@ -131,7 +132,7 @@ func Build(
 				if len(plans) == 0 {
 					needHandoff = true
 					handoffReason = "after_sale_service_unavailable"
-					finalAnswer = "售后申请服务暂时不可用，已为你转人工处理。"
+					finalAnswer = "\u552e\u540e\u7533\u8bf7\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff0c\u5df2\u4e3a\u4f60\u8f6c\u4eba\u5de5\u5904\u7406\u3002"
 					return Output{
 						FinalAnswer:     finalAnswer,
 						NeedHandoff:     needHandoff,
@@ -146,7 +147,7 @@ func Build(
 					if callErr != nil {
 						return Output{}, callErr
 					}
-					messages, execErr := toolExecNode.Invoke(ctx, orchestratornode.ToolExecutionInput{
+					messages, execErr := toolExecNode.Invoke(ctx, sharednode.ToolExecutionInput{
 						Plans:       plans,
 						CallMessage: callMessage,
 						Mode:        agenttool.ToolExecutionSerial,
@@ -159,7 +160,7 @@ func Build(
 						support.HydrateToolResultsIntoSlots(slots, input.Recorder.Snapshot())
 					}
 				}
-				submitResult, submitErr := submitNode.Invoke(ctx, orchestratornode.SubmitAfterSaleInput{
+				submitResult, submitErr := submitNode.Invoke(ctx, aftersalenode.SubmitAfterSaleInput{
 					ConfirmStatus: confirmStatus,
 					RequestType:   support.FirstNonEmpty(slotString(slots, "request_type"), "return"),
 					SubmitResult:  support.ToolResultMapFromSlots(slots, "create_after_sale_request"),
@@ -225,13 +226,8 @@ func registryHasTool(ctx context.Context, registry *agenttool.Registry, name str
 	if registry == nil {
 		return false
 	}
-	for _, tool := range registry.Tools() {
-		info, err := tool.Info(ctx)
-		if err == nil && info != nil && info.Name == name {
-			return true
-		}
-	}
-	return false
+	_ = ctx
+	return registry.Has(name)
 }
 
 func parseSubmitOrderID(slots map[string]any) (int64, error) {

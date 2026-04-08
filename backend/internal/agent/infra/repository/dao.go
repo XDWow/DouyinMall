@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"context"
@@ -14,6 +14,7 @@ type SessionDO struct {
 	Status      string    `gorm:"type:varchar(16);not null"`
 	LastMessage string    `gorm:"type:varchar(255);not null;default:''"`
 	TotalTurns  int       `gorm:"not null;default:0"`
+	SlotsJSON   string    `gorm:"type:longtext"`
 	CreatedAt   time.Time `gorm:"autoCreateTime"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 }
@@ -59,4 +60,3 @@ func NewDAO(db *gorm.DB) *DAO {
 func (d *DAO) InitTables(ctx context.Context) error {
 	return d.db.WithContext(ctx).AutoMigrate(&SessionDO{}, &MessageDO{}, &KnowledgeChunkDO{})
 }
-

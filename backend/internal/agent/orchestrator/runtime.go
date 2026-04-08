@@ -2,25 +2,26 @@ package orchestrator
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"io"
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
-	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	agentmemory "github.com/XDWow/DouyinMall/backend/internal/agent/memory"
 	orchestratorcallback "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/callback"
 	orchestratorgraph "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/graph"
-	orchestratornode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node"
-	orchestratorragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/rag"
+	aftersalenode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/aftersale"
+	cartnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/cart"
+	baseqanode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/fallback"
+	inventorynode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/inventory"
+	ordernode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/order"
+	productnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/product"
+	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
+	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
+	orchestratorragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
 	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
@@ -54,7 +55,7 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 		knowledgeBase:   deps.KnowledgeBase,
 		skills:          deps.Skills,
 		registry:        deps.Registry,
-		memory:          deps.Memory,
+		sessionService:  deps.SessionService,
 		exactCache:      deps.ExactCache,
 		semanticCache:   deps.SemanticCache,
 		rateLimiter:     deps.RateLimiter,
@@ -65,9 +66,7 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 		tracer:          tracer,
 	}
 
-	toolCheck := orchestratornode.ToolRegistryCheck(svc.registryHasTool)
-	persistTurn := orchestratornode.ConversationTurnPersister(svc.persistConversationTurn)
-	genAnswer := orchestratornode.AnswerGenerator(svc.generateAnswer)
+	toolCheck := sharednode.ToolRegistryCheck(svc.registryHasTool)
 	svc.callbackHandler = orchestratorcallback.Builder{Tracer: tracer, Metrics: metrics}.New()
 
 	runner, err := (&orchestratorgraph.Builder{
@@ -75,30 +74,41 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 			InterruptBeforeNodes: cfg.InterruptBeforeNodes,
 			InterruptAfterNodes:  cfg.InterruptAfterNodes,
 		},
-		CheckpointStore:     deps.CheckpointStore,
-		Registry:            deps.Registry,
-		AccessGuard:         orchestratornode.NewAccessGuardNode(cfg.DefaultTenantID, cfg.RateLimitPerMinute, deps.RateLimiter, deps.CheckpointStore),
-		SessionLoad:         orchestratornode.NewSessionLoadNode(),
-		CachePolicy:         orchestratornode.NewCachePolicyNode(),
-		MultiLevelCache:     orchestratornode.NewMultiLevelCacheNode(deps.ExactCache, deps.SemanticCache, deps.Embedder, cfg.SemanticCacheScore, cfg.SemanticCacheTopK),
-		IntentClassify:      orchestratornode.NewIntentClassifyNode(deps.Model, prompts),
-		SlotExtract:         orchestratornode.NewSlotExtractNode(),
-		SlotCheck:           orchestratornode.NewSlotCheckNode(),
-		AskUser:             orchestratornode.NewAskUserNode(persistTurn, log),
-		Route:               orchestratornode.NewRouteNode(),
-		SkillSelect:         orchestratornode.NewSkillSelectNode(deps.Skills),
-		ResponseRender:      orchestratornode.NewResponseRenderNode(deps.Model, prompts, deps.Skills, genAnswer, metrics),
-		CacheWriteback:      orchestratornode.NewCacheWritebackNode(deps.ExactCache, deps.SemanticCache, deps.Embedder, cfg.ExactCacheTTL, cfg.SemanticCacheTTL, persistTurn, log),
-		OrderRead:           orchestratornode.NewOrderReadNode(toolCheck),
-		InventoryRead:       orchestratornode.NewInventoryReadNode(toolCheck),
-		ProductInfo:         orchestratornode.NewProductInfoNode(toolCheck),
-		AddToCart:           orchestratornode.NewAddToCartNode(toolCheck),
-		ReturnExchangeQuery: orchestratornode.NewReturnExchangeQueryNode(toolCheck),
-		EligibilityCheck:    orchestratornode.NewEligibilityCheckNode(),
-		ConfirmSummary:      orchestratornode.NewConfirmSummaryNode(persistTurn, log),
-		SubmitAfterSale:     orchestratornode.NewSubmitAfterSaleNode(),
+		CheckpointStore:   deps.CheckpointStore,
+		Registry:          deps.Registry,
+		AccessGuard:       globalnode.NewAccessGuardNode(cfg.DefaultTenantID, cfg.RateLimitPerMinute, deps.RateLimiter, deps.CheckpointStore),
+		SessionLoad:       globalnode.NewSessionLoadNode(deps.SessionService),
+		CachePreCheck:     globalnode.NewCachePreCheckNode(),
+		L0ExactCache:      globalnode.NewL0ExactCacheNode(deps.ExactCache),
+		L1SemanticCache:   globalnode.NewL1SemanticCacheNode(deps.SemanticCache, deps.Embedder, cfg.SemanticCacheScore, cfg.SemanticCacheTopK),
+		QueryRewrite:      globalnode.NewQueryRewriteNode(deps.Model, prompts),
+		IntentClassify:    globalnode.NewIntentClassifyNode(deps.Model, prompts),
+		GlobalSlotExtract: globalnode.NewGlobalSlotExtractNode(),
+		GlobalSlotCheck:   globalnode.NewGlobalSlotCheckNode(),
+		AskUser:           globalnode.NewAskUserNode(),
+		Route:             globalnode.NewRouteNode(),
+		SkillSelect:       globalnode.NewSkillSelectNode(deps.Skills),
+		Finalize: globalnode.NewFinalizeNode(
+			deps.Model,
+			prompts,
+			deps.Skills,
+			deps.Registry,
+			deps.SessionService,
+			globalnode.NewCacheWritebackService(deps.ExactCache, deps.SemanticCache, deps.Embedder, cfg.ExactCacheTTL, cfg.SemanticCacheTTL, log),
+			log,
+			metrics,
+			cfg.MaxAnswerTokens,
+		),
+		OrderRead:           ordernode.NewOrderReadNode(toolCheck),
+		InventoryRead:       inventorynode.NewInventoryReadNode(toolCheck),
+		ProductInfo:         productnode.NewProductInfoNode(toolCheck),
+		AddToCart:           cartnode.NewAddToCartNode(toolCheck),
+		ReturnExchangeQuery: aftersalenode.NewReturnExchangeQueryNode(toolCheck),
+		EligibilityCheck:    aftersalenode.NewEligibilityCheckNode(),
+		ConfirmSummary:      aftersalenode.NewConfirmSummaryNode(),
+		SubmitAfterSale:     aftersalenode.NewSubmitAfterSaleNode(),
 		RAG:                 orchestratorragnode.NewRAGNode(deps.KnowledgeBase, cfg.RetrieveTopK, cfg.RetrieveMinScore),
-		Fallback:            orchestratornode.NewFallbackNode(),
+		BaseQA:              baseqanode.NewBaseQANode(),
 	}).Build(ctx)
 	if err != nil {
 		return nil, err
@@ -127,8 +137,8 @@ func (s *Runtime) CreateSession(ctx context.Context, userID int64) (*domain.Sess
 		UpdatedAt:  now,
 		TotalTurns: 0,
 	}
-	if s.memory != nil {
-		if err := s.memory.CreateSession(ctx, session); err != nil {
+	if s.sessionService != nil {
+		if err := s.sessionService.CreateSession(ctx, session); err != nil {
 			return nil, err
 		}
 	}
@@ -136,10 +146,10 @@ func (s *Runtime) CreateSession(ctx context.Context, userID int64) (*domain.Sess
 }
 
 func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]domain.Message, int, error) {
-	if s.memory == nil {
+	if s.sessionService == nil {
 		return nil, 0, nil
 	}
-	messages, err := s.memory.AllMessages(ctx, sessionID)
+	messages, err := s.sessionService.AllMessages(ctx, sessionID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -164,22 +174,22 @@ func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offse
 }
 
 func (s *Runtime) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
-	if s.memory == nil {
+	if s.sessionService == nil {
 		return nil, 0, nil
 	}
-	return s.memory.ListSessions(ctx, userID, limit, offset)
+	return s.sessionService.ListSessions(ctx, userID, limit, offset)
 }
 
 func (s *Runtime) ClearSession(ctx context.Context, sessionID string) error {
-	if s.memory == nil {
+	if s.sessionService == nil {
 		return nil
 	}
-	return s.memory.Clear(ctx, sessionID)
+	return s.sessionService.Clear(ctx, sessionID)
 }
 
 func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer StreamWriter) (*domain.ChatResult, error) {
 	start := time.Now()
-	state := orchestratorstate.NewConversationState(req, writer, orchestratorstate.InitOptions{
+	state := orchestratorstate.NewState(req, writer, orchestratorstate.InitOptions{
 		KBVersion:    cfgValue(s.cfg.KBVersion, DefaultConfig().KBVersion),
 		FeatureFlags: s.cfg.FeatureFlags,
 	})
@@ -189,11 +199,8 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 		checkpointID = state.TraceID
 	}
 	state.Checkpoint = checkpointID
-
-	if err := s.loadSessionContext(ctx, state); err != nil {
-		orchestratorobserve.SendEvent(ctx, writer, "error", map[string]any{"message": err.Error()})
-		s.metrics.ObserveRequest("error", time.Since(start))
-		return nil, err
+	if strings.TrimSpace(state.Request.SessionID) == "" {
+		state.Request.SessionID = "sess_" + state.TraceID
 	}
 
 	ctx = agenttool.WithExecutionRecorder(ctx, state.Recorder)
@@ -236,7 +243,7 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 			resp.Interrupt.RerunNodes = append(resp.Interrupt.RerunNodes, info.RerunNodes...)
 		}
 		if strings.TrimSpace(resp.Reply) == "" {
-			resp.Reply = "请先补充所需信息，我再继续为你处理。"
+			resp.Reply = "\u8bf7\u5148\u8865\u5145\u6240\u9700\u4fe1\u606f\uff0c\u6211\u518d\u7ee7\u7eed\u4e3a\u4f60\u5904\u7406\u3002"
 		}
 		s.metrics.ObserveRequest(string(resp.Status), time.Since(start))
 		orchestratorobserve.SendEvent(ctx, writer, "done", resp)
@@ -254,168 +261,12 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 	return resp, nil
 }
 
-func (s *Runtime) generateAnswer(ctx context.Context, state *orchestratorstate.ConversationState, messages []*schema.Message) (string, error) {
-	if s.model == nil {
-		return "", fmt.Errorf("chat model is not configured")
-	}
-
-	if state.StreamWriter == nil {
-		msg, err := s.model.Generate(ctx, messages,
-			model.WithTemperature(0.15),
-			model.WithMaxTokens(s.cfg.MaxAnswerTokens),
-			model.WithToolChoice(schema.ToolChoiceForbidden),
-		)
-		if err != nil || msg == nil {
-			return "", err
-		}
-		return msg.Content, nil
-	}
-
-	stream, err := s.model.Stream(ctx, messages,
-		model.WithTemperature(0.15),
-		model.WithMaxTokens(s.cfg.MaxAnswerTokens),
-		model.WithToolChoice(schema.ToolChoiceForbidden),
-	)
-	if err != nil {
-		return "", err
-	}
-	defer stream.Close()
-
-	var builder strings.Builder
-	for {
-		chunk, recvErr := stream.Recv()
-		if errors.Is(recvErr, io.EOF) {
-			break
-		}
-		if recvErr != nil {
-			return "", recvErr
-		}
-		if chunk == nil || strings.TrimSpace(chunk.Content) == "" {
-			continue
-		}
-		builder.WriteString(chunk.Content)
-		orchestratorobserve.SendEvent(ctx, state.StreamWriter, "token", map[string]any{
-			"trace_id": state.TraceID,
-			"text":     chunk.Content,
-		})
-	}
-	return builder.String(), nil
-}
-
 func (s *Runtime) registryHasTool(ctx context.Context, name string) bool {
 	if s.registry == nil {
 		return false
 	}
-	for _, tool := range s.registry.Tools() {
-		info, err := tool.Info(ctx)
-		if err == nil && info != nil && info.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Runtime) loadSessionContext(ctx context.Context, state *orchestratorstate.ConversationState) error {
-	if state == nil {
-		return fmt.Errorf("state is required")
-	}
-
-	sessionID := strings.TrimSpace(state.Request.SessionID)
-	if sessionID == "" {
-		sessionID = "sess_" + state.TraceID
-		state.Request.SessionID = sessionID
-	}
-
-	if s.memory == nil {
-		now := time.Now()
-		state.SessionMeta = &domain.Session{
-			SessionID:  sessionID,
-			UserID:     state.Request.UserID,
-			Status:     domain.SessionStatusActive,
-			CreatedAt:  now,
-			UpdatedAt:  now,
-			TotalTurns: 0,
-		}
-		state.Session.SessionID = sessionID
-		state.EnsureResponse().SessionID = sessionID
-		return nil
-	}
-
-	meta, messages, err := s.memory.LoadSession(ctx, sessionID)
-	if err != nil {
-		return err
-	}
-	if meta == nil {
-		now := time.Now()
-		meta = &domain.Session{
-			SessionID:  sessionID,
-			UserID:     state.Request.UserID,
-			Status:     domain.SessionStatusActive,
-			CreatedAt:  now,
-			UpdatedAt:  now,
-			TotalTurns: 0,
-		}
-		if err := s.memory.CreateSession(ctx, *meta); err != nil {
-			return err
-		}
-	}
-	if meta.UserID != 0 && meta.UserID != state.Request.UserID {
-		return fmt.Errorf("session owner mismatch")
-	}
-
-	cloned := *meta
-	state.SessionMeta = &cloned
-	orchestratorstate.SetRecentMessages(state, s.memory.RecentSchemaMessages(messages))
-	state.Session.SessionID = meta.SessionID
-	state.EnsureResponse().SessionID = meta.SessionID
-	return nil
-}
-
-func (s *Runtime) persistConversationTurn(
-	ctx context.Context,
-	state *orchestratorstate.ConversationState,
-	assistantReply string,
-	assistantIntent domain.Intent,
-	confidence float64,
-) error {
-	if state == nil || state.SessionMeta == nil || s.memory == nil {
-		return nil
-	}
-
-	userMsg := agentmemory.NewUserMessage(state.SessionMeta.SessionID, state.Session.RawQuery)
-	assistantMsg := agentmemory.NewAssistantMessage(state.SessionMeta.SessionID, assistantReply, assistantIntent, confidence)
-
-	appendMessages := make([]domain.Message, 0, 2)
-	if strings.TrimSpace(userMsg.Content) != "" {
-		appendMessages = append(appendMessages, userMsg)
-	}
-	if strings.TrimSpace(assistantMsg.Content) != "" {
-		appendMessages = append(appendMessages, assistantMsg)
-	}
-	if len(appendMessages) == 0 {
-		return nil
-	}
-
-	cloned := *state.SessionMeta
-	cloned.TotalTurns++
-	cloned.UpdatedAt = assistantMsg.CreatedAt
-	if cloned.UpdatedAt.IsZero() {
-		cloned.UpdatedAt = time.Now()
-	}
-	if assistantMsg.Content != "" {
-		cloned.LastMessage = agentmemory.Truncate(assistantMsg.Content, 64)
-	} else {
-		cloned.LastMessage = agentmemory.Truncate(userMsg.Content, 64)
-	}
-	if cloned.Status == "" {
-		cloned.Status = domain.SessionStatusActive
-	}
-
-	if err := s.memory.SaveTurn(ctx, cloned, userMsg, assistantMsg); err != nil {
-		return err
-	}
-	state.SessionMeta = &cloned
-	return nil
+	_ = ctx
+	return s.registry.Has(name)
 }
 
 func cfgValue(value, fallback string) string {

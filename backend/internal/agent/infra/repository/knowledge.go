@@ -6,18 +6,18 @@ import (
 	"sort"
 	"strings"
 
-	knowledgebase "github.com/XDWow/DouyinMall/backend/internal/agent/infra/knowledgebase"
+	rag "github.com/XDWow/DouyinMall/backend/internal/agent/infra/rag"
 )
 
 type KnowledgeStore struct {
 	dao *DAO
 }
 
-func NewKnowledgeStore(dao *DAO) knowledgebase.Store {
+func NewKnowledgeStore(dao *DAO) rag.Store {
 	return &KnowledgeStore{dao: dao}
 }
 
-func (s *KnowledgeStore) TopKByVector(ctx context.Context, vector []float64, limit int) ([]knowledgebase.Chunk, error) {
+func (s *KnowledgeStore) TopKByVector(ctx context.Context, vector []float64, limit int) ([]rag.Chunk, error) {
 	if limit <= 0 {
 		limit = 5
 	}
@@ -29,14 +29,14 @@ func (s *KnowledgeStore) TopKByVector(ctx context.Context, vector []float64, lim
 		return nil, err
 	}
 
-	chunks := make([]knowledgebase.Chunk, 0, len(rows))
+	chunks := make([]rag.Chunk, 0, len(rows))
 	for _, row := range rows {
 		var embeddingVec []float64
 		if err := json.Unmarshal([]byte(row.Embedding), &embeddingVec); err != nil {
 			continue
 		}
 		score := cosineSimilarity(embeddingVec, vector)
-		chunk := knowledgebase.Chunk{
+		chunk := rag.Chunk{
 			ID:          row.ID,
 			KnowledgeID: row.KnowledgeID,
 			Title:       row.Title,
@@ -69,7 +69,7 @@ func (s *KnowledgeStore) TopKByVector(ctx context.Context, vector []float64, lim
 	return chunks, nil
 }
 
-func (s *KnowledgeStore) UpsertChunks(ctx context.Context, chunks []knowledgebase.Chunk) error {
+func (s *KnowledgeStore) UpsertChunks(ctx context.Context, chunks []rag.Chunk) error {
 	if len(chunks) == 0 {
 		return nil
 	}

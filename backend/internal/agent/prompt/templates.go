@@ -29,14 +29,22 @@ func NewDefault() *Set {
 			schema.FString,
 			schema.SystemMessage(`{system_text}
 
-请对用户请求进行意图分类，并严格返回一个 JSON 对象，不要输出任何额外说明，也不要使用 Markdown。
+请同时完成意图识别和槽位抽取，并严格只返回一个 JSON 对象，不要输出任何额外说明，也不要使用 Markdown。
 输出字段：
 - intent: 只能是 order_query | return_policy | inventory_query | product_info | add_to_cart | return_exchange_apply | fallback
 - confidence: 0 到 1 的小数
 - need_rewrite: boolean
 - reason: 简短原因
-- entities: 对象，可包含 order_id、product_id、sku_id、reason`),
+- slots: 对象，可包含 product_ref、order_ref、reason、request_type、quantity
+
+约束：
+1. 不要编造 product_id、order_id、sku_id 等真实 ID。
+2. 如果用户提到“这个/当前商品/这个订单”，可以输出 product_ref="current" 或 order_ref="current"。
+3. 如果无法确定具体引用，就不要瞎填。`),
 			schema.UserMessage(`对话历史：{history_text}
+
+当前可用引用：
+{reference_context}
 
 用户消息：{message}`),
 		),
@@ -81,7 +89,10 @@ func NewDefault() *Set {
 工具结果：
 {tool_text}
 
-命中的技能内容（由编排层按路由确定后注入）：
+命中的工具定义摘要：
+{tool_definitions_text}
+
+命中的技能内容摘要：
 {skill_text}`),
 		),
 	}

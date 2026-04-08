@@ -91,7 +91,7 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 		KnowledgeBase:   components.KnowledgeBase,
 		Skills:          components.Skills,
 		Registry:        components.Registry,
-		Memory:          components.Memory,
+		SessionService:  components.SessionService,
 		ExactCache:      components.ExactCache,
 		SemanticCache:   components.SemanticCache,
 		RateLimiter:     components.RateLimiter,

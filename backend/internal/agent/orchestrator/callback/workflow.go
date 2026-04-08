@@ -25,25 +25,49 @@ type stateKey struct{}
 type callbackState struct {
 	node      string
 	startedAt time.Time
-	state     *orchestratorstate.ConversationState
+	state     *orchestratorstate.State
 	span      trace.Span
 }
 
 var nodeNameSet = map[string]struct{}{
-	"AccessGuardNode": {}, "SessionLoadNode": {}, "CachePolicyNode": {}, "MultiLevelCacheNode": {}, "PrepareIntentClassifyInputNode": {}, "IntentClassifyNode": {}, "ApplyIntentClassifyResultNode": {},
-	"PrepareReturnPolicyRAGInputNode": {}, "ReturnPolicyRAGNode": {}, "ApplyReturnPolicyRAGResultNode": {},
-	"SlotExtractNode": {}, "SlotCheckNode": {}, "AskUserNode": {},
-	"OrderQueryGraph": {}, "InventoryGraph": {}, "ProductInfoGraph": {}, "AddToCartGraph": {}, "ReturnExchangeGraph": {}, "FallbackGraph": {},
-	"PrepareProductRAGInputNode": {}, "ProductRAGNode": {}, "ApplyProductRAGResultNode": {},
-	"PrepareFallbackRAGInputNode": {}, "FallbackRAGNode": {}, "ApplyFallbackRAGResultNode": {},
-	"RouteNode": {}, "OrderQueryWorkflow": {}, "ReturnPolicyRAGWorkflow": {}, "InventoryWorkflow": {}, "ProductInfoWorkflow": {},
-	"ReturnExchangeApplyWorkflow": {}, "FallbackWorkflow": {}, "BuildOrderQueryNode": {}, "CallOrderServiceNode": {},
-	"OrderToolResultNode": {}, "BuildInventoryQueryNode": {}, "CallInventoryServiceNode": {}, "InventoryToolResultNode": {},
-	"BuildProductInfoNode": {}, "CallProductServiceNode": {}, "ProductToolResultNode": {}, "GetOrderDetailNode": {},
-	"CallReturnOrderServiceNode": {}, "ReturnOrderResultNode": {}, "EligibilityCheckNode": {}, "ConfirmSummaryNode": {}, "BuildAfterSaleSubmitNode": {},
-	"CallAfterSaleServiceNode": {}, "SubmitAfterSaleNode": {},
-	"FallbackResolveNode": {}, "PrepareSerialToolMessageNode": {},
-	"PrepareParallelReadonlyToolMessageNode": {}, "ToolsNode": {}, "ApplyToolMessagesNode": {}, "ResponseRenderNode": {}, "CacheWritebackNode": {},
+	"AccessGuardNode":                 {},
+	"SessionLoadNode":                 {},
+	"CachePreCheckNode":               {},
+	"L0ExactCacheNode":                {},
+	"L1SemanticCacheNode":             {},
+	"ToolsNode":                       {},
+	"QueryRewriteNode":                {},
+	"IntentClassifyNode":              {},
+	"GlobalSlotExtractNode":           {},
+	"GlobalSlotCheckNode":             {},
+	"AskUserNode":                     {},
+	"RouteNode":                       {},
+	"PrepareSkillSelectInputNode":     {},
+	"SkillSelectNode":                 {},
+	"ApplySkillSelectResultNode":      {},
+	"PrepareOrderQueryInputNode":      {},
+	"OrderQueryGraph":                 {},
+	"ApplyOrderQueryResultNode":       {},
+	"PrepareInventoryInputNode":       {},
+	"InventoryGraph":                  {},
+	"ApplyInventoryResultNode":        {},
+	"PrepareProductInfoInputNode":     {},
+	"ProductInfoGraph":                {},
+	"ApplyProductInfoResultNode":      {},
+	"PrepareAddToCartInputNode":       {},
+	"AddToCartGraph":                  {},
+	"ApplyAddToCartResultNode":        {},
+	"PrepareReturnPolicyRAGInputNode": {},
+	"ReturnPolicyRAGNode":             {},
+	"ApplyReturnPolicyRAGResultNode":  {},
+	"PrepareReturnExchangeInputNode":  {},
+	"ReturnExchangeGraph":             {},
+	"ApplyReturnExchangeResultNode":   {},
+	"PrepareBaseQAInputNode":          {},
+	"BaseQAGraph":                     {},
+	"ApplyBaseQAResultNode":           {},
+	"FinalizeNode":                    {},
+	"InterruptNode":                   {},
 }
 
 func (b Builder) New() callbacks.Handler {
@@ -127,26 +151,26 @@ func isWorkflowNode(info *callbacks.RunInfo) bool {
 	return ok
 }
 
-func callbackFlow(ctx context.Context, value any) *orchestratorstate.ConversationState {
-	if state, _ := value.(*orchestratorstate.ConversationState); state != nil {
+func callbackFlow(ctx context.Context, value any) *orchestratorstate.State {
+	if state, _ := value.(*orchestratorstate.State); state != nil {
 		return state
 	}
 	if payload, _ := value.(map[string]any); payload != nil {
-		if state, _ := payload["state"].(*orchestratorstate.ConversationState); state != nil {
+		if state, _ := payload["state"].(*orchestratorstate.State); state != nil {
 			return state
 		}
 	}
-	var state *orchestratorstate.ConversationState
-	_ = compose.ProcessState[*orchestratorstate.ConversationState](ctx, func(_ context.Context, state *orchestratorstate.ConversationState) error {
-		if state != nil {
-			state = state
+	var state *orchestratorstate.State
+	_ = compose.ProcessState[*orchestratorstate.State](ctx, func(_ context.Context, current *orchestratorstate.State) error {
+		if current != nil {
+			state = current
 		}
 		return nil
 	})
 	return state
 }
 
-func callbackStreamWriter(state *orchestratorstate.ConversationState) orchestratorstate.StreamWriter {
+func callbackStreamWriter(state *orchestratorstate.State) orchestratorstate.StreamWriter {
 	if state == nil {
 		return nil
 	}
