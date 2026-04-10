@@ -21,6 +21,7 @@ type Registry struct {
 	tools          []einotool.BaseTool
 	invokables     map[string]registeredInvokableTool
 	summaries      map[string]ToolSummary
+	toolInfos      map[string]*schema.ToolInfo
 	sequentialNode *compose.ToolsNode
 	parallelNode   *compose.ToolsNode
 }
@@ -41,6 +42,7 @@ func newRegistry(ctx context.Context, registered []registeredTool) (*Registry, e
 	tools := make([]einotool.BaseTool, 0, len(registered))
 	invokables := make(map[string]registeredInvokableTool, len(registered))
 	summaries := make(map[string]ToolSummary, len(registered))
+	toolInfos := make(map[string]*schema.ToolInfo, len(registered))
 
 	for _, item := range registered {
 		if item.baseTool == nil || item.info == nil || strings.TrimSpace(item.info.Name) == "" {
@@ -52,6 +54,7 @@ func newRegistry(ctx context.Context, registered []registeredTool) (*Registry, e
 			policy:    item.policy,
 		}
 		summaries[item.info.Name] = buildToolSummary(item.info, item.policy)
+		toolInfos[item.info.Name] = item.info
 	}
 
 	sequentialNode, err := compose.NewToolNode(ctx, &compose.ToolsNodeConfig{
@@ -73,9 +76,33 @@ func newRegistry(ctx context.Context, registered []registeredTool) (*Registry, e
 		tools:          tools,
 		invokables:     invokables,
 		summaries:      summaries,
+		toolInfos:      toolInfos,
 		sequentialNode: sequentialNode,
 		parallelNode:   parallelNode,
 	}, nil
+}
+
+// ToolInfos 按白名单名返回已注册的 ToolInfo，供子图 WithTools 绑定模型；未知名跳过。
+func (r *Registry) ToolInfos(names []string) []*schema.ToolInfo {
+	if r == nil || len(r.toolInfos) == 0 || len(names) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(names))
+	out := make([]*schema.ToolInfo, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		if info := r.toolInfos[name]; info != nil {
+			out = append(out, info)
+		}
+	}
+	return out
 }
 
 func (r *Registry) Tools() []einotool.BaseTool {

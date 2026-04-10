@@ -15,6 +15,7 @@ services:
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
+      - ./scripts/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     networks:
       - douyinmall-net
 
@@ -319,6 +320,7 @@ services:
     restart: unless-stopped
     ports:
       - "8087:8087"
+      - "18087:18087"
     environment:
       TZ: Asia/Shanghai
       LLM_API_KEY: ${LLM_API_KEY}
@@ -329,8 +331,6 @@ services:
       - mysql
       - redis
       - etcd
-      - kafka
-      - milvus
       - mcpServer
     networks:
       - douyinmall-net

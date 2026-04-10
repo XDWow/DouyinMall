@@ -109,8 +109,8 @@ func (r *Registry) Load(names []string) []Skill {
 	return items
 }
 
-// SummariesByNames 只返回 skill 的名称和说明。
-// 当子图只需要给模型注入 metadata 时，不必把正文整段加载出来。
+// SummariesByNames 只返回 skill 的名称和说明
+// 当子图只需要给模型注入 metadata 时，不必把正文整段加载出来
 func (r *Registry) SummariesByNames(names []string) []SkillSummary {
 	if r == nil || len(names) == 0 {
 		return nil

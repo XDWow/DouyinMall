@@ -9,8 +9,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 type Builder struct {
@@ -25,7 +25,7 @@ type stateKey struct{}
 type callbackState struct {
 	node      string
 	startedAt time.Time
-	state     *orchestratorstate.State
+	state     *domain.State
 	span      trace.Span
 }
 
@@ -35,15 +35,8 @@ var nodeNameSet = map[string]struct{}{
 	"CachePreCheckNode":              {},
 	"L0ExactCacheNode":               {},
 	"ToolsNode":                      {},
-	"QueryRewriteNode":               {},
-	"IntentClassifyNode":             {},
-	"GlobalSlotExtractNode":          {},
-	"GlobalSlotCheckNode":            {},
-	"AskUserNode":                    {},
+	"IntentAndSlotNode":              {},
 	"RouteNode":                      {},
-	"PrepareSkillSelectInputNode":    {},
-	"SkillSelectNode":                {},
-	"ApplySkillSelectResultNode":     {},
 	"PrepareOrderQueryInputNode":     {},
 	"OrderQueryGraph":                {},
 	"ApplyOrderQueryResultNode":      {},
@@ -150,17 +143,17 @@ func isWorkflowNode(info *callbacks.RunInfo) bool {
 	return ok
 }
 
-func callbackFlow(ctx context.Context, value any) *orchestratorstate.State {
-	if state, _ := value.(*orchestratorstate.State); state != nil {
+func callbackFlow(ctx context.Context, value any) *domain.State {
+	if state, _ := value.(*domain.State); state != nil {
 		return state
 	}
 	if payload, _ := value.(map[string]any); payload != nil {
-		if state, _ := payload["state"].(*orchestratorstate.State); state != nil {
+		if state, _ := payload["state"].(*domain.State); state != nil {
 			return state
 		}
 	}
-	var state *orchestratorstate.State
-	_ = compose.ProcessState[*orchestratorstate.State](ctx, func(_ context.Context, current *orchestratorstate.State) error {
+	var state *domain.State
+	_ = compose.ProcessState[*domain.State](ctx, func(_ context.Context, current *domain.State) error {
 		if current != nil {
 			state = current
 		}
@@ -169,7 +162,7 @@ func callbackFlow(ctx context.Context, value any) *orchestratorstate.State {
 	return state
 }
 
-func callbackStreamWriter(state *orchestratorstate.State) orchestratorstate.StreamWriter {
+func callbackStreamWriter(state *domain.State) domain.StreamWriter {
 	if state == nil {
 		return nil
 	}

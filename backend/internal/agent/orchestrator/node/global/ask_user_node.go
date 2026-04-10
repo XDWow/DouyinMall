@@ -8,6 +8,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
+// AskUserInput 缺参追问（interrupt 带 missing_slots）。
 type AskUserInput struct {
 	Reply            string
 	Intent           domain.Intent
@@ -15,6 +16,7 @@ type AskUserInput struct {
 	MissingSlots     []string
 }
 
+// AskUserNode 统一缺参问句与置信度下限。
 type AskUserNode struct {
 }
 
@@ -32,7 +34,7 @@ type AskUserResult struct {
 func (n *AskUserNode) Invoke(_ context.Context, input AskUserInput) (*AskUserResult, error) {
 	reply := strings.TrimSpace(input.Reply)
 	if reply == "" {
-		reply = "\u8bf7\u5148\u8865\u5145\u7f3a\u5931\u4fe1\u606f\uff0c\u6211\u518d\u7ee7\u7eed\u4e3a\u4f60\u5904\u7406\u3002"
+		reply = "请补充缺失信息。"
 	}
 
 	return &AskUserResult{

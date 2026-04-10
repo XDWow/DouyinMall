@@ -8,7 +8,6 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 const cacheHitSemantic = "semantic"
@@ -31,7 +30,7 @@ type L1SemanticCacheResult struct {
 	Response    *domain.ChatResult
 	FinalAnswer string
 	Intent      domain.Intent
-	Route       graphstate.WorkflowRoute
+	Route       domain.WorkflowRoute
 }
 
 type L1SemanticCacheNode struct {

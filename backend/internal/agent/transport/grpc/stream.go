@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agentv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/agent/v1"
 )
 
@@ -16,7 +16,7 @@ func NewStreamWriter(stream agentv1.AgentService_SendMessageStreamServer) *Strea
 	return &StreamWriter{stream: stream}
 }
 
-func (w *StreamWriter) Send(ctx context.Context, event orchestratorstate.StreamEvent) error {
+func (w *StreamWriter) Send(ctx context.Context, event domain.StreamEvent) error {
 	switch event.Event {
 	case "node":
 		payload, _ := event.Data.(map[string]any)
@@ -50,7 +50,7 @@ func normalizeStage(node string) string {
 	switch node {
 	case "CachePreCheckNode", "L0ExactCacheNode":
 		return "cache"
-	case "QueryRewriteNode", "IntentClassifyNode", "GlobalSlotExtractNode", "GlobalSlotCheckNode", "RouteNode", "PrepareSkillSelectInputNode", "SkillSelectNode", "ApplySkillSelectResultNode":
+	case "IntentAndSlotNode", "RouteNode":
 		return "intent"
 	case "PrepareReturnPolicyInputNode", "ReturnPolicyGraph", "ApplyReturnPolicyResultNode", "PrepareBaseQAInputNode", "BaseQAGraph", "ApplyBaseQAResultNode":
 		return "retrieval"
@@ -58,8 +58,6 @@ func normalizeStage(node string) string {
 		return "tool"
 	case "FinalizeNode":
 		return "generating"
-	case "AskUserNode":
-		return "handoff"
 	default:
 		return ""
 	}

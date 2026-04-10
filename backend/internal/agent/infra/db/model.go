@@ -1,13 +1,10 @@
-package repository
+package db
 
-import (
-	"context"
-	"time"
+import "time"
 
-	"gorm.io/gorm"
-)
+// 以下为 agent MySQL 表的 GORM 模型，与 domain 层分离；仓储通过映射与 domain 互转。
 
-type SessionDO struct {
+type Session struct {
 	ID          uint64    `gorm:"primaryKey;autoIncrement"`
 	SessionID   string    `gorm:"uniqueIndex;type:varchar(64);not null"`
 	UserID      int64     `gorm:"index;not null"`
@@ -19,9 +16,9 @@ type SessionDO struct {
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 }
 
-func (SessionDO) TableName() string { return "agent_sessions" }
+func (Session) TableName() string { return "agent_sessions" }
 
-type MessageDO struct {
+type Message struct {
 	ID         uint64    `gorm:"primaryKey;autoIncrement"`
 	SessionID  string    `gorm:"index:idx_session_created;type:varchar(64);not null"`
 	Role       string    `gorm:"type:varchar(16);not null"`
@@ -31,9 +28,9 @@ type MessageDO struct {
 	CreatedAt  time.Time `gorm:"index:idx_session_created;autoCreateTime"`
 }
 
-func (MessageDO) TableName() string { return "agent_messages" }
+func (Message) TableName() string { return "agent_messages" }
 
-type KnowledgeChunkDO struct {
+type KnowledgeChunk struct {
 	ID          string    `gorm:"primaryKey;type:varchar(64)"`
 	KnowledgeID string    `gorm:"index;type:varchar(64);not null"`
 	Title       string    `gorm:"type:varchar(255);not null"`
@@ -47,16 +44,4 @@ type KnowledgeChunkDO struct {
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 }
 
-func (KnowledgeChunkDO) TableName() string { return "agent_knowledge_chunks" }
-
-type DAO struct {
-	db *gorm.DB
-}
-
-func NewDAO(db *gorm.DB) *DAO {
-	return &DAO{db: db}
-}
-
-func (d *DAO) InitTables(ctx context.Context) error {
-	return d.db.WithContext(ctx).AutoMigrate(&SessionDO{}, &MessageDO{}, &KnowledgeChunkDO{})
-}
+func (KnowledgeChunk) TableName() string { return "agent_knowledge_chunks" }

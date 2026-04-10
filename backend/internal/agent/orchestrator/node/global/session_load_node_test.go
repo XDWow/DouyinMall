@@ -8,9 +8,10 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agentsession "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 )
 
-func TestSessionLoadNodeInvokeLoadsRecentMessagesAndMetadataSlots(t *testing.T) {
+func TestSessionLoadNodeLoadsPersistedSlotsAndHistory(t *testing.T) {
 	node := NewSessionLoadNode(&stubSessionMemory{
 		session: &domain.Session{
 			SessionID: "sess_1",
@@ -24,67 +25,47 @@ func TestSessionLoadNodeInvokeLoadsRecentMessagesAndMetadataSlots(t *testing.T) 
 			UpdatedAt:  time.Now(),
 			TotalTurns: 2,
 		},
-		messages: []domain.Message{
+		messages: []domain.SessionMessage{
 			{SessionID: "sess_1", Role: domain.RoleUser, Content: "hello"},
 			{SessionID: "sess_1", Role: domain.RoleAssistant, Content: "hi"},
 		},
 	})
 
-	result, err := node.Invoke(context.Background(), SessionLoadInput{
-		Request: domain.ChatCommand{
-			SessionID: "sess_1",
-			UserID:    123,
-			Metadata: map[string]string{
-				"order_id":   "order-10001",
-				"product_id": "sku-20002",
-			},
-		},
-		TraceID: "trace_1",
-		ExistingSlots: map[string]any{
-			"reason": "damaged",
-		},
-	})
-	if err != nil {
-		t.Fatalf("Invoke() error = %v", err)
+	st := domain.NewState(domain.ChatCommand{SessionID: "sess_1", UserID: 123, Message: "x"}, nil, nil)
+	if err := node.PrepareSession(context.Background(), st); err != nil {
+		t.Fatalf("PrepareSession() error = %v", err)
 	}
-	if result.SessionID != "sess_1" {
-		t.Fatalf("SessionID = %q", result.SessionID)
+	if st.Session.SessionID != "sess_1" {
+		t.Fatalf("SessionID = %q", st.Session.SessionID)
 	}
-	if len(result.RecentMessages) != 2 {
-		t.Fatalf("RecentMessages len = %d, want 2", len(result.RecentMessages))
+	if len(st.Session.Messages) != 2 {
+		t.Fatalf("Messages len = %d, want 2", len(st.Session.Messages))
 	}
-	if result.Slots["order_id"] != "10001" {
-		t.Fatalf("order_id = %v", result.Slots["order_id"])
+	if st.Session.Slots["order_id"] != "99999" {
+		t.Fatalf("order_id = %v", st.Session.Slots["order_id"])
 	}
-	if result.Slots["product_id"] != "20002" {
-		t.Fatalf("product_id = %v", result.Slots["product_id"])
+	if st.Session.Slots["sku_id"] != "30003" {
+		t.Fatalf("sku_id = %v", st.Session.Slots["sku_id"])
 	}
-	if result.Slots["sku_id"] != "30003" {
-		t.Fatalf("sku_id = %v", result.Slots["sku_id"])
+	if _, ok := st.Session.Slots["reason"]; ok {
+		t.Fatalf("expected no reason slot from non-persisted merge")
 	}
-	if result.Slots["reason"] != "damaged" {
-		t.Fatalf("reason = %v", result.Slots["reason"])
-	}
-	if result.SessionMeta == nil || result.SessionMeta.Slots["product_id"] != "20002" {
-		t.Fatalf("session meta slots = %+v", result.SessionMeta)
+	if st.PersistedSession == nil || st.PersistedSession.Slots == nil {
+		t.Fatal("expected persisted slots merged for storage shape")
 	}
 }
 
-func TestSessionLoadNodeInvokeCreatesSessionWhenMissing(t *testing.T) {
+func TestSessionLoadNodeCreatesSessionWhenMissing(t *testing.T) {
 	mem := &stubSessionMemory{}
 	node := NewSessionLoadNode(mem)
 
-	result, err := node.Invoke(context.Background(), SessionLoadInput{
-		Request: domain.ChatCommand{
-			UserID: 456,
-		},
-		TraceID: "trace_new",
-	})
-	if err != nil {
-		t.Fatalf("Invoke() error = %v", err)
+	st := domain.NewState(domain.ChatCommand{UserID: 456, Message: "x"}, nil, nil)
+	st.TraceID = "trace_new"
+	if err := node.PrepareSession(context.Background(), st); err != nil {
+		t.Fatalf("PrepareSession() error = %v", err)
 	}
-	if result.SessionID != "sess_trace_new" {
-		t.Fatalf("SessionID = %q", result.SessionID)
+	if st.Session.SessionID != "sess_trace_new" {
+		t.Fatalf("SessionID = %q", st.Session.SessionID)
 	}
 	if mem.created == nil || mem.created.SessionID != "sess_trace_new" {
 		t.Fatalf("expected session to be auto created, got %+v", mem.created)
@@ -93,12 +74,18 @@ func TestSessionLoadNodeInvokeCreatesSessionWhenMissing(t *testing.T) {
 
 type stubSessionMemory struct {
 	session  *domain.Session
-	messages []domain.Message
+	messages []domain.SessionMessage
 	created  *domain.Session
 }
 
-func (s *stubSessionMemory) LoadSession(context.Context, string) (*domain.Session, []domain.Message, error) {
-	return s.session, s.messages, nil
+func (s *stubSessionMemory) LoadSnapshot(context.Context, string) (*agentsession.Snapshot, error) {
+	if s.session == nil {
+		return nil, nil
+	}
+	return &agentsession.Snapshot{
+		PersistedSession: *s.session,
+		Messages:         append([]domain.SessionMessage(nil), s.messages...),
+	}, nil
 }
 
 func (s *stubSessionMemory) CreateSession(_ context.Context, session domain.Session) error {
@@ -107,7 +94,7 @@ func (s *stubSessionMemory) CreateSession(_ context.Context, session domain.Sess
 	return nil
 }
 
-func (s *stubSessionMemory) RecentSchemaMessages(messages []domain.Message) []*schema.Message {
+func (s *stubSessionMemory) BuildRecentHistory(messages []domain.SessionMessage) []*schema.Message {
 	out := make([]*schema.Message, 0, len(messages))
 	for _, message := range messages {
 		switch message.Role {

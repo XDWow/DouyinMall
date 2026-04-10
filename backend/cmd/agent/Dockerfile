@@ -10,6 +10,7 @@ ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/agent .
 COPY --from=builder /app/internal/agent/config/dev.yaml ./internal/agent/config/dev.yaml
+EXPOSE 8087 18087
 ENTRYPOINT ["./agent", "--config", "internal/agent/config/dev.yaml"]
 
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 func TestCachePreCheckNodeInvoke(t *testing.T) {
@@ -80,16 +79,16 @@ func TestCacheWritebackServiceRespectsCacheGate(t *testing.T) {
 	t.Run("dynamic query does not write exact cache", func(t *testing.T) {
 		exact := &stubExactCache{}
 		writer := NewCacheWritebackService(exact, nil, nil, time.Minute, time.Minute, nil)
-		state := graphstate.NewState(domain.ChatCommand{
+		state := domain.NewState(domain.ChatCommand{
 			SessionID: "sess_dynamic",
 			UserID:    1,
 			Message:   "check order status",
-		}, nil, graphstate.InitOptions{})
+		}, nil, nil)
 		state.Session.TenantID = "tenant_1"
 		state.Session.Intent = domain.IntentOrderQuery
 		state.Session.ReadOnly = true
 		state.Response = &domain.ChatResult{
-			SessionID:  state.Request.SessionID,
+			SessionID:  state.Input.SessionID,
 			Reply:      "your order is in transit",
 			Intent:     domain.IntentOrderQuery,
 			Status:     domain.ReplyStatusAnswered,
@@ -107,17 +106,17 @@ func TestCacheWritebackServiceRespectsCacheGate(t *testing.T) {
 	t.Run("stable knowledge query writes exact cache", func(t *testing.T) {
 		exact := &stubExactCache{}
 		writer := NewCacheWritebackService(exact, nil, nil, time.Minute, time.Minute, nil)
-		state := graphstate.NewState(domain.ChatCommand{
+		state := domain.NewState(domain.ChatCommand{
 			SessionID: "sess_policy",
 			UserID:    2,
 			Message:   "what is the return policy",
-		}, nil, graphstate.InitOptions{})
+		}, nil, nil)
 		state.Session.TenantID = "tenant_1"
 		state.Session.Intent = domain.IntentReturnPolicy
 		state.Session.ReadOnly = true
 		state.Answer.CacheableHint = testBoolPtr(true)
 		state.Response = &domain.ChatResult{
-			SessionID:  state.Request.SessionID,
+			SessionID:  state.Input.SessionID,
 			Reply:      "you can start a return from the order detail page",
 			Intent:     domain.IntentReturnPolicy,
 			Status:     domain.ReplyStatusAnswered,
@@ -141,17 +140,17 @@ func TestCacheWritebackServiceRespectsCacheGate(t *testing.T) {
 	t.Run("product query touching dynamic tool does not write cache", func(t *testing.T) {
 		exact := &stubExactCache{}
 		writer := NewCacheWritebackService(exact, nil, nil, time.Minute, time.Minute, nil)
-		state := graphstate.NewState(domain.ChatCommand{
+		state := domain.NewState(domain.ChatCommand{
 			SessionID: "sess_product_dynamic",
 			UserID:    3,
 			Message:   "is this product in stock",
-		}, nil, graphstate.InitOptions{})
+		}, nil, nil)
 		state.Session.TenantID = "tenant_1"
 		state.Session.Intent = domain.IntentProductInfo
 		state.Session.ReadOnly = true
 		state.Tool.Plans = []domain.ToolCallPlan{{Name: "get_inventory"}}
 		state.Response = &domain.ChatResult{
-			SessionID:  state.Request.SessionID,
+			SessionID:  state.Input.SessionID,
 			Reply:      "current stock is 12",
 			Intent:     domain.IntentProductInfo,
 			Status:     domain.ReplyStatusAnswered,
@@ -169,17 +168,17 @@ func TestCacheWritebackServiceRespectsCacheGate(t *testing.T) {
 	t.Run("explicit non-cacheable hint skips stable reply", func(t *testing.T) {
 		exact := &stubExactCache{}
 		writer := NewCacheWritebackService(exact, nil, nil, time.Minute, time.Minute, nil)
-		state := graphstate.NewState(domain.ChatCommand{
+		state := domain.NewState(domain.ChatCommand{
 			SessionID: "sess_no_cache",
 			UserID:    4,
 			Message:   "what is the return policy",
-		}, nil, graphstate.InitOptions{})
+		}, nil, nil)
 		state.Session.TenantID = "tenant_1"
 		state.Session.Intent = domain.IntentReturnPolicy
 		state.Session.ReadOnly = true
 		state.Answer.CacheableHint = testBoolPtr(false)
 		state.Response = &domain.ChatResult{
-			SessionID:  state.Request.SessionID,
+			SessionID:  state.Input.SessionID,
 			Reply:      "you can start a return from the order detail page",
 			Intent:     domain.IntentReturnPolicy,
 			Status:     domain.ReplyStatusAnswered,
@@ -198,19 +197,19 @@ func TestCacheWritebackServiceRespectsCacheGate(t *testing.T) {
 		exact := &stubExactCache{}
 		semantic := &stubSemanticCache{}
 		writer := NewCacheWritebackService(exact, semantic, stubEmbedder{}, time.Minute, time.Minute, nil)
-		state := graphstate.NewState(domain.ChatCommand{
+		state := domain.NewState(domain.ChatCommand{
 			SessionID: "sess_baseqa_semantic",
 			UserID:    5,
 			Message:   "what are your shipping time rules",
-		}, nil, graphstate.InitOptions{})
+		}, nil, nil)
 		state.Session.TenantID = "tenant_1"
 		state.Session.Intent = domain.IntentFallback
-		state.Session.Route = graphstate.RouteBaseQA
+		state.Session.Route = domain.RouteBaseQA
 		state.Session.ReadOnly = true
 		state.Answer.CacheableHint = testBoolPtr(true)
 		state.Retrieval.Documents = []*schema.Document{{ID: "doc_shipping"}}
 		state.Response = &domain.ChatResult{
-			SessionID:  state.Request.SessionID,
+			SessionID:  state.Input.SessionID,
 			Reply:      "standard delivery usually takes 3 to 5 business days.",
 			Intent:     domain.IntentFallback,
 			Status:     domain.ReplyStatusAnswered,

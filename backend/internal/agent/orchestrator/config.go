@@ -28,29 +28,17 @@ func applyConfigDefaults(cfg Config) Config {
 	if cfg.RetrieveMinScore == 0 {
 		cfg.RetrieveMinScore = def.RetrieveMinScore
 	}
-	if cfg.RerankTopK == 0 {
-		cfg.RerankTopK = def.RerankTopK
-	}
-	if cfg.ToolParallelism == 0 {
-		cfg.ToolParallelism = def.ToolParallelism
-	}
 	if cfg.ConfidenceThreshold == 0 {
 		cfg.ConfidenceThreshold = def.ConfidenceThreshold
 	}
 	if cfg.MaxAnswerTokens == 0 {
 		cfg.MaxAnswerTokens = def.MaxAnswerTokens
 	}
-	if cfg.StreamBuffer == 0 {
-		cfg.StreamBuffer = def.StreamBuffer
-	}
 	if strings.TrimSpace(cfg.DefaultTenantID) == "" {
 		cfg.DefaultTenantID = def.DefaultTenantID
 	}
-	if strings.TrimSpace(cfg.KBVersion) == "" {
-		cfg.KBVersion = def.KBVersion
-	}
-	if cfg.FeatureFlags == (FeatureFlags{}) {
-		cfg.FeatureFlags = def.FeatureFlags
+	if len(cfg.InterruptBeforeNodes) == 0 && len(def.InterruptBeforeNodes) > 0 {
+		cfg.InterruptBeforeNodes = append([]string(nil), def.InterruptBeforeNodes...)
 	}
 	return cfg
 }

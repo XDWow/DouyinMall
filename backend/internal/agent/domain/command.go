@@ -1,5 +1,8 @@
 ﻿package domain
 
+// TurnInput 本轮用户入参（只读语义），与共享上下文 State 分离。
+type TurnInput = ChatCommand
+
 type ChatCommand struct {
 	SessionID   string
 	UserID      int64

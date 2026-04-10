@@ -1,0 +1,111 @@
+# 在本机直接运行 agent 时使用（工作目录为 backend/）：
+#   docker compose 仅启动 mysql/redis/etcd 等基础服务后：
+#   go run ./cmd/agent --config internal/agent/config/local.yaml
+#
+# 与 dev.yaml 的差异：DB/Redis/Etcd 走宿主机映射端口；Embedding 默认连本机 Ollama。
+grpc:
+  server:
+    port: 8087
+    name: "agent-service"
+
+http:
+  addr: ":18087"
+  prefix: "/api/agent"
+  read_timeout_seconds: 30
+  write_timeout_seconds: 120
+  idle_timeout_seconds: 120
+
+db:
+  dsn: "root:root@tcp(127.0.0.1:13306)/douyinmall_agent?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "127.0.0.1:16379"
+  password: ""
+  db: 0
+
+etcd:
+  endpoints:
+    - "127.0.0.1:12379"
+
+mcp:
+  servers:
+    - name: "order"
+      endpoint: "http://localhost:19092/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "search"
+      endpoint: "http://localhost:19093/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "cart"
+      endpoint: "http://localhost:19094/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "product"
+      endpoint: "http://localhost:19095/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "inventory"
+      endpoint: "http://localhost:19096/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "aftersale"
+      endpoint: "http://localhost:19097/mcp"
+      timeout_seconds: 10
+      enabled: true
+
+skill:
+  enabled: true
+  roots:
+    - "internal/agent/skills"
+
+tenant:
+  default_id: "default"
+
+llm:
+  base_url: "https://apis.iflow.cn/v1"
+  api_key: ""
+  model: "qwen3-max"
+  timeout_seconds: 60
+  temperature: 0.2
+  max_tokens: 512
+
+embedding:
+  base_url: "http://127.0.0.1:11434/v1"
+  api_key: ""
+  model: "qwen3-embedding:0.6b"
+  timeout_seconds: 15
+
+knowledge_base:
+  scheme: "http"
+  domain: "api-knowledgebase.mlp.cn-beijing.volces.com"
+  service_chat_path: "/api/knowledge/service/chat"
+  service_resource_id: ""
+  api_key: ""
+  timeout_seconds: 60
+
+workflow:
+  rate_limit_per_minute: 30
+  conversation_window: 5
+  exact_cache_ttl_seconds: 600
+  semantic_cache_ttl_seconds: 1800
+  semantic_cache_score: 0.9
+  semantic_cache_top_k: 20
+  retrieve_top_k: 8
+  retrieve_min_score: 0.35
+  confidence_threshold: 0.62
+  max_answer_tokens: 512
+  checkpoint_ttl_seconds: 604800
+
+observability:
+  log:
+    level: "info"
+    file: ""
+  metrics:
+    path: "/metrics"
+  trace:
+    enabled: false
+    service_name: "agent-service"
+    endpoint: ""
+    insecure: true
+    sample_ratio: 1.0

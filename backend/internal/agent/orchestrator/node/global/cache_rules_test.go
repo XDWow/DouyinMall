@@ -5,13 +5,12 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 func TestResolveSemanticCachePolicy(t *testing.T) {
 	tests := []struct {
 		name       string
-		route      graphstate.WorkflowRoute
+		route      domain.WorkflowRoute
 		message    string
 		wantAllow  bool
 		wantBucket string
@@ -19,7 +18,7 @@ func TestResolveSemanticCachePolicy(t *testing.T) {
 	}{
 		{
 			name:       "return policy route always allows semantic cache",
-			route:      graphstate.RouteReturnPolicy,
+			route:      domain.RouteReturnPolicy,
 			message:    "how do I return this order",
 			wantAllow:  true,
 			wantBucket: string(domain.IntentReturnPolicy),
@@ -27,7 +26,7 @@ func TestResolveSemanticCachePolicy(t *testing.T) {
 		},
 		{
 			name:       "stable product knowledge allows semantic cache",
-			route:      graphstate.RouteProductInfo,
+			route:      domain.RouteProductInfo,
 			message:    "what material is this product made of",
 			wantAllow:  true,
 			wantBucket: string(domain.IntentProductInfo),
@@ -35,13 +34,13 @@ func TestResolveSemanticCachePolicy(t *testing.T) {
 		},
 		{
 			name:      "dynamic product question skips semantic cache",
-			route:     graphstate.RouteProductInfo,
+			route:     domain.RouteProductInfo,
 			message:   "what is the price of this product",
 			wantAllow: false,
 		},
 		{
 			name:       "base qa knowledge question can use semantic cache",
-			route:      graphstate.RouteBaseQA,
+			route:      domain.RouteBaseQA,
 			message:    "what are your shipping time rules",
 			wantAllow:  true,
 			wantBucket: string(domain.IntentFallback),
@@ -49,13 +48,13 @@ func TestResolveSemanticCachePolicy(t *testing.T) {
 		},
 		{
 			name:      "base qa dynamic order status skips semantic cache",
-			route:     graphstate.RouteBaseQA,
+			route:     domain.RouteBaseQA,
 			message:   "check my order status",
 			wantAllow: false,
 		},
 		{
 			name:      "action route never allows semantic cache",
-			route:     graphstate.RouteAddToCart,
+			route:     domain.RouteAddToCart,
 			message:   "add this to my cart",
 			wantAllow: false,
 		},

@@ -9,22 +9,18 @@ import (
 	raginfra "github.com/XDWow/DouyinMall/backend/internal/agent/infra/rag"
 )
 
-// Input 描述 RAG 节点真正需要的最小输入。
 type Input struct {
 	Message string
 	History []*schema.Message
 	Intent  string
 }
 
-// Result 描述 RAG 节点的直接输出。
 type Result struct {
 	Query     string
 	Documents []*schema.Document
 }
 
-// RAGNode 负责调用托管知识库完成一次完整的知识检索。
-// 当前版本把 RAG 收敛成一个明确节点，而不是在编排层继续拆 rewrite / retrieve / rerank，
-// 因为这些步骤已经由托管知识库服务内部完成，上层只需要一个稳定的检索能力边界。
+// RAGNode 知识库检索一步（rewrite/rerank 在库内）。
 type RAGNode struct {
 	KnowledgeBase *raginfra.ManagedKnowledgeService
 	TopK          int

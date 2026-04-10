@@ -6,24 +6,23 @@ import (
 	"strings"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-func HydrateToolResults(state *orchestratorstate.State) {
-	if state == nil {
+func HydrateToolResults(st *domain.State) {
+	if st == nil {
 		return
 	}
-	ss := &state.Session
-	HydrateToolResultsIntoSlots(ss.Slots, state.ToolExecutions())
+	ss := &st.Session
+	HydrateToolResultsIntoSlots(ss.Slots, st.ToolExecutions())
 	HydrateCurrentRefs(ss)
 }
 
 // HydrateToolResultsFromExecutions 保留给主流程节点在已有执行结果时复用。
-func HydrateToolResultsFromExecutions(state *orchestratorstate.State, executions []domain.ToolExecution) {
-	if state == nil {
+func HydrateToolResultsFromExecutions(st *domain.State, executions []domain.ToolExecution) {
+	if st == nil {
 		return
 	}
-	ss := &state.Session
+	ss := &st.Session
 	HydrateToolResultsIntoSlots(ss.Slots, executions)
 	HydrateCurrentRefs(ss)
 }
@@ -48,11 +47,11 @@ func HydrateToolResultsIntoSlots(slots map[string]any, executions []domain.ToolE
 	}
 }
 
-func ToolResultMap(state *orchestratorstate.State, toolName string) map[string]any {
-	if state == nil {
+func ToolResultMap(st *domain.State, toolName string) map[string]any {
+	if st == nil {
 		return nil
 	}
-	return ToolResultMapFromSlots(state.Session.Slots, toolName)
+	return ToolResultMapFromSlots(st.Session.Slots, toolName)
 }
 
 func ToolResultMapFromSlots(slots map[string]any, toolName string) map[string]any {
@@ -67,23 +66,50 @@ func ToolResultMapFromSlots(slots map[string]any, toolName string) map[string]an
 	return result
 }
 
-func ResetToolState(state *orchestratorstate.State) {
-	if state == nil {
+func ResetToolState(st *domain.State) {
+	if st == nil {
 		return
 	}
-	state.Tool.Plans = nil
-	state.Tool.CallMessage = nil
-	state.Tool.ToolMessages = nil
+	st.Tool.Plans = nil
+	st.Tool.CallMessage = nil
+	st.Tool.ToolMessages = nil
 }
 
-func HasToolPlan(state *orchestratorstate.State, names ...string) bool {
-	if state == nil || len(state.Tool.Plans) == 0 {
+// CollectUsedToolNames 从本轮 Plan 与 Recorder 快照收敛工具名（无参数、无结果），供出口组装与缓存策略。
+func CollectUsedToolNames(st *domain.State) []string {
+	if st == nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	for _, plan := range st.Tool.Plans {
+		add(plan.Name)
+	}
+	for _, exec := range st.ToolExecutions() {
+		add(exec.Name)
+	}
+	return out
+}
+
+func HasToolPlan(st *domain.State, names ...string) bool {
+	if st == nil || len(st.Tool.Plans) == 0 {
 		return false
 	}
 	if len(names) == 0 {
-		return len(state.Tool.Plans) > 0
+		return len(st.Tool.Plans) > 0
 	}
-	for _, plan := range state.Tool.Plans {
+	for _, plan := range st.Tool.Plans {
 		for _, name := range names {
 			if strings.EqualFold(plan.Name, name) {
 				return true
@@ -93,11 +119,11 @@ func HasToolPlan(state *orchestratorstate.State, names ...string) bool {
 	return false
 }
 
-func ToolResultRecord(state *orchestratorstate.State, toolName string) map[string]any {
-	if state == nil {
+func ToolResultRecord(st *domain.State, toolName string) map[string]any {
+	if st == nil {
 		return nil
 	}
-	return ToolResultRecordFromSlots(state.Session.Slots, toolName)
+	return ToolResultRecordFromSlots(st.Session.Slots, toolName)
 }
 
 func ToolResultRecordFromSlots(slots map[string]any, toolName string) map[string]any {
@@ -116,7 +142,7 @@ func ToolResultRecordFromSlots(slots map[string]any, toolName string) map[string
 	return result
 }
 
-func HydrateCurrentRefs(session *orchestratorstate.Session) {
+func HydrateCurrentRefs(session *domain.Session) {
 	if session == nil || len(session.Slots) == 0 {
 		return
 	}
@@ -197,12 +223,12 @@ func ToolResultBool(record map[string]any, keys ...string) (bool, bool) {
 
 // SelectedToolNames 收敛出当前轮真正相关的工具名称。
 // 有 plan / execution 时以运行期结果为准；否则回退到子图白名单。
-func SelectedToolNames(state *orchestratorstate.State) []string {
-	if state == nil {
+func SelectedToolNames(st *domain.State) []string {
+	if st == nil {
 		return nil
 	}
 	seen := make(map[string]struct{})
-	names := make([]string, 0, len(state.Tool.Plans)+len(state.ToolExecutions()))
+	names := make([]string, 0, len(st.Tool.Plans)+len(st.ToolExecutions()))
 	appendName := func(name string) {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -214,16 +240,16 @@ func SelectedToolNames(state *orchestratorstate.State) []string {
 		seen[name] = struct{}{}
 		names = append(names, name)
 	}
-	for _, plan := range state.Tool.Plans {
+	for _, plan := range st.Tool.Plans {
 		appendName(plan.Name)
 	}
-	for _, exec := range state.ToolExecutions() {
+	for _, exec := range st.ToolExecutions() {
 		appendName(exec.Name)
 	}
 	if len(names) > 0 {
 		return names
 	}
-	for _, name := range ToolNamesForRoute(state.Session.Route) {
+	for _, name := range ToolNamesForRoute(st.Session.Route) {
 		appendName(name)
 	}
 	return names

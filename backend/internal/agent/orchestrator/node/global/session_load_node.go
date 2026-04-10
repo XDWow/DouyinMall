@@ -9,17 +9,11 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 	agentsession "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 )
 
-type SessionLoadInput struct {
-	Request       domain.ChatCommand
-	TraceID       string
-	ExistingSlots map[string]any
-}
-
+// SessionLoadNode 加载/创建持久会话，写入共享 *domain.State（SessionID/UserID/TraceID 来自 st.Input 与 st.TraceID）。
+// 生产路径由 graph 包注册的 StatePreHandler 调用 PrepareSession（框架已持 state 锁）；Handler 与节点体分离，便于复用与单测领域逻辑。
 type SessionLoadNode struct {
 	service agentsession.SessionService
 }
@@ -28,106 +22,107 @@ func NewSessionLoadNode(service agentsession.SessionService) *SessionLoadNode {
 	return &SessionLoadNode{service: service}
 }
 
-type SessionLoadResult struct {
-	SessionID         string
-	SessionMeta       *domain.Session
-	RecentMessages    []*schema.Message
-	Slots             map[string]any
-	CurrentRefs       graphstate.CurrentRefs
-	PendingSelections map[string]graphstate.PendingSelection
-}
+// PrepareSession 把仓储会话与最近历史写入 st，并保留 AccessGuard 已写入的本轮 Session 字段。
+func (n *SessionLoadNode) PrepareSession(ctx context.Context, st *domain.State) error {
+	if st == nil {
+		return fmt.Errorf("state is required")
+	}
+	guardRawQuery := st.Session.RawQuery
+	guardTenantID := st.Session.TenantID
+	guardResume := st.Session.ResumeFromCP
+	guardErr := st.Session.ErrorCode
+	guardFinal := st.Session.FinalAnswer
 
-func (n *SessionLoadNode) Invoke(ctx context.Context, input SessionLoadInput) (*SessionLoadResult, error) {
-	sessionID := strings.TrimSpace(input.Request.SessionID)
+	sessionID := strings.TrimSpace(st.Input.SessionID)
 	if sessionID == "" {
-		sessionID = "sess_" + input.TraceID
+		sessionID = "sess_" + st.TraceID
 	}
 
-	meta, recentMessages, err := n.ensureSessionMeta(ctx, sessionID, input.Request.UserID)
+	persistedSession, recentHistory, err := n.loadOrCreatePersistedSession(ctx, sessionID, st.Input.UserID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	persistedSlots, currentRefs, pendingSelections := splitPersistedSessionState(meta.Slots)
-	currentRefs = refsFromMetadata(input.Request.Metadata, currentRefs)
-	slots := restoreSessionSlots(persistedSlots, input.ExistingSlots, input.Request.Metadata, currentRefs)
-	meta.Slots = mergePersistedSessionState(slots, currentRefs, pendingSelections)
+	persistedSlots, currentRefs, pendingSelections := splitPersistedSessionState(persistedSession.Slots)
+	workingSlots := cloneSlots(persistedSlots)
+	if workingSlots == nil {
+		workingSlots = map[string]any{}
+	}
+	promoteTrustedRefsIntoSlots(workingSlots, currentRefs)
 
-	return &SessionLoadResult{
-		SessionID:         sessionID,
-		SessionMeta:       meta,
-		RecentMessages:    recentMessages,
-		Slots:             slots,
-		CurrentRefs:       currentRefs,
-		PendingSelections: pendingSelections,
-	}, nil
+	outSession := clonePersistedSession(persistedSession)
+	outSession.Slots = mergePersistedSessionState(workingSlots, currentRefs, pendingSelections)
+
+	ps := outSession
+	st.PersistedSession = &ps
+	st.Session = outSession
+
+	st.Session.SessionID = sessionID
+	st.Session.Messages = append([]*schema.Message(nil), recentHistory...)
+	st.Session.Slots = cloneSlots(workingSlots)
+	st.Session.CurrentRefs = currentRefs
+	st.Session.PendingSelections = clonePendingSelectionsSL(pendingSelections)
+
+	st.EnsureResponse().SessionID = sessionID
+
+	st.Session.RawQuery = guardRawQuery
+	st.Session.TenantID = guardTenantID
+	st.Session.ResumeFromCP = guardResume
+	st.Session.ErrorCode = guardErr
+	st.Session.FinalAnswer = guardFinal
+	return nil
 }
 
-func (n *SessionLoadNode) ensureSessionMeta(
+func clonePendingSelectionsSL(input map[string]domain.PendingSelection) map[string]domain.PendingSelection {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]domain.PendingSelection, len(input))
+	for key, selection := range input {
+		cloned := domain.PendingSelection{Kind: selection.Kind}
+		if len(selection.Options) > 0 {
+			cloned.Options = make(map[string]string, len(selection.Options))
+			for optionKey, optionValue := range selection.Options {
+				cloned.Options[optionKey] = optionValue
+			}
+		}
+		out[key] = cloned
+	}
+	return out
+}
+
+func (n *SessionLoadNode) loadOrCreatePersistedSession(
 	ctx context.Context,
 	sessionID string,
 	userID int64,
-) (*domain.Session, []*schema.Message, error) {
+) (domain.Session, []*schema.Message, error) {
 	if strings.TrimSpace(sessionID) == "" {
-		return nil, nil, fmt.Errorf("session_id is required")
+		return domain.Session{}, nil, fmt.Errorf("session_id is required")
 	}
 	if userID <= 0 {
-		return nil, nil, fmt.Errorf("user_id is required")
+		return domain.Session{}, nil, fmt.Errorf("user_id is required")
 	}
 
 	if n == nil || n.service == nil {
-		now := time.Now()
-		return &domain.Session{
-			SessionID:  sessionID,
-			UserID:     userID,
-			Status:     domain.SessionStatusActive,
-			CreatedAt:  now,
-			UpdatedAt:  now,
-			TotalTurns: 0,
-		}, nil, nil
+		return newActiveSession(sessionID, userID), nil, nil
 	}
 
-	meta, messages, err := n.service.LoadSession(ctx, sessionID)
+	snapshot, err := n.service.LoadSnapshot(ctx, sessionID)
 	if err != nil {
-		return nil, nil, err
+		return domain.Session{}, nil, err
 	}
-	if meta == nil {
-		now := time.Now()
-		meta = &domain.Session{
-			SessionID:  sessionID,
-			UserID:     userID,
-			Status:     domain.SessionStatusActive,
-			CreatedAt:  now,
-			UpdatedAt:  now,
-			TotalTurns: 0,
+	if snapshot == nil {
+		persistedSession := newActiveSession(sessionID, userID)
+		if err := n.service.CreateSession(ctx, persistedSession); err != nil {
+			return domain.Session{}, nil, err
 		}
-		if err := n.service.CreateSession(ctx, *meta); err != nil {
-			return nil, nil, err
-		}
+		return persistedSession, nil, nil
 	}
-	if meta.UserID != 0 && meta.UserID != userID {
-		return nil, nil, fmt.Errorf("session user mismatch")
+	if snapshot.PersistedSession.UserID != 0 && snapshot.PersistedSession.UserID != userID {
+		return domain.Session{}, nil, fmt.Errorf("session user mismatch")
 	}
 
-	cloned := *meta
-	cloned.Slots = cloneSlots(meta.Slots)
-	return &cloned, n.service.RecentSchemaMessages(messages), nil
-}
-
-func restoreSessionSlots(
-	persisted map[string]any,
-	existing map[string]any,
-	metadata map[string]string,
-	currentRefs graphstate.CurrentRefs,
-) map[string]any {
-	slots := cloneSlots(persisted)
-	if slots == nil {
-		slots = map[string]any{}
-	}
-	support.MergeSlots(slots, existing)
-	support.MergeSlots(slots, extractMetadataSlots(metadata))
-	applyTrustedRefsToSlots(slots, currentRefs)
-	return slots
+	return clonePersistedSession(snapshot.PersistedSession), n.service.BuildRecentHistory(snapshot.Messages), nil
 }
 
 func cloneSlots(input map[string]any) map[string]any {
@@ -139,6 +134,24 @@ func cloneSlots(input map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func clonePersistedSession(session domain.Session) domain.Session {
+	cloned := session
+	cloned.Slots = cloneSlots(session.Slots)
+	return cloned
+}
+
+func newActiveSession(sessionID string, userID int64) domain.Session {
+	now := time.Now()
+	return domain.Session{
+		SessionID:  sessionID,
+		UserID:     userID,
+		Status:     domain.SessionStatusActive,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		TotalTurns: 0,
+	}
 }
 
 var _ agentsession.SessionService = (*agentsession.Service)(nil)

@@ -10,7 +10,7 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
@@ -41,7 +41,7 @@ func NewCacheWritebackService(
 	}
 }
 
-func (n *CacheWritebackService) Write(ctx context.Context, state *graphstate.State) error {
+func (n *CacheWritebackService) Write(ctx context.Context, state *domain.State) error {
 	if state == nil {
 		return fmt.Errorf("state is required")
 	}
@@ -60,7 +60,7 @@ func (n *CacheWritebackService) Write(ctx context.Context, state *graphstate.Sta
 	if n.ExactCache != nil && n.ExactCacheTTL > 0 && n.shouldWriteExactCache(state, cacheIntent) {
 		_ = n.ExactCache.Store(ctx, &cache.ExactCacheItem{
 			TenantID: state.Session.TenantID,
-			UserID:   state.Request.UserID,
+			UserID:   state.Input.UserID,
 			Query:    state.Session.RawQuery,
 			Response: *resp,
 		}, n.ExactCacheTTL)
@@ -68,12 +68,12 @@ func (n *CacheWritebackService) Write(ctx context.Context, state *graphstate.Sta
 
 	policy := ResolveSemanticCachePolicy(state.Session.Route, state.Session.RawQuery)
 	if n.SemanticCache != nil && n.Embedder != nil && n.SemanticCacheTTL > 0 && n.shouldWriteSemanticCache(state, policy) {
-		query := strings.TrimSpace(firstNonEmpty(state.Rewrite.Query, state.Session.RawQuery))
+		query := strings.TrimSpace(support.FirstNonEmpty(state.Rewrite.Query, state.Session.RawQuery))
 		if query != "" {
 			if vector, err := n.embedQuery(ctx, query); err == nil && len(vector) > 0 {
 				userID := int64(0)
 				if policy.Scope == cache.CacheScopeTenantUser {
-					userID = state.Request.UserID
+					userID = state.Input.UserID
 				}
 				_ = n.SemanticCache.Store(ctx, &cache.SemanticCacheItem{
 					TenantID:     state.Session.TenantID,
@@ -91,7 +91,7 @@ func (n *CacheWritebackService) Write(ctx context.Context, state *graphstate.Sta
 	return nil
 }
 
-func (n *CacheWritebackService) cacheIntent(state *graphstate.State, resp *domain.ChatResult) domain.Intent {
+func (n *CacheWritebackService) cacheIntent(state *domain.State, resp *domain.ChatResult) domain.Intent {
 	if resp != nil && resp.Intent != domain.IntentUnknown {
 		return resp.Intent
 	}
@@ -101,7 +101,7 @@ func (n *CacheWritebackService) cacheIntent(state *graphstate.State, resp *domai
 	return detectCacheIntent(state.Session.RawQuery)
 }
 
-func (n *CacheWritebackService) shouldWriteExactCache(state *graphstate.State, intent domain.Intent) bool {
+func (n *CacheWritebackService) shouldWriteExactCache(state *domain.State, intent domain.Intent) bool {
 	if state != nil && state.Answer.CacheableHint != nil && !*state.Answer.CacheableHint {
 		return false
 	}
@@ -117,7 +117,7 @@ func (n *CacheWritebackService) shouldWriteExactCache(state *graphstate.State, i
 	}
 }
 
-func (n *CacheWritebackService) shouldWriteSemanticCache(state *graphstate.State, policy SemanticCachePolicy) bool {
+func (n *CacheWritebackService) shouldWriteSemanticCache(state *domain.State, policy SemanticCachePolicy) bool {
 	if !policy.AllowRead {
 		return false
 	}
@@ -126,16 +126,16 @@ func (n *CacheWritebackService) shouldWriteSemanticCache(state *graphstate.State
 	}
 
 	switch state.Session.Route {
-	case graphstate.RouteProductInfo:
+	case domain.RouteProductInfo:
 		return !hasDynamicCacheTool(state)
-	case graphstate.RouteBaseQA:
+	case domain.RouteBaseQA:
 		return len(state.Retrieval.Documents) > 0
 	default:
 		return true
 	}
 }
 
-func (n *CacheWritebackService) shouldWriteCache(state *graphstate.State, resp *domain.ChatResult) bool {
+func (n *CacheWritebackService) shouldWriteCache(state *domain.State, resp *domain.ChatResult) bool {
 	return resp != nil &&
 		state.Session.ReadOnly &&
 		state.Session.CacheHitLevel == "" &&
@@ -154,18 +154,14 @@ func (n *CacheWritebackService) embedQuery(ctx context.Context, query string) ([
 	return vectors[0], nil
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func hasDynamicCacheTool(state *graphstate.State) bool {
+func hasDynamicCacheTool(state *domain.State) bool {
 	for _, plan := range state.Tool.Plans {
 		if isDynamicCacheTool(plan.Name) {
+			return true
+		}
+	}
+	for _, name := range state.EnsureResponse().UsedToolNames {
+		if isDynamicCacheTool(name) {
 			return true
 		}
 	}

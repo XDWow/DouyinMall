@@ -1,4 +1,4 @@
-﻿package http
+package http
 
 import (
 	"net/http"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agentusecase "github.com/XDWow/DouyinMall/backend/internal/agent/usecase"
 )
 
@@ -64,7 +64,7 @@ func (h *Handler) ChatStream(c *gin.Context) {
 
 	writer := NewSSEWriter(c.Writer, flusher)
 	if _, err := h.usecase.ChatStream(c.Request.Context(), toChatInput(req), writer); err != nil {
-		_ = writer.Send(c.Request.Context(), orchestratorstate.StreamEvent{
+		_ = writer.Send(c.Request.Context(), domain.StreamEvent{
 			Event: "error",
 			Data:  gin.H{"message": err.Error()},
 		})

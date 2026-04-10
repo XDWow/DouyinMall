@@ -11,7 +11,7 @@ import (
 	"time"
 
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
-	agentrepository "github.com/XDWow/DouyinMall/backend/internal/agent/infra/repository"
+	agentdb "github.com/XDWow/DouyinMall/backend/internal/agent/infra/db"
 	agentioc "github.com/XDWow/DouyinMall/backend/internal/agent/ioc"
 	customergraph "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator"
 	grpcHandler "github.com/XDWow/DouyinMall/backend/internal/agent/transport/grpc"
@@ -59,8 +59,7 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 		return nil, err
 	}
 
-	dao := agentrepository.NewDAO(db)
-	if err := dao.InitTables(ctx); err != nil {
+	if err := agentdb.InitTables(db); err != nil {
 		return nil, fmt.Errorf("init agent tables failed: %w", err)
 	}
 
@@ -72,15 +71,8 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 	workflowCfg := customergraph.DefaultConfig()
 	overrideWorkflowConfig(&workflowCfg, cfg.Workflow, cfg.LLM.MaxTokens)
 	workflowCfg.DefaultTenantID = defaultString(cfg.Tenant.DefaultID, workflowCfg.DefaultTenantID)
-	workflowCfg.FeatureFlags = customergraph.FeatureFlags{
-		OrderQuery:          cfg.FeatureFlags.OrderQuery,
-		ReturnPolicy:        cfg.FeatureFlags.ReturnPolicy,
-		Inventory:           cfg.FeatureFlags.Inventory,
-		ProductInfo:         cfg.FeatureFlags.ProductInfo,
-		ReturnExchangeApply: cfg.FeatureFlags.ReturnExchangeApply,
-	}
 
-	components, err := agentioc.InitComponents(ctx, cfg, dao, rdb)
+	components, err := agentioc.InitComponents(ctx, cfg, db, rdb)
 	if err != nil {
 		return nil, err
 	}
@@ -388,8 +380,6 @@ func overrideWorkflowConfig(dst *customergraph.Config, src agentconfig.WorkflowC
 	}
 	if src.ExactCacheTTLSeconds > 0 {
 		dst.ExactCacheTTL = time.Duration(src.ExactCacheTTLSeconds) * time.Second
-	} else if src.L0CacheTTLSeconds > 0 {
-		dst.ExactCacheTTL = time.Duration(src.L0CacheTTLSeconds) * time.Second
 	}
 	if src.SemanticCacheTTLSeconds > 0 {
 		dst.SemanticCacheTTL = time.Duration(src.SemanticCacheTTLSeconds) * time.Second
@@ -406,12 +396,6 @@ func overrideWorkflowConfig(dst *customergraph.Config, src agentconfig.WorkflowC
 	if src.RetrieveMinScore > 0 {
 		dst.RetrieveMinScore = src.RetrieveMinScore
 	}
-	if src.RerankTopK > 0 {
-		dst.RerankTopK = src.RerankTopK
-	}
-	if src.ToolParallelism > 0 {
-		dst.ToolParallelism = src.ToolParallelism
-	}
 	if src.ConfidenceThreshold > 0 {
 		dst.ConfidenceThreshold = src.ConfidenceThreshold
 	}
@@ -420,14 +404,8 @@ func overrideWorkflowConfig(dst *customergraph.Config, src agentconfig.WorkflowC
 	} else if llmMaxTokens > 0 {
 		dst.MaxAnswerTokens = llmMaxTokens
 	}
-	if src.StreamBuffer > 0 {
-		dst.StreamBuffer = src.StreamBuffer
-	}
 	if len(src.InterruptBeforeNodes) > 0 {
 		dst.InterruptBeforeNodes = append([]string(nil), src.InterruptBeforeNodes...)
-	}
-	if len(src.InterruptAfterNodes) > 0 {
-		dst.InterruptAfterNodes = append([]string(nil), src.InterruptAfterNodes...)
 	}
 }
 

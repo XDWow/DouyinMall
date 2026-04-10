@@ -1,4 +1,4 @@
-﻿package usecase
+package usecase
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
@@ -19,7 +19,7 @@ func sessionOutputFromDomain(session *domain.Session) *SessionOutput {
 	}
 }
 
-func messageOutputFromDomain(message domain.Message) MessageOutput {
+func messageOutputFromDomain(message domain.SessionMessage) MessageOutput {
 	return MessageOutput{
 		ID:         message.ID,
 		SessionID:  message.SessionID,
@@ -30,4 +30,3 @@ func messageOutputFromDomain(message domain.Message) MessageOutput {
 		CreatedAt:  message.CreatedAt,
 	}
 }
-

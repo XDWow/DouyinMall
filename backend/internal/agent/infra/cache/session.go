@@ -16,8 +16,8 @@ const (
 )
 
 type SessionCache interface {
-	Load(ctx context.Context, sessionID string) (*domain.Session, []domain.Message, error)
-	Save(ctx context.Context, session domain.Session, messages []domain.Message) error
+	Load(ctx context.Context, sessionID string) (*domain.Session, []domain.SessionMessage, error)
+	Save(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error
 	Delete(ctx context.Context, sessionID string) error
 }
 
@@ -41,7 +41,7 @@ func NewRedisSessionCache(store Store, ttl time.Duration, messageWindow int) *Re
 	}
 }
 
-func (c *RedisSessionCache) Load(ctx context.Context, sessionID string) (*domain.Session, []domain.Message, error) {
+func (c *RedisSessionCache) Load(ctx context.Context, sessionID string) (*domain.Session, []domain.SessionMessage, error) {
 	if c == nil || c.store == nil {
 		return nil, nil, nil
 	}
@@ -64,9 +64,9 @@ func (c *RedisSessionCache) Load(ctx context.Context, sessionID string) (*domain
 		return &session, nil, err
 	}
 
-	messages := make([]domain.Message, 0, len(rawMessages))
+	messages := make([]domain.SessionMessage, 0, len(rawMessages))
 	for _, item := range rawMessages {
-		var message domain.Message
+		var message domain.SessionMessage
 		if err := json.Unmarshal(item, &message); err == nil {
 			messages = append(messages, message)
 		}
@@ -74,7 +74,7 @@ func (c *RedisSessionCache) Load(ctx context.Context, sessionID string) (*domain
 	return &session, messages, nil
 }
 
-func (c *RedisSessionCache) Save(ctx context.Context, session domain.Session, messages []domain.Message) error {
+func (c *RedisSessionCache) Save(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error {
 	if c == nil || c.store == nil {
 		return nil
 	}

@@ -3,21 +3,16 @@ package orderquery
 import (
 	"context"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
+	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	ordernode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/order"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 )
 
-// Input 描述订单查询子图的入口。
-type Input struct {
-	Slots map[string]any
-}
-
-// Output 描述订单查询子图的出口。
 type Output struct {
 	FinalAnswer   string
 	NeedHandoff   bool
@@ -26,67 +21,59 @@ type Output struct {
 	ToolMessages  []*schema.Message
 }
 
-// Build 组装订单查询子图。
-// 这段流程的职责是：生成订单查询计划，按需执行工具，再把结果整理成明确输出。
-func Build(ctx context.Context, registry *agenttool.Registry, node *ordernode.OrderReadNode) (compose.AnyGraph, error) {
+func Build(
+	_ context.Context,
+	registry *agenttool.Registry,
+	node *ordernode.OrderReadNode,
+	chatModel model.ToolCallingChatModel,
+	skills *agentskill.Registry,
+	maxAnswerTokens int,
+) (compose.AnyGraph, error) {
 	if node == nil {
 		return nil, nil
 	}
 
-	_ = ctx
-	toolExecNode := sharednode.NewToolExecNode(registry)
+	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, maxAnswerTokens)
+	toolExec := sharednode.NewToolExecNode(registry)
 
-	g := compose.NewGraph[Input, Output]()
-	if err := g.AddLambdaNode("ExecuteOrderQueryFlowNode", compose.InvokableLambda(
-		func(ctx context.Context, input Input) (Output, error) {
-			result, err := node.Invoke(ctx, ordernode.OrderReadInput{Slots: cloneSlots(input.Slots)})
-			if err != nil {
-				return Output{}, err
-			}
-
-			out := Output{
-				FinalAnswer:   result.FinalAnswer,
-				NeedHandoff:   result.NeedHandoff,
-				HandoffReason: result.HandoffReason,
-				ReadOnly:      result.ReadOnly,
-			}
-			if len(result.Plans) == 0 || toolExecNode == nil {
-				return out, nil
-			}
-
-			callMessage, err := toolexec.CreateToolCallMessage(result.Plans)
-			if err != nil {
-				return Output{}, err
-			}
-			messages, err := toolExecNode.Invoke(ctx, sharednode.ToolExecutionInput{
-				Plans:       result.Plans,
-				CallMessage: callMessage,
-				Mode:        agenttool.ToolExecutionSerial,
-			})
-			if err != nil {
-				return Output{}, err
-			}
-			out.ToolMessages = append([]*schema.Message(nil), messages...)
-			return out, nil
-		}), compose.WithNodeName("ExecuteOrderQueryFlowNode")); err != nil {
+	g := compose.NewGraph[struct{}, Output]()
+	if err := g.AddLambdaNode("OrderQueryPrepareSlotsNode", compose.InvokableLambda(prepareSlots()),
+		compose.WithNodeName("OrderQueryPrepareSlotsNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge(compose.START, "ExecuteOrderQueryFlowNode"); err != nil {
+	if err := g.AddLambdaNode("OrderQueryModelAgentNode", compose.InvokableLambda(runOrderModelAgent(agent, skills)),
+		compose.WithNodeName("OrderQueryModelAgentNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge("ExecuteOrderQueryFlowNode", compose.END); err != nil {
+	if err := g.AddLambdaNode("OrderQueryAgentAnswerNode", compose.InvokableLambda(buildOrderOutputFromAgent),
+		compose.WithNodeName("OrderQueryAgentAnswerNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode("OrderQueryRulePlanNode", compose.InvokableLambda(runOrderRulePlanAndTools(node, toolExec)),
+		compose.WithNodeName("OrderQueryRulePlanNode")); err != nil {
+		return nil, err
+	}
+
+	if err := g.AddEdge(compose.START, "OrderQueryPrepareSlotsNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("OrderQueryPrepareSlotsNode", "OrderQueryModelAgentNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddBranch("OrderQueryModelAgentNode", compose.NewGraphBranch(
+		branchAfterOrderAgent,
+		map[string]bool{
+			"OrderQueryAgentAnswerNode": true,
+			"OrderQueryRulePlanNode":    true,
+		},
+	)); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("OrderQueryAgentAnswerNode", compose.END); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("OrderQueryRulePlanNode", compose.END); err != nil {
 		return nil, err
 	}
 	return g, nil
-}
-
-func cloneSlots(input map[string]any) map[string]any {
-	if len(input) == 0 {
-		return nil
-	}
-	result := make(map[string]any, len(input))
-	for key, value := range input {
-		result[key] = value
-	}
-	return result
 }

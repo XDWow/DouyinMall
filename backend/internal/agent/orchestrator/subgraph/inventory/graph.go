@@ -3,89 +3,96 @@ package inventory
 import (
 	"context"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
+	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	inventorynode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/inventory"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 )
 
-// Input 描述库存查询子图的入口。
-type Input struct {
-	Slots map[string]any
-}
-
-// Output 描述库存查询子图的出口。
 type Output struct {
 	FinalAnswer   string
 	NeedHandoff   bool
 	HandoffReason string
 	ReadOnly      bool
 	ToolMessages  []*schema.Message
+	AwaitingUser  bool
+	MissingSlots  []string
 }
 
-// Build 组装库存查询子图。
-func Build(ctx context.Context, registry *agenttool.Registry, node *inventorynode.InventoryReadNode) (compose.AnyGraph, error) {
+func Build(
+	_ context.Context,
+	registry *agenttool.Registry,
+	node *inventorynode.InventoryReadNode,
+	chatModel model.ToolCallingChatModel,
+	skills *agentskill.Registry,
+	maxAnswerTokens int,
+) (compose.AnyGraph, error) {
 	if node == nil {
 		return nil, nil
 	}
 
-	_ = ctx
+	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, maxAnswerTokens)
 	toolExecNode := sharednode.NewToolExecNode(registry)
 
-	g := compose.NewGraph[Input, Output]()
-	if err := g.AddLambdaNode("ExecuteInventoryFlowNode", compose.InvokableLambda(
-		func(ctx context.Context, input Input) (Output, error) {
-			result, err := node.Invoke(ctx, inventorynode.InventoryReadInput{Slots: cloneSlots(input.Slots)})
-			if err != nil {
-				return Output{}, err
-			}
-
-			out := Output{
-				FinalAnswer:   result.FinalAnswer,
-				NeedHandoff:   result.NeedHandoff,
-				HandoffReason: result.HandoffReason,
-				ReadOnly:      result.ReadOnly,
-			}
-			if len(result.Plans) == 0 || toolExecNode == nil {
-				return out, nil
-			}
-
-			callMessage, err := toolexec.CreateToolCallMessage(result.Plans)
-			if err != nil {
-				return Output{}, err
-			}
-			messages, err := toolExecNode.Invoke(ctx, sharednode.ToolExecutionInput{
-				Plans:       result.Plans,
-				CallMessage: callMessage,
-				Mode:        agenttool.ToolExecutionSerial,
-			})
-			if err != nil {
-				return Output{}, err
-			}
-			out.ToolMessages = append([]*schema.Message(nil), messages...)
-			return out, nil
-		}), compose.WithNodeName("ExecuteInventoryFlowNode")); err != nil {
+	g := compose.NewGraph[struct{}, Output]()
+	if err := g.AddLambdaNode("InventoryCheckSlotsNode", compose.InvokableLambda(inventoryCheckSlots()),
+		compose.WithNodeName("InventoryCheckSlotsNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge(compose.START, "ExecuteInventoryFlowNode"); err != nil {
+	if err := g.AddLambdaNode("InventoryMissingSlotsNode", compose.InvokableLambda(buildInventoryMissingOutput),
+		compose.WithNodeName("InventoryMissingSlotsNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge("ExecuteInventoryFlowNode", compose.END); err != nil {
+	if err := g.AddLambdaNode("InventoryModelAgentNode", compose.InvokableLambda(runInventoryModelAgent(agent, skills)),
+		compose.WithNodeName("InventoryModelAgentNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode("InventoryAgentAnswerNode", compose.InvokableLambda(buildInventoryOutputFromAgent),
+		compose.WithNodeName("InventoryAgentAnswerNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode("InventoryRulePlanNode", compose.InvokableLambda(runInventoryRulePlanAndTools(node, toolExecNode)),
+		compose.WithNodeName("InventoryRulePlanNode")); err != nil {
+		return nil, err
+	}
+
+	if err := g.AddEdge(compose.START, "InventoryCheckSlotsNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddBranch("InventoryCheckSlotsNode", compose.NewGraphBranch(
+		branchAfterInventorySlotCheck,
+		map[string]bool{
+			"InventoryMissingSlotsNode": true,
+			"InventoryModelAgentNode":   true,
+		},
+	)); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("InventoryMissingSlotsNode", compose.END); err != nil {
+		return nil, err
+	}
+	if err := g.AddBranch("InventoryModelAgentNode", compose.NewGraphBranch(
+		branchAfterInventoryAgent,
+		map[string]bool{
+			"InventoryAgentAnswerNode": true,
+			"InventoryRulePlanNode":    true,
+		},
+	)); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("InventoryAgentAnswerNode", compose.END); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("InventoryRulePlanNode", compose.END); err != nil {
 		return nil, err
 	}
 	return g, nil
 }
 
 func cloneSlots(input map[string]any) map[string]any {
-	if len(input) == 0 {
-		return nil
-	}
-	result := make(map[string]any, len(input))
-	for key, value := range input {
-		result[key] = value
-	}
-	return result
+	return cloneSlotsInv(input)
 }

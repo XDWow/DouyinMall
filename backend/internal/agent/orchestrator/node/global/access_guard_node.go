@@ -17,6 +17,7 @@ type AccessGuardInput struct {
 	ResumeToken string
 }
 
+// AccessGuardNode 入口：租户、限流、checkpoint 校验。
 type AccessGuardNode struct {
 	DefaultTenantID    string
 	RateLimitPerMinute int64
@@ -43,10 +44,10 @@ type AccessGuardResult struct {
 
 func (n *AccessGuardNode) Invoke(ctx context.Context, input AccessGuardInput) (*AccessGuardResult, error) {
 	if strings.TrimSpace(input.Message) == "" {
-		return nil, fmt.Errorf("消息为空")
+		return nil, fmt.Errorf("empty message")
 	}
 	if input.UserID <= 0 {
-		return nil, fmt.Errorf("用户不存在")
+		return nil, fmt.Errorf("invalid user_id")
 	}
 
 	result := &AccessGuardResult{
@@ -67,14 +68,14 @@ func (n *AccessGuardNode) Invoke(ctx context.Context, input AccessGuardInput) (*
 
 	if strings.TrimSpace(input.ResumeToken) != "" {
 		if n.CheckpointStore == nil {
-			return nil, fmt.Errorf("检查点恢复不可用")
+			return nil, fmt.Errorf("checkpoint store unavailable")
 		}
 		_, ok, err := n.CheckpointStore.Get(ctx, input.ResumeToken)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
-			return nil, fmt.Errorf("检查点不存在")
+			return nil, fmt.Errorf("checkpoint not found")
 		}
 		result.ResumeFromCP = true
 	}

@@ -3,30 +3,19 @@ package fallback
 import (
 	"context"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	fallbacknode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/fallback"
 	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
+	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
-// Input 描述兜底子图的入口。
-type Input struct {
-	TenantID     string
-	UserID       int64
-	SessionID    string
-	TraceID      string
-	CheckpointID string
-	RawQuery     string
-	Intent       string
-	History      []*schema.Message
-	FinalAnswer  string
-}
-
-// Output 描述兜底子图的出口。
 type Output struct {
 	CacheHit    bool
 	HitLevel    string
@@ -36,79 +25,75 @@ type Output struct {
 	Documents   []*schema.Document
 }
 
-// Build 组装兜底子图。
-// 它会优先尝试知识库检索；如果没有形成明确回答，再走兜底文案生成。
 func Build(
 	_ context.Context,
 	ragNode *ragnode.RAGNode,
 	baseQANode *fallbacknode.BaseQANode,
 	l1Cache *globalnode.L1SemanticCacheNode,
+	chatModel model.ToolCallingChatModel,
+	registry *agenttool.Registry,
+	skills *agentskill.Registry,
+	maxAnswerTokens int,
 ) (compose.AnyGraph, error) {
-	g := compose.NewGraph[Input, Output]()
-	if err := g.AddLambdaNode("ExecuteBaseQAFlowNode", compose.InvokableLambda(
-		func(ctx context.Context, input Input) (Output, error) {
-			out := Output{FinalAnswer: input.FinalAnswer}
-			policy := globalnode.ResolveSemanticCachePolicy(orchestratorstate.RouteBaseQA, input.RawQuery)
-			if policy.AllowRead && l1Cache != nil {
-				cacheResult, cacheErr := l1Cache.Invoke(ctx, globalnode.L1SemanticCacheInput{
-					TenantID:     input.TenantID,
-					UserID:       input.UserID,
-					Query:        input.RawQuery,
-					SessionID:    input.SessionID,
-					TraceID:      input.TraceID,
-					CheckpointID: input.CheckpointID,
-					IntentBucket: policy.IntentBucket,
-					Scope:        policy.Scope,
-					AllowRead:    true,
-				})
-				if cacheErr != nil {
-					return Output{}, cacheErr
-				}
-				if cacheResult != nil && cacheResult.CacheHit {
-					return Output{
-						CacheHit:    true,
-						HitLevel:    cacheResult.HitLevel,
-						Response:    cacheResult.Response,
-						FinalAnswer: cacheResult.FinalAnswer,
-					}, nil
-				}
-			}
+	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, maxAnswerTokens)
+	g := compose.NewGraph[struct{}, Output]()
 
-			if ragNode != nil {
-				ragResult, err := ragNode.Invoke(ctx, ragnode.Input{
-					Message: input.RawQuery,
-					History: append([]*schema.Message(nil), input.History...),
-					Intent:  input.Intent,
-				})
-				if err != nil {
-					return Output{}, err
-				}
-				if ragResult != nil {
-					out.Query = ragResult.Query
-					out.Documents = append([]*schema.Document(nil), ragResult.Documents...)
-				}
-			}
-
-			if baseQANode != nil {
-				result, err := baseQANode.Invoke(ctx, fallbacknode.BaseQAInput{
-					FinalAnswer: out.FinalAnswer,
-					Documents:   append([]*schema.Document(nil), out.Documents...),
-				})
-				if err != nil {
-					return Output{}, err
-				}
-				if result != nil {
-					out.FinalAnswer = result.FinalAnswer
-				}
-			}
-			return out, nil
-		}), compose.WithNodeName("ExecuteBaseQAFlowNode")); err != nil {
+	if err := g.AddLambdaNode("FallbackL1TryNode", compose.InvokableLambda(fallbackInit(l1Cache, skills)),
+		compose.WithNodeName("FallbackL1TryNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge(compose.START, "ExecuteBaseQAFlowNode"); err != nil {
+	if err := g.AddLambdaNode("FallbackL1OutputNode", compose.InvokableLambda(buildFallbackL1Output),
+		compose.WithNodeName("FallbackL1OutputNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge("ExecuteBaseQAFlowNode", compose.END); err != nil {
+	if err := g.AddLambdaNode("FallbackRAGNode", compose.InvokableLambda(fallbackRAG(ragNode)),
+		compose.WithNodeName("FallbackRAGNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode("FallbackModelAgentNode", compose.InvokableLambda(fallbackModelAgent(agent)),
+		compose.WithNodeName("FallbackModelAgentNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode("FallbackAgentOutputNode", compose.InvokableLambda(buildFallbackAgentOutput),
+		compose.WithNodeName("FallbackAgentOutputNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode("FallbackBaseQANode", compose.InvokableLambda(fallbackBaseQA(baseQANode)),
+		compose.WithNodeName("FallbackBaseQANode")); err != nil {
+		return nil, err
+	}
+
+	if err := g.AddEdge(compose.START, "FallbackL1TryNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddBranch("FallbackL1TryNode", compose.NewGraphBranch(
+		branchAfterFallbackL1,
+		map[string]bool{
+			"FallbackL1OutputNode": true,
+			"FallbackRAGNode":      true,
+		},
+	)); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("FallbackL1OutputNode", compose.END); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("FallbackRAGNode", "FallbackModelAgentNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddBranch("FallbackModelAgentNode", compose.NewGraphBranch(
+		branchAfterFallbackAgent,
+		map[string]bool{
+			"FallbackAgentOutputNode": true,
+			"FallbackBaseQANode":      true,
+		},
+	)); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("FallbackAgentOutputNode", compose.END); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("FallbackBaseQANode", compose.END); err != nil {
 		return nil, err
 	}
 	return g, nil

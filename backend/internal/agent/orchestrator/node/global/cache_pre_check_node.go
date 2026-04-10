@@ -23,6 +23,7 @@ type CachePreCheckResult struct {
 	Scope         cache.CacheScope
 }
 
+// CachePreCheckNode 是否允许查 L0（精确缓存）。
 type CachePreCheckNode struct{}
 
 func NewCachePreCheckNode() *CachePreCheckNode {

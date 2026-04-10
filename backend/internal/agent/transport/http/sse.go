@@ -1,4 +1,4 @@
-﻿package http
+package http
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
 
 type SSEWriter struct {
@@ -21,7 +21,7 @@ func NewSSEWriter(writer http.ResponseWriter, flusher http.Flusher) *SSEWriter {
 	}
 }
 
-func (w *SSEWriter) Send(ctx context.Context, event orchestratorstate.StreamEvent) error {
+func (w *SSEWriter) Send(ctx context.Context, event domain.StreamEvent) error {
 	payload, err := json.Marshal(event.Data)
 	if err != nil {
 		return err

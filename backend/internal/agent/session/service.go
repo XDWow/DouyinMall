@@ -14,15 +14,17 @@ import (
 )
 
 type cacheSnapshotWriter interface {
-	SaveCacheSnapshot(ctx context.Context, session domain.Session, messages []domain.Message) error
+	SaveCacheSnapshot(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error
 }
 
 type persistentRoundWriter interface {
-	SaveRoundPersistent(ctx context.Context, session domain.Session, userMessage domain.Message, assistantMessage domain.Message) error
+	SaveRoundPersistent(ctx context.Context, session domain.Session, userMessage domain.SessionMessage, assistantMessage domain.SessionMessage) error
 }
 
-// Service is the session application service. It loads conversation context,
-// trims recent history, and persists completed turns.
+// Service 负责会话读写的应用层编排：
+// 1. 读取持久化快照；
+// 2. 根据窗口大小裁剪最近历史；
+// 3. 持久化一轮对话产生的摘要和消息。
 type Service struct {
 	repo     domainrepo.SessionRepository
 	maxTurns int
@@ -32,43 +34,47 @@ func NewService(repo domainrepo.SessionRepository, maxTurns int) *Service {
 	return &Service{repo: repo, maxTurns: maxTurns}
 }
 
-func (s *Service) LoadSession(ctx context.Context, sessionID string) (*domain.Session, []domain.Message, error) {
+// LoadSnapshot 读取会话的持久化快照。
+// 返回值会复制引用类型字段，避免调用方无意间改脏仓储层拿到的数据。
+func (s *Service) LoadSnapshot(ctx context.Context, sessionID string) (*Snapshot, error) {
 	if s == nil || s.repo == nil {
-		return nil, nil, nil
+		return nil, nil
 	}
 	if strings.TrimSpace(sessionID) == "" {
-		return nil, nil, fmt.Errorf("session_id is required")
+		return nil, fmt.Errorf("session_id is required")
 	}
 
-	meta, messages, err := s.repo.Load(ctx, sessionID)
+	persistedSession, messages, err := s.repo.Load(ctx, sessionID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	if meta == nil {
-		return nil, nil, nil
+	if persistedSession == nil {
+		return nil, nil
 	}
 
-	meta.RecentMessages = MessagesToSchema(WindowMessages(messages, s.maxTurns))
-	return meta, messages, nil
+	return &Snapshot{
+		PersistedSession: cloneSession(*persistedSession),
+		Messages:         cloneSessionMessages(messages),
+	}, nil
 }
 
 func (s *Service) CreateSession(ctx context.Context, session domain.Session) error {
 	if s == nil || s.repo == nil {
 		return nil
 	}
-	session.RecentMessages = nil
 	return s.repo.Create(ctx, session)
 }
 
-func (s *Service) RecentSchemaMessages(messages []domain.Message) []*schema.Message {
+// BuildRecentHistory 把完整持久化历史裁剪成模型需要的最近窗口。
+func (s *Service) BuildRecentHistory(messages []domain.SessionMessage) []*schema.Message {
 	return MessagesToSchema(WindowMessages(messages, s.maxTurns))
 }
 
 func (s *Service) SaveTurn(
 	ctx context.Context,
 	session domain.Session,
-	userMsg domain.Message,
-	assistantMsg domain.Message,
+	userMsg domain.SessionMessage,
+	assistantMsg domain.SessionMessage,
 ) error {
 	if s == nil || s.repo == nil {
 		return nil
@@ -76,7 +82,7 @@ func (s *Service) SaveTurn(
 	return s.repo.SaveRound(ctx, session, userMsg, assistantMsg)
 }
 
-func (s *Service) SaveTurnCache(ctx context.Context, session domain.Session, messages []domain.Message) error {
+func (s *Service) SaveTurnCache(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error {
 	if s == nil || s.repo == nil {
 		return nil
 	}
@@ -90,8 +96,8 @@ func (s *Service) SaveTurnCache(ctx context.Context, session domain.Session, mes
 func (s *Service) SaveTurnPersistent(
 	ctx context.Context,
 	session domain.Session,
-	userMsg domain.Message,
-	assistantMsg domain.Message,
+	userMsg domain.SessionMessage,
+	assistantMsg domain.SessionMessage,
 ) error {
 	if s == nil || s.repo == nil {
 		return nil
@@ -102,7 +108,7 @@ func (s *Service) SaveTurnPersistent(
 	return s.repo.SaveRound(ctx, session, userMsg, assistantMsg)
 }
 
-func (s *Service) AllMessages(ctx context.Context, sessionID string) ([]domain.Message, error) {
+func (s *Service) AllMessages(ctx context.Context, sessionID string) ([]domain.SessionMessage, error) {
 	if s == nil || s.repo == nil {
 		return nil, nil
 	}
@@ -129,8 +135,8 @@ func (s *Service) Clear(ctx context.Context, sessionID string) error {
 	return s.repo.Clear(ctx, sessionID)
 }
 
-func NewUserMessage(sessionID, content string) domain.Message {
-	return domain.Message{
+func NewUserMessage(sessionID, content string) domain.SessionMessage {
+	return domain.SessionMessage{
 		ID:        uuid.NewString(),
 		SessionID: sessionID,
 		Role:      domain.RoleUser,
@@ -139,8 +145,8 @@ func NewUserMessage(sessionID, content string) domain.Message {
 	}
 }
 
-func NewAssistantMessage(sessionID, content string, intent domain.Intent, confidence float64) domain.Message {
-	return domain.Message{
+func NewAssistantMessage(sessionID, content string, intent domain.Intent, confidence float64) domain.SessionMessage {
+	return domain.SessionMessage{
 		ID:         uuid.NewString(),
 		SessionID:  sessionID,
 		Role:       domain.RoleAssistant,
@@ -159,18 +165,21 @@ func Truncate(value string, limit int) string {
 	return string(runes[:limit]) + "..."
 }
 
-func WindowMessages(messages []domain.Message, maxTurns int) []domain.Message {
+// WindowMessages 按“轮次”裁剪历史。
+// 一轮默认按用户消息 + 助手消息两条估算。
+func WindowMessages(messages []domain.SessionMessage, maxTurns int) []domain.SessionMessage {
 	if maxTurns <= 0 || len(messages) == 0 {
 		return messages
 	}
 	limit := maxTurns * 2
 	if len(messages) > limit {
-		return append([]domain.Message(nil), messages[len(messages)-limit:]...)
+		return append([]domain.SessionMessage(nil), messages[len(messages)-limit:]...)
 	}
-	return append([]domain.Message(nil), messages...)
+	return append([]domain.SessionMessage(nil), messages...)
 }
 
-func MessagesToSchema(messages []domain.Message) []*schema.Message {
+// MessagesToSchema 把业务消息转换成模型消息。
+func MessagesToSchema(messages []domain.SessionMessage) []*schema.Message {
 	if len(messages) == 0 {
 		return nil
 	}
@@ -181,7 +190,7 @@ func MessagesToSchema(messages []domain.Message) []*schema.Message {
 	return out
 }
 
-func ToSchemaMessage(msg domain.Message) *schema.Message {
+func ToSchemaMessage(msg domain.SessionMessage) *schema.Message {
 	switch msg.Role {
 	case domain.RoleAssistant:
 		return schema.AssistantMessage(msg.Content, nil)
@@ -207,17 +216,18 @@ func ToSchemaRole(role domain.Role) schema.RoleType {
 	}
 }
 
-func FromSchemaMessages(sessionID string, messages []*schema.Message) []domain.Message {
+// FromSchemaMessages 把运行时的模型消息转换成可持久化的业务消息。
+func FromSchemaMessages(sessionID string, messages []*schema.Message) []domain.SessionMessage {
 	if len(messages) == 0 {
 		return nil
 	}
 	now := time.Now()
-	out := make([]domain.Message, 0, len(messages))
+	out := make([]domain.SessionMessage, 0, len(messages))
 	for _, msg := range messages {
 		if msg == nil || strings.TrimSpace(msg.Content) == "" {
 			continue
 		}
-		out = append(out, domain.Message{
+		out = append(out, domain.SessionMessage{
 			ID:        uuid.NewString(),
 			SessionID: sessionID,
 			Role:      FromSchemaRole(msg.Role),
@@ -239,4 +249,28 @@ func FromSchemaRole(role schema.RoleType) domain.Role {
 	default:
 		return domain.RoleUser
 	}
+}
+
+func cloneSession(session domain.Session) domain.Session {
+	cloned := session
+	cloned.Slots = cloneSlots(session.Slots)
+	return cloned
+}
+
+func cloneSessionMessages(messages []domain.SessionMessage) []domain.SessionMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	return append([]domain.SessionMessage(nil), messages...)
+}
+
+func cloneSlots(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(input))
+	for key, value := range input {
+		cloned[key] = value
+	}
+	return cloned
 }

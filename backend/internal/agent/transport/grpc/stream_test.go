@@ -1,4 +1,4 @@
-﻿package grpc
+package grpc
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agentv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/agent/v1"
 	"github.com/cloudwego/kitex/pkg/remote/trans/nphttp2/metadata"
 )
@@ -37,7 +37,7 @@ func TestStreamWriterSend(t *testing.T) {
 	stream := &stubStreamServer{}
 	writer := NewStreamWriter(stream)
 
-	err := writer.Send(context.Background(), orchestratorstate.StreamEvent{
+	err := writer.Send(context.Background(), domain.StreamEvent{
 		Event: "node",
 		Data: map[string]any{
 			"node":   "FinalizeNode",
@@ -46,7 +46,7 @@ func TestStreamWriterSend(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	err = writer.Send(context.Background(), orchestratorstate.StreamEvent{
+	err = writer.Send(context.Background(), domain.StreamEvent{
 		Event: "token",
 		Data:  map[string]any{"text": "hello"},
 	})

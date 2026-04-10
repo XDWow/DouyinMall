@@ -1,25 +1,24 @@
-﻿package usecase
+package usecase
 
 import (
 	"context"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 type runtime interface {
 	Chat(ctx context.Context, command domain.ChatCommand) (*domain.ChatResult, error)
-	ChatStream(ctx context.Context, command domain.ChatCommand, writer graphstate.StreamWriter) (*domain.ChatResult, error)
+	ChatStream(ctx context.Context, command domain.ChatCommand, writer domain.StreamWriter) (*domain.ChatResult, error)
 	CreateSession(ctx context.Context, userID int64) (*domain.Session, error)
-	GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]domain.Message, int, error)
+	GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]domain.SessionMessage, int, error)
 	ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error)
 	ClearSession(ctx context.Context, sessionID string) error
 }
 
 type Service interface {
 	Chat(ctx context.Context, input ChatInput) (*ChatOutput, error)
-	ChatStream(ctx context.Context, input ChatInput, writer graphstate.StreamWriter) (*ChatOutput, error)
+	ChatStream(ctx context.Context, input ChatInput, writer domain.StreamWriter) (*ChatOutput, error)
 	CreateSession(ctx context.Context, input CreateSessionInput) (*SessionOutput, error)
 	GetHistory(ctx context.Context, input HistoryInput) (*HistoryOutput, error)
 	ListSessions(ctx context.Context, input ListSessionsInput) (*SessionListOutput, error)
@@ -42,7 +41,7 @@ func (f *Facade) Chat(ctx context.Context, input ChatInput) (*ChatOutput, error)
 	return f.chat.Execute(ctx, input)
 }
 
-func (f *Facade) ChatStream(ctx context.Context, input ChatInput, writer graphstate.StreamWriter) (*ChatOutput, error) {
+func (f *Facade) ChatStream(ctx context.Context, input ChatInput, writer domain.StreamWriter) (*ChatOutput, error) {
 	return f.chat.Stream(ctx, input, writer)
 }
 
@@ -71,15 +70,16 @@ type ChatInput struct {
 }
 
 type ChatOutput struct {
-	SessionID      string
-	TraceID        string
-	Status         domain.ReplyStatus
-	Reply          string
-	Intent         domain.Intent
-	Confidence     float64
-	NeedHandoff    bool
-	HandoffReason  string
-	References     []KnowledgeRef
+	SessionID     string
+	TraceID       string
+	Status        domain.ReplyStatus
+	Reply         string
+	Intent        domain.Intent
+	Confidence    float64
+	NeedHandoff   bool
+	HandoffReason string
+	References    []KnowledgeRef
+	UsedToolNames  []string
 	ToolExecutions []ToolExecution
 	Trace          Trace
 	Interrupt      *InterruptInfo
@@ -157,11 +157,13 @@ type ToolExecution struct {
 }
 
 type Trace struct {
-	TraceID        string
-	CheckpointID   string
-	CacheHit       bool
-	RewrittenQuery string
-	Steps          []TraceStep
+	TraceID              string
+	CheckpointID         string
+	CacheHit             bool
+	RewrittenQuery       string
+	Steps                []TraceStep
+	SlowestStepNode      string
+	SlowestStepLatencyMs int64
 }
 
 type TraceStep struct {
@@ -176,5 +178,4 @@ type InterruptInfo struct {
 	RerunNodes   []string
 }
 
-type StreamEvent = graphstate.StreamEvent
-
+type StreamEvent = domain.StreamEvent

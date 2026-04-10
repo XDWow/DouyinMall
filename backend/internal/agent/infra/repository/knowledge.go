@@ -6,15 +6,17 @@ import (
 	"sort"
 	"strings"
 
+	agentdb "github.com/XDWow/DouyinMall/backend/internal/agent/infra/db"
 	rag "github.com/XDWow/DouyinMall/backend/internal/agent/infra/rag"
+	"gorm.io/gorm"
 )
 
 type KnowledgeStore struct {
-	dao *DAO
+	db *gorm.DB
 }
 
-func NewKnowledgeStore(dao *DAO) rag.Store {
-	return &KnowledgeStore{dao: dao}
+func NewKnowledgeStore(db *gorm.DB) rag.Store {
+	return &KnowledgeStore{db: db}
 }
 
 func (s *KnowledgeStore) TopKByVector(ctx context.Context, vector []float64, limit int) ([]rag.Chunk, error) {
@@ -22,8 +24,8 @@ func (s *KnowledgeStore) TopKByVector(ctx context.Context, vector []float64, lim
 		limit = 5
 	}
 
-	var rows []KnowledgeChunkDO
-	if err := s.dao.db.WithContext(ctx).
+	var rows []agentdb.KnowledgeChunk
+	if err := s.db.WithContext(ctx).
 		Where("enabled = ?", true).
 		Find(&rows).Error; err != nil {
 		return nil, err
@@ -74,7 +76,7 @@ func (s *KnowledgeStore) UpsertChunks(ctx context.Context, chunks []rag.Chunk) e
 		return nil
 	}
 
-	rows := make([]KnowledgeChunkDO, 0, len(chunks))
+	rows := make([]agentdb.KnowledgeChunk, 0, len(chunks))
 	for _, chunk := range chunks {
 		embeddingRaw, err := json.Marshal(chunk.Embedding)
 		if err != nil {
@@ -84,7 +86,7 @@ func (s *KnowledgeStore) UpsertChunks(ctx context.Context, chunks []rag.Chunk) e
 		if err != nil {
 			return err
 		}
-		rows = append(rows, KnowledgeChunkDO{
+		rows = append(rows, agentdb.KnowledgeChunk{
 			ID:          chunk.ID,
 			KnowledgeID: chunk.KnowledgeID,
 			Title:       chunk.Title,
@@ -97,7 +99,7 @@ func (s *KnowledgeStore) UpsertChunks(ctx context.Context, chunks []rag.Chunk) e
 		})
 	}
 
-	return s.dao.db.WithContext(ctx).
+	return s.db.WithContext(ctx).
 		Save(&rows).Error
 }
 

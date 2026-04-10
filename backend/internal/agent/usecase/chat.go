@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 type ChatUseCase struct {
@@ -29,7 +28,7 @@ func (uc *ChatUseCase) Execute(ctx context.Context, input ChatInput) (*ChatOutpu
 	return toChatOutput(resp), nil
 }
 
-func (uc *ChatUseCase) Stream(ctx context.Context, input ChatInput, writer graphstate.StreamWriter) (*ChatOutput, error) {
+func (uc *ChatUseCase) Stream(ctx context.Context, input ChatInput, writer domain.StreamWriter) (*ChatOutput, error) {
 	command, err := validateChatInput(input)
 	if err != nil {
 		return nil, err
@@ -107,13 +106,16 @@ func toChatOutput(resp *domain.ChatResult) *ChatOutput {
 		NeedHandoff:    resp.NeedHandoff,
 		HandoffReason:  resp.HandoffReason,
 		References:     references,
+		UsedToolNames:  append([]string(nil), resp.UsedToolNames...),
 		ToolExecutions: toolExecutions,
 		Trace: Trace{
-			TraceID:        resp.Trace.TraceID,
-			CheckpointID:   resp.Trace.CheckpointID,
-			CacheHit:       resp.Trace.CacheHit,
-			RewrittenQuery: resp.Trace.RewrittenQuery,
-			Steps:          traceSteps,
+			TraceID:              resp.Trace.TraceID,
+			CheckpointID:         resp.Trace.CheckpointID,
+			CacheHit:             resp.Trace.CacheHit,
+			RewrittenQuery:       resp.Trace.RewrittenQuery,
+			Steps:                traceSteps,
+			SlowestStepNode:      resp.Trace.SlowestStepNode,
+			SlowestStepLatencyMs: resp.Trace.SlowestStepLatencyMs,
 		},
 	}
 	if resp.Interrupt != nil {
@@ -146,4 +148,3 @@ func copyAnyMap(in map[string]any) map[string]any {
 	}
 	return out
 }
-

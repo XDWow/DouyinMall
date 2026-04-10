@@ -3,25 +3,17 @@ package returnpolicy
 import (
 	"context"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
+	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
-
-type Input struct {
-	TenantID     string
-	UserID       int64
-	SessionID    string
-	TraceID      string
-	CheckpointID string
-	RawQuery     string
-	History      []*schema.Message
-	Intent       string
-}
 
 type Output struct {
 	CacheHit    bool
@@ -32,65 +24,65 @@ type Output struct {
 	Documents   []*schema.Document
 }
 
-func Build(_ context.Context, ragNode *ragnode.RAGNode, l1Cache *globalnode.L1SemanticCacheNode) (compose.AnyGraph, error) {
+func Build(
+	_ context.Context,
+	ragNode *ragnode.RAGNode,
+	l1Cache *globalnode.L1SemanticCacheNode,
+	chatModel model.ToolCallingChatModel,
+	registry *agenttool.Registry,
+	skills *agentskill.Registry,
+	maxAnswerTokens int,
+) (compose.AnyGraph, error) {
 	if ragNode == nil && l1Cache == nil {
 		return nil, nil
 	}
 
-	g := compose.NewGraph[Input, Output]()
-	if err := g.AddLambdaNode("ExecuteReturnPolicyFlowNode", compose.InvokableLambda(
-		func(ctx context.Context, input Input) (Output, error) {
-			policy := globalnode.ResolveSemanticCachePolicy(orchestratorstate.RouteReturnPolicy, input.RawQuery)
-			if policy.AllowRead && l1Cache != nil {
-				cacheResult, cacheErr := l1Cache.Invoke(ctx, globalnode.L1SemanticCacheInput{
-					TenantID:     input.TenantID,
-					UserID:       input.UserID,
-					Query:        input.RawQuery,
-					SessionID:    input.SessionID,
-					TraceID:      input.TraceID,
-					CheckpointID: input.CheckpointID,
-					IntentBucket: policy.IntentBucket,
-					Scope:        policy.Scope,
-					AllowRead:    true,
-				})
-				if cacheErr != nil {
-					return Output{}, cacheErr
-				}
-				if cacheResult != nil && cacheResult.CacheHit {
-					return Output{
-						CacheHit:    true,
-						HitLevel:    cacheResult.HitLevel,
-						Response:    cacheResult.Response,
-						FinalAnswer: cacheResult.FinalAnswer,
-					}, nil
-				}
-			}
+	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, maxAnswerTokens)
+	g := compose.NewGraph[struct{}, Output]()
 
-			out := Output{}
-			if ragNode == nil {
-				return out, nil
-			}
-
-			ragResult, ragErr := ragNode.Invoke(ctx, ragnode.Input{
-				Message: input.RawQuery,
-				History: append([]*schema.Message(nil), input.History...),
-				Intent:  input.Intent,
-			})
-			if ragErr != nil {
-				return Output{}, ragErr
-			}
-			if ragResult != nil {
-				out.Query = ragResult.Query
-				out.Documents = append([]*schema.Document(nil), ragResult.Documents...)
-			}
-			return out, nil
-		}), compose.WithNodeName("ExecuteReturnPolicyFlowNode")); err != nil {
+	if err := g.AddLambdaNode("ReturnPolicyL1TryNode", compose.InvokableLambda(returnPolicyL1Try(l1Cache, skills)),
+		compose.WithNodeName("ReturnPolicyL1TryNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge(compose.START, "ExecuteReturnPolicyFlowNode"); err != nil {
+	if err := g.AddLambdaNode("ReturnPolicyL1OutputNode", compose.InvokableLambda(buildReturnPolicyL1Output),
+		compose.WithNodeName("ReturnPolicyL1OutputNode")); err != nil {
 		return nil, err
 	}
-	if err := g.AddEdge("ExecuteReturnPolicyFlowNode", compose.END); err != nil {
+	if err := g.AddLambdaNode("ReturnPolicyRAGNode", compose.InvokableLambda(returnPolicyRAG(ragNode)),
+		compose.WithNodeName("ReturnPolicyRAGNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode("ReturnPolicyModelAgentNode", compose.InvokableLambda(returnPolicyModelAgent(agent)),
+		compose.WithNodeName("ReturnPolicyModelAgentNode")); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode("ReturnPolicyBuildOutputNode", compose.InvokableLambda(buildReturnPolicyFinalOutput),
+		compose.WithNodeName("ReturnPolicyBuildOutputNode")); err != nil {
+		return nil, err
+	}
+
+	if err := g.AddEdge(compose.START, "ReturnPolicyL1TryNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddBranch("ReturnPolicyL1TryNode", compose.NewGraphBranch(
+		branchAfterReturnPolicyL1,
+		map[string]bool{
+			"ReturnPolicyL1OutputNode": true,
+			"ReturnPolicyRAGNode":      true,
+		},
+	)); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("ReturnPolicyL1OutputNode", compose.END); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("ReturnPolicyRAGNode", "ReturnPolicyModelAgentNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("ReturnPolicyModelAgentNode", "ReturnPolicyBuildOutputNode"); err != nil {
+		return nil, err
+	}
+	if err := g.AddEdge("ReturnPolicyBuildOutputNode", compose.END); err != nil {
 		return nil, err
 	}
 	return g, nil

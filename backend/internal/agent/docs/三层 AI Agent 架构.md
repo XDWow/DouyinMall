@@ -1,3 +1,8 @@
+> **说明**：下文是「分层职责」的**抽象备忘**（HTTP / infra AI / usecase 等），便于和别的服务对齐概念。  
+> **本仓库 AI 客服编排**以 **`internal/agent/orchestrator`（Eino 主图 + 子图）** 为准，面试/串讲请优先看 [面试-AI客服工作流.md](./面试-AI客服工作流.md)。
+
+---
+
 职责清晰：
 pkg/ai：HTTP 调用，返回原始响应
 infra/ai：熔断、限流、降级、参数累积、统一配置模型参数

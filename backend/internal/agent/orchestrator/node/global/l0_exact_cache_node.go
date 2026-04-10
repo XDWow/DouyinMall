@@ -5,7 +5,6 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 type L0ExactCacheInput struct {
@@ -19,12 +18,9 @@ type L0ExactCacheInput struct {
 }
 
 type L0ExactCacheResult struct {
-	CacheHit    bool
-	HitLevel    string
-	Response    *domain.ChatResult
-	FinalAnswer string
-	Intent      domain.Intent
-	Route       graphstate.WorkflowRoute
+	CacheHit bool
+	HitLevel string
+	Response *domain.ChatResult
 }
 
 type L0ExactCacheNode struct {
@@ -55,11 +51,8 @@ func newExactCacheResult(input L0ExactCacheInput, resp domain.ChatResult) *L0Exa
 	resp.SessionID = input.SessionID
 
 	return &L0ExactCacheResult{
-		CacheHit:    true,
-		HitLevel:    cacheHitExact,
-		Response:    &resp,
-		FinalAnswer: resp.Reply,
-		Intent:      resp.Intent,
-		Route:       routeFromIntent(resp.Intent),
+		CacheHit: true,
+		HitLevel: cacheHitExact,
+		Response: &resp,
 	}
 }

@@ -12,16 +12,16 @@ import (
 
 func TestToProtoChatResponse(t *testing.T) {
 	resp := toProtoChatResponse(&agentusecase.ChatOutput{
-		Reply:          "Order found successfully",
-		Intent:         domain.IntentOrderQuery,
-		NeedHandoff:    true,
-		HandoffReason:  "low_confidence",
-		References:     []agentusecase.KnowledgeRef{{ID: "k1", Title: "Order status", Snippet: "Order is being processed", Category: "faq", Score: 0.91}},
-		ToolExecutions: []agentusecase.ToolExecution{{Name: "query_order", Arguments: map[string]any{"order_id": 123}, Success: true, Result: "ok", LatencyMs: 33}},
-		Trace:          agentusecase.Trace{TraceID: "trace_nested", CheckpointID: "cp_123", RewrittenQuery: "query order 123"},
-		TraceID:        "trace_top",
-		SessionID:      "sess_1",
-		Interrupt:      &agentusecase.InterruptInfo{CheckpointID: "cp_interrupt", RerunNodes: []string{"InterruptNode"}},
+		Reply:         "Order found successfully",
+		Intent:        domain.IntentOrderQuery,
+		NeedHandoff:   true,
+		HandoffReason: "low_confidence",
+		References:    []agentusecase.KnowledgeRef{{ID: "k1", Title: "Order status", Snippet: "Order is being processed", Category: "faq", Score: 0.91}},
+		UsedToolNames: []string{"query_order"},
+		Trace:         agentusecase.Trace{TraceID: "trace_nested", CheckpointID: "cp_123", RewrittenQuery: "query order 123"},
+		TraceID:       "trace_top",
+		SessionID:     "sess_1",
+		Interrupt:     &agentusecase.InterruptInfo{CheckpointID: "cp_interrupt", RerunNodes: []string{"InterruptNode"}},
 	}, "check order 123")
 
 	require.Equal(t, "Order found successfully", resp.GetReply())

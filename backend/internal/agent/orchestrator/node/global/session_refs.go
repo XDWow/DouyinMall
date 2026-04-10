@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
@@ -13,10 +13,10 @@ const (
 	pendingSelectionsKey  = "_pending_selections"
 )
 
-func splitPersistedSessionState(persisted map[string]any) (map[string]any, graphstate.CurrentRefs, map[string]graphstate.PendingSelection) {
+func splitPersistedSessionState(persisted map[string]any) (map[string]any, domain.CurrentRefs, map[string]domain.PendingSelection) {
 	slots := cloneAnyMap(persisted)
-	currentRefs := graphstate.CurrentRefs{}
-	pendingSelections := map[string]graphstate.PendingSelection{}
+	currentRefs := domain.CurrentRefs{}
+	pendingSelections := map[string]domain.PendingSelection{}
 	if len(slots) == 0 {
 		return nil, currentRefs, pendingSelections
 	}
@@ -36,7 +36,7 @@ func splitPersistedSessionState(persisted map[string]any) (map[string]any, graph
 	return slots, currentRefs, pendingSelections
 }
 
-func mergePersistedSessionState(slots map[string]any, currentRefs graphstate.CurrentRefs, pendingSelections map[string]graphstate.PendingSelection) map[string]any {
+func mergePersistedSessionState(slots map[string]any, currentRefs domain.CurrentRefs, pendingSelections map[string]domain.PendingSelection) map[string]any {
 	merged := cloneAnyMap(slots)
 	if merged == nil {
 		merged = map[string]any{}
@@ -71,7 +71,7 @@ func mergePersistedSessionState(slots map[string]any, currentRefs graphstate.Cur
 	return merged
 }
 
-func applyTrustedRefsToSlots(slots map[string]any, currentRefs graphstate.CurrentRefs) {
+func applyTrustedRefsToSlots(slots map[string]any, currentRefs domain.CurrentRefs) {
 	if slots == nil {
 		return
 	}
@@ -87,43 +87,34 @@ func applyTrustedRefsToSlots(slots map[string]any, currentRefs graphstate.Curren
 	}
 }
 
-func refsFromMetadata(metadata map[string]string, currentRefs graphstate.CurrentRefs) graphstate.CurrentRefs {
-	if id := normalizeTrustedID(metadata["product_id"]); id != "" {
-		currentRefs.ProductID = id
+// promoteTrustedRefsIntoSlots 有 ref 则写入 product_id/order_id，不删已有键。
+func promoteTrustedRefsIntoSlots(slots map[string]any, currentRefs domain.CurrentRefs) {
+	if slots == nil {
+		return
 	}
-	if id := normalizeTrustedID(metadata["productID"]); id != "" {
-		currentRefs.ProductID = id
+	if strings.TrimSpace(currentRefs.ProductID) != "" {
+		slots["product_id"] = currentRefs.ProductID
 	}
-	if id := normalizeTrustedID(metadata["sku_id"]); id != "" && currentRefs.ProductID == "" {
-		currentRefs.ProductID = id
+	if strings.TrimSpace(currentRefs.OrderID) != "" {
+		slots["order_id"] = currentRefs.OrderID
 	}
-	if id := normalizeTrustedID(metadata["skuID"]); id != "" && currentRefs.ProductID == "" {
-		currentRefs.ProductID = id
-	}
-	if id := normalizeTrustedID(metadata["order_id"]); id != "" {
-		currentRefs.OrderID = id
-	}
-	if id := normalizeTrustedID(metadata["orderID"]); id != "" {
-		currentRefs.OrderID = id
-	}
-	return currentRefs
 }
 
-func parseCurrentRefs(raw map[string]any) graphstate.CurrentRefs {
-	return graphstate.CurrentRefs{
+func parseCurrentRefs(raw map[string]any) domain.CurrentRefs {
+	return domain.CurrentRefs{
 		ProductID: normalizeTrustedID(fmt.Sprint(raw["product_id"])),
 		OrderID:   normalizeTrustedID(fmt.Sprint(raw["order_id"])),
 	}
 }
 
-func parsePendingSelections(raw map[string]any) map[string]graphstate.PendingSelection {
-	result := make(map[string]graphstate.PendingSelection, len(raw))
+func parsePendingSelections(raw map[string]any) map[string]domain.PendingSelection {
+	result := make(map[string]domain.PendingSelection, len(raw))
 	for key, value := range raw {
 		entry, ok := value.(map[string]any)
 		if !ok {
 			continue
 		}
-		selection := graphstate.PendingSelection{
+		selection := domain.PendingSelection{
 			Kind: strings.TrimSpace(fmt.Sprint(entry["kind"])),
 		}
 		if options, ok := entry["options"].(map[string]any); ok {
@@ -140,13 +131,13 @@ func parsePendingSelections(raw map[string]any) map[string]graphstate.PendingSel
 	return result
 }
 
-func clonePendingSelections(input map[string]graphstate.PendingSelection) map[string]graphstate.PendingSelection {
+func clonePendingSelections(input map[string]domain.PendingSelection) map[string]domain.PendingSelection {
 	if len(input) == 0 {
 		return nil
 	}
-	out := make(map[string]graphstate.PendingSelection, len(input))
+	out := make(map[string]domain.PendingSelection, len(input))
 	for key, selection := range input {
-		cloned := graphstate.PendingSelection{
+		cloned := domain.PendingSelection{
 			Kind: selection.Kind,
 		}
 		if len(selection.Options) > 0 {

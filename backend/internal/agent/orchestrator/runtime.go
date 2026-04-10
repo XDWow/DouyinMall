@@ -23,11 +23,10 @@ import (
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	orchestratorragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
-	orchestratorstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// NewRuntime 根据配置和依赖组装完整的编排运行时。
+// NewRuntime 编译主图 Runnable；每轮新 State + Recorder。
 func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, error) {
 	cfg = applyConfigDefaults(cfg)
 
@@ -72,32 +71,26 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 	runner, err := (&orchestratorgraph.Builder{
 		Config: orchestratorgraph.Config{
 			InterruptBeforeNodes: cfg.InterruptBeforeNodes,
-			InterruptAfterNodes:  cfg.InterruptAfterNodes,
 		},
 		CheckpointStore:   deps.CheckpointStore,
 		Registry:          deps.Registry,
+		ChatModel:         deps.Model,
+		Skills:            deps.Skills,
+		MaxAnswerTokens:   cfg.MaxAnswerTokens,
 		AccessGuard:       globalnode.NewAccessGuardNode(cfg.DefaultTenantID, cfg.RateLimitPerMinute, deps.RateLimiter, deps.CheckpointStore),
 		SessionLoad:       globalnode.NewSessionLoadNode(deps.SessionService),
 		CachePreCheck:     globalnode.NewCachePreCheckNode(),
 		L0ExactCache:      globalnode.NewL0ExactCacheNode(deps.ExactCache),
 		L1SemanticCache:   globalnode.NewL1SemanticCacheNode(deps.SemanticCache, deps.Embedder, cfg.SemanticCacheScore, cfg.SemanticCacheTopK),
-		QueryRewrite:      globalnode.NewQueryRewriteNode(deps.Model, prompts),
-		IntentClassify:    globalnode.NewIntentClassifyNode(deps.Model, prompts),
-		GlobalSlotExtract: globalnode.NewGlobalSlotExtractNode(),
-		GlobalSlotCheck:   globalnode.NewGlobalSlotCheckNode(),
-		AskUser:           globalnode.NewAskUserNode(),
+		IntentAndSlot:     globalnode.NewIntentAndSlotNode(deps.Model, prompts),
+		SlotMerge: globalnode.NewSlotMergeNode(),
+		AskUser:   globalnode.NewAskUserNode(),
 		Route:             globalnode.NewRouteNode(),
-		SkillSelect:       globalnode.NewSkillSelectNode(deps.Skills),
 		Finalize: globalnode.NewFinalizeNode(
-			deps.Model,
-			prompts,
-			deps.Skills,
-			deps.Registry,
 			deps.SessionService,
 			globalnode.NewCacheWritebackService(deps.ExactCache, deps.SemanticCache, deps.Embedder, cfg.ExactCacheTTL, cfg.SemanticCacheTTL, log),
 			log,
 			metrics,
-			cfg.MaxAnswerTokens,
 		),
 		OrderRead:           ordernode.NewOrderReadNode(toolCheck),
 		InventoryRead:       inventorynode.NewInventoryReadNode(toolCheck),
@@ -145,7 +138,7 @@ func (s *Runtime) CreateSession(ctx context.Context, userID int64) (*domain.Sess
 	return &session, nil
 }
 
-func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]domain.Message, int, error) {
+func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]domain.SessionMessage, int, error) {
 	if s.sessionService == nil {
 		return nil, 0, nil
 	}
@@ -164,13 +157,13 @@ func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offse
 		offset = 0
 	}
 	if offset >= total {
-		return []domain.Message{}, total, nil
+		return []domain.SessionMessage{}, total, nil
 	}
 	end := offset + limit
 	if end > total {
 		end = total
 	}
-	return append([]domain.Message(nil), messages[offset:end]...), total, nil
+	return append([]domain.SessionMessage(nil), messages[offset:end]...), total, nil
 }
 
 func (s *Runtime) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
@@ -189,31 +182,28 @@ func (s *Runtime) ClearSession(ctx context.Context, sessionID string) error {
 
 func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer StreamWriter) (*domain.ChatResult, error) {
 	start := time.Now()
-	state := orchestratorstate.NewState(req, writer, orchestratorstate.InitOptions{
-		KBVersion:    cfgValue(s.cfg.KBVersion, DefaultConfig().KBVersion),
-		FeatureFlags: s.cfg.FeatureFlags,
-	})
+	state := domain.NewState(req, writer, agenttool.NewSafeExecutionRecorder())
 
 	checkpointID := req.ResumeToken
 	if checkpointID == "" {
 		checkpointID = state.TraceID
 	}
 	state.Checkpoint = checkpointID
-	if strings.TrimSpace(state.Request.SessionID) == "" {
-		state.Request.SessionID = "sess_" + state.TraceID
+	if strings.TrimSpace(state.Session.SessionID) == "" {
+		state.Session.SessionID = "sess_" + state.TraceID
 	}
 
 	ctx = agenttool.WithExecutionRecorder(ctx, state.Recorder)
 	ctx = agenttool.WithRuntime(ctx, agenttool.Runtime{
-		UserID:    state.Request.UserID,
-		SessionID: state.Request.SessionID,
+		UserID:    state.Input.UserID,
+		SessionID: state.Session.SessionID,
 		TraceID:   state.TraceID,
 	})
 
 	orchestratorobserve.SendEvent(ctx, writer, "start", map[string]any{
 		"trace_id":      state.TraceID,
 		"checkpoint_id": checkpointID,
-		"session_id":    state.Request.SessionID,
+		"session_id":    state.Session.SessionID,
 	})
 
 	invokeOpts := make([]compose.Option, 0, 2)
@@ -243,8 +233,9 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 			resp.Interrupt.RerunNodes = append(resp.Interrupt.RerunNodes, info.RerunNodes...)
 		}
 		if strings.TrimSpace(resp.Reply) == "" {
-			resp.Reply = "\u8bf7\u5148\u8865\u5145\u6240\u9700\u4fe1\u606f\uff0c\u6211\u518d\u7ee7\u7eed\u4e3a\u4f60\u5904\u7406\u3002"
+			resp.Reply = "请补充缺失信息。"
 		}
+		s.recordRequestLatencyInsight(resp, time.Since(start))
 		s.metrics.ObserveRequest(string(resp.Status), time.Since(start))
 		orchestratorobserve.SendEvent(ctx, writer, "done", resp)
 		return resp, nil
@@ -256,9 +247,29 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 		return nil, err
 	}
 
+	s.recordRequestLatencyInsight(resp, time.Since(start))
 	s.metrics.ObserveRequest(string(resp.Status), time.Since(start))
 	orchestratorobserve.SendEvent(ctx, writer, "done", resp)
 	return resp, nil
+}
+
+// recordRequestLatencyInsight 汇总本轮最慢节点（便于日志/Prometheus 回答「一次请求最长耗时在哪」）。
+func (s *Runtime) recordRequestLatencyInsight(resp *domain.ChatResult, wall time.Duration) {
+	if resp == nil {
+		return
+	}
+	orchestratorobserve.EnrichTraceSlowest(resp)
+	s.metrics.ObserveRequestBottleneck(resp.Trace.SlowestStepNode, resp.Trace.SlowestStepLatencyMs)
+	if resp.Trace.SlowestStepNode == "" {
+		return
+	}
+	s.logger.Debug("chat_latency_breakdown",
+		logger.String("trace_id", resp.TraceID),
+		logger.String("slowest_node", resp.Trace.SlowestStepNode),
+		logger.Int64("slowest_step_ms", resp.Trace.SlowestStepLatencyMs),
+		logger.Int64("wall_total_ms", wall.Milliseconds()),
+		logger.Int("workflow_step_count", len(resp.Trace.Steps)),
+	)
 }
 
 func (s *Runtime) registryHasTool(ctx context.Context, name string) bool {
@@ -269,9 +280,3 @@ func (s *Runtime) registryHasTool(ctx context.Context, name string) bool {
 	return s.registry.Has(name)
 }
 
-func cfgValue(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return value
-}

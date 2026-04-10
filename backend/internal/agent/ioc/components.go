@@ -19,6 +19,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 )
 
 // Components groups the Eino components and runtime-facing capabilities
@@ -42,10 +43,19 @@ type Components struct {
 func InitComponents(
 	ctx context.Context,
 	cfg agentconfig.Config,
-	dao *agentrepository.DAO,
+	db *gorm.DB,
 	rdb *redis.Client,
 ) (*Components, error) {
-	registry, err := agenttool.NewMCPRegistry(ctx, cfg.MCP.Servers)
+	var skills *agentskill.Registry
+	if cfg.Skill.Enabled {
+		var err error
+		skills, err = agentskill.NewRegistry(cfg.Skill.Roots...)
+		if err != nil {
+			return nil, fmt.Errorf("init skill registry failed: %w", err)
+		}
+	}
+
+	registry, err := agenttool.NewMCPRegistry(ctx, cfg.MCP.Servers, skills)
 	if err != nil {
 		return nil, fmt.Errorf("init tool registry failed: %w", err)
 	}
@@ -84,16 +94,8 @@ func InitComponents(
 		return nil, fmt.Errorf("init managed knowledge service failed: %w", err)
 	}
 
-	var skills *agentskill.Registry
-	if cfg.Skill.Enabled {
-		skills, err = agentskill.NewRegistry(cfg.Skill.Roots...)
-		if err != nil {
-			return nil, fmt.Errorf("init skill registry failed: %w", err)
-		}
-	}
-
 	store := agentcache.NewRedisStore(rdb)
-	sessionRepo := agentrepository.NewSessionStore(dao, agentcache.NewRedisSessionCache(store, 24*time.Hour, 10))
+	sessionRepo := agentrepository.NewSessionRepository(db, agentcache.NewRedisSessionCache(store, 24*time.Hour, 10))
 	conversationWindow := cfg.Workflow.ConversationWindow
 	if conversationWindow <= 0 {
 		conversationWindow = 5

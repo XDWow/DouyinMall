@@ -7,25 +7,24 @@ import (
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 	agentsession "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 )
 
 func TestFinalizeNodeAddsLowConfidenceNoticeAndStreamsReply(t *testing.T) {
 	writer := &stubStreamWriter{}
-	state := graphstate.NewState(domain.ChatCommand{
+	state := domain.NewState(domain.ChatCommand{
 		SessionID: "sess_finalize",
 		UserID:    1,
 		Message:   "help",
-	}, writer, graphstate.InitOptions{})
+	}, writer, nil)
 	state.Session.SessionID = "sess_finalize"
 	state.Session.Intent = domain.IntentFallback
 	state.Session.FinalAnswer = "这是当前查询结果。"
 	state.Session.IntentConfidence = 0.1
 
-	node := NewFinalizeNode(nil, nil, nil, nil, nil, nil, nil, nil, 0)
-	if _, err := node.Invoke(context.Background(), state); err != nil {
-		t.Fatalf("Invoke() error = %v", err)
+	node := NewFinalizeNode(nil, nil, nil, nil)
+	if err := node.FinalizeSession(context.Background(), state); err != nil {
+		t.Fatalf("FinalizeSession() error = %v", err)
 	}
 	if got := state.Response.Reply; got == "" || got == "这是当前查询结果。" {
 		t.Fatalf("reply = %q, want low confidence notice", got)
@@ -44,15 +43,15 @@ func TestFinalizeNodeAddsLowConfidenceNoticeAndStreamsReply(t *testing.T) {
 func TestFinalizeNodeWritesSessionCacheBeforeReturning(t *testing.T) {
 	repo := &stubSessionRepo{}
 	service := agentsession.NewService(repo, 5)
-	state := graphstate.NewState(domain.ChatCommand{
+	state := domain.NewState(domain.ChatCommand{
 		SessionID: "sess_cache",
 		UserID:    7,
 		Message:   "where is my order",
-	}, nil, graphstate.InitOptions{})
+	}, nil, nil)
 	state.Session.SessionID = "sess_cache"
 	state.Session.Intent = domain.IntentOrderQuery
 	state.Session.FinalAnswer = "订单正在配送中。"
-	state.SessionMeta = &domain.Session{
+	state.PersistedSession = &domain.Session{
 		SessionID:  "sess_cache",
 		UserID:     7,
 		Status:     domain.SessionStatusActive,
@@ -61,9 +60,9 @@ func TestFinalizeNodeWritesSessionCacheBeforeReturning(t *testing.T) {
 		UpdatedAt:  time.Now(),
 	}
 
-	node := NewFinalizeNode(nil, nil, nil, nil, service, nil, nil, nil, 0)
-	if _, err := node.Invoke(context.Background(), state); err != nil {
-		t.Fatalf("Invoke() error = %v", err)
+	node := NewFinalizeNode(service, nil, nil, nil)
+	if err := node.FinalizeSession(context.Background(), state); err != nil {
+		t.Fatalf("FinalizeSession() error = %v", err)
 	}
 
 	repo.mu.Lock()
@@ -83,10 +82,10 @@ func TestFinalizeNodeWritesSessionCacheBeforeReturning(t *testing.T) {
 }
 
 type stubStreamWriter struct {
-	events []graphstate.StreamEvent
+	events []domain.StreamEvent
 }
 
-func (s *stubStreamWriter) Send(_ context.Context, event graphstate.StreamEvent) error {
+func (s *stubStreamWriter) Send(_ context.Context, event domain.StreamEvent) error {
 	s.events = append(s.events, event)
 	return nil
 }
@@ -94,10 +93,10 @@ func (s *stubStreamWriter) Send(_ context.Context, event graphstate.StreamEvent)
 type stubSessionRepo struct {
 	mu            sync.Mutex
 	cacheSession  domain.Session
-	cacheMessages []domain.Message
+	cacheMessages []domain.SessionMessage
 }
 
-func (s *stubSessionRepo) Load(context.Context, string) (*domain.Session, []domain.Message, error) {
+func (s *stubSessionRepo) Load(context.Context, string) (*domain.Session, []domain.SessionMessage, error) {
 	return nil, nil, nil
 }
 
@@ -105,15 +104,15 @@ func (s *stubSessionRepo) Create(context.Context, domain.Session) error {
 	return nil
 }
 
-func (s *stubSessionRepo) SaveRound(context.Context, domain.Session, domain.Message, domain.Message) error {
+func (s *stubSessionRepo) SaveRound(context.Context, domain.Session, domain.SessionMessage, domain.SessionMessage) error {
 	return nil
 }
 
-func (s *stubSessionRepo) SaveMessages(context.Context, string, []domain.Message) error {
+func (s *stubSessionRepo) SaveMessages(context.Context, string, []domain.SessionMessage) error {
 	return nil
 }
 
-func (s *stubSessionRepo) LoadAllMessages(context.Context, string) ([]domain.Message, error) {
+func (s *stubSessionRepo) LoadAllMessages(context.Context, string) ([]domain.SessionMessage, error) {
 	return nil, nil
 }
 
@@ -125,14 +124,14 @@ func (s *stubSessionRepo) ListByUser(context.Context, int64, int, int) ([]domain
 	return nil, 0, nil
 }
 
-func (s *stubSessionRepo) SaveCacheSnapshot(_ context.Context, session domain.Session, messages []domain.Message) error {
+func (s *stubSessionRepo) SaveCacheSnapshot(_ context.Context, session domain.Session, messages []domain.SessionMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cacheSession = session
-	s.cacheMessages = append([]domain.Message(nil), messages...)
+	s.cacheMessages = append([]domain.SessionMessage(nil), messages...)
 	return nil
 }
 
-func (s *stubSessionRepo) SaveRoundPersistent(context.Context, domain.Session, domain.Message, domain.Message) error {
+func (s *stubSessionRepo) SaveRoundPersistent(context.Context, domain.Session, domain.SessionMessage, domain.SessionMessage) error {
 	return nil
 }

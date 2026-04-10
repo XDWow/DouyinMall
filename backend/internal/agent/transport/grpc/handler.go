@@ -122,7 +122,7 @@ func toProtoChatResponse(resp *agentusecase.ChatOutput, userMessage string) *age
 		Reply:              resp.Reply,
 		Intent:             toProtoIntent(resp.Intent, userMessage),
 		Knowledge:          make([]*agentv1.KnowledgeRef, 0, len(resp.References)),
-		ToolExecs:          make([]*agentv1.ToolExec, 0, len(resp.ToolExecutions)),
+		ToolExecs:          make([]*agentv1.ToolExec, 0, len(resp.UsedToolNames)),
 		SuggestedQuestions: buildSuggestedQuestions(resp, userMessage),
 		SessionId:          resp.SessionID,
 		TraceId:            firstNonEmpty(resp.TraceID, resp.Trace.TraceID),
@@ -138,15 +138,9 @@ func toProtoChatResponse(resp *agentusecase.ChatOutput, userMessage string) *age
 			Relevance: float32(ref.Score),
 		})
 	}
-	for _, exec := range resp.ToolExecutions {
+	for _, name := range resp.UsedToolNames {
 		result.ToolExecs = append(result.ToolExecs, &agentv1.ToolExec{
-			ToolName:  exec.Name,
-			Params:    stringifyMap(exec.Arguments),
-			Reasoning: exec.Reason,
-			Success:   exec.Success,
-			Result:    exec.Result,
-			Error:     exec.Error,
-			LatencyMs: exec.LatencyMs,
+			ToolName: name,
 		})
 	}
 
@@ -161,12 +155,12 @@ func toProtoChatResponse(resp *agentusecase.ChatOutput, userMessage string) *age
 }
 
 func toProtoHandoff(resp *agentusecase.ChatOutput, userMessage string) *agentv1.HandoffSummary {
-	actions := make([]string, 0, len(resp.ToolExecutions)+2)
+	actions := make([]string, 0, len(resp.UsedToolNames)+2)
 	if len(resp.References) > 0 {
 		actions = append(actions, fmt.Sprintf("retrieved %d knowledge references", len(resp.References)))
 	}
-	for _, exec := range resp.ToolExecutions {
-		actions = append(actions, fmt.Sprintf("executed tool %s", exec.Name))
+	for _, name := range resp.UsedToolNames {
+		actions = append(actions, fmt.Sprintf("executed tool %s", name))
 	}
 	if len(actions) == 0 {
 		actions = append(actions, "completed controlled workflow analysis")

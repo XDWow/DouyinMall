@@ -57,13 +57,6 @@ skill:
 tenant:
   default_id: "default"
 
-feature_flags:
-  order_query: true
-  return_policy: true
-  inventory: true
-  product_info: true
-  return_exchange_apply: true
-
 llm:
   base_url: "https://apis.iflow.cn/v1"
   api_key: ""
@@ -95,14 +88,10 @@ workflow:
   semantic_cache_top_k: 20
   retrieve_top_k: 8
   retrieve_min_score: 0.35
-  rerank_top_k: 4
-  tool_parallelism: 4
   confidence_threshold: 0.62
   max_answer_tokens: 512
-  stream_buffer: 16
   checkpoint_ttl_seconds: 604800
   interrupt_before_nodes: []
-  interrupt_after_nodes: []
 
 observability:
   log:

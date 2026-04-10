@@ -9,7 +9,6 @@ type Config struct {
 	MCP           MCPConfig           `mapstructure:"mcp"`
 	Skill         SkillConfig         `mapstructure:"skill"`
 	Tenant        TenantConfig        `mapstructure:"tenant"`
-	FeatureFlags  FeatureFlagsConfig  `mapstructure:"feature_flags"`
 	LLM           LLMConfig           `mapstructure:"llm"`
 	Embedding     EmbeddingConfig     `mapstructure:"embedding"`
 	KnowledgeBase KnowledgeBaseConfig `mapstructure:"knowledge_base"`
@@ -70,14 +69,6 @@ type TenantConfig struct {
 	DefaultID string `mapstructure:"default_id"`
 }
 
-type FeatureFlagsConfig struct {
-	OrderQuery          bool `mapstructure:"order_query"`
-	ReturnPolicy        bool `mapstructure:"return_policy"`
-	Inventory           bool `mapstructure:"inventory"`
-	ProductInfo         bool `mapstructure:"product_info"`
-	ReturnExchangeApply bool `mapstructure:"return_exchange_apply"`
-}
-
 type LLMConfig struct {
 	BaseURL        string  `mapstructure:"base_url"`
 	APIKey         string  `mapstructure:"api_key"`
@@ -107,20 +98,15 @@ type WorkflowConfig struct {
 	RateLimitPerMinute      int64    `mapstructure:"rate_limit_per_minute"`
 	ConversationWindow      int      `mapstructure:"conversation_window"`
 	ExactCacheTTLSeconds    int      `mapstructure:"exact_cache_ttl_seconds"`
-	L0CacheTTLSeconds       int      `mapstructure:"l0_cache_ttl_seconds"`
 	SemanticCacheTTLSeconds int      `mapstructure:"semantic_cache_ttl_seconds"`
 	SemanticCacheScore      float64  `mapstructure:"semantic_cache_score"`
 	SemanticCacheTopK       int      `mapstructure:"semantic_cache_top_k"`
 	RetrieveTopK            int      `mapstructure:"retrieve_top_k"`
 	RetrieveMinScore        float64  `mapstructure:"retrieve_min_score"`
-	RerankTopK              int      `mapstructure:"rerank_top_k"`
-	ToolParallelism         int      `mapstructure:"tool_parallelism"`
 	ConfidenceThreshold     float64  `mapstructure:"confidence_threshold"`
 	MaxAnswerTokens         int      `mapstructure:"max_answer_tokens"`
-	StreamBuffer            int      `mapstructure:"stream_buffer"`
 	CheckpointTTLSeconds    int      `mapstructure:"checkpoint_ttl_seconds"`
 	InterruptBeforeNodes    []string `mapstructure:"interrupt_before_nodes"`
-	InterruptAfterNodes     []string `mapstructure:"interrupt_after_nodes"`
 }
 
 type ObservabilityConfig struct {

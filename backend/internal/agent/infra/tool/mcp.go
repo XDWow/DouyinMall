@@ -17,6 +17,7 @@ import (
 
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	"github.com/XDWow/DouyinMall/backend/pkg/mcpruntime"
 )
 
@@ -25,14 +26,14 @@ type discoveredMCPTool struct {
 	Tool       *mcpWrappedTool
 }
 
-// NewMCPRegistry 负责把远端 MCP server 暴露的 tool 发现出来，并注册成本地 Registry。
-func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig) (*Registry, error) {
+// NewMCPRegistry 负责把远端 MCP server 暴露的 tool 发现出来，并注册成本地 Registry；若配置了技能库则追加 fetch_skill。
+func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig, skills *agentskill.Registry) (*Registry, error) {
 	discovered, err := discoverMCPTools(ctx, servers)
 	if err != nil {
 		return nil, err
 	}
 
-	registered := make([]registeredTool, 0, len(discovered))
+	registered := make([]registeredTool, 0, len(discovered)+1)
 	for _, item := range discovered {
 		registered = append(registered, registeredTool{
 			baseTool:  item.Tool,
@@ -40,6 +41,24 @@ func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig) 
 			info:      item.Tool.info,
 			policy:    defaultToolPolicy(item.Tool.info.Name),
 		})
+	}
+	if skills != nil {
+		ft, ferr := NewFetchSkillTool(skills)
+		if ferr != nil {
+			return nil, fmt.Errorf("fetch_skill tool: %w", ferr)
+		}
+		if ft != nil {
+			info, ierr := ft.Info(ctx)
+			if ierr != nil {
+				return nil, fmt.Errorf("fetch_skill info: %w", ierr)
+			}
+			registered = append(registered, registeredTool{
+				baseTool:  ft,
+				invokable: ft,
+				info:      info,
+				policy:    ToolPolicy{ReadOnly: true},
+			})
+		}
 	}
 	return newRegistry(ctx, registered)
 }

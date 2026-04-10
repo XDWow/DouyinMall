@@ -5,11 +5,11 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	graphstate "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/state"
 )
 
 const cacheHitExact = "exact"
 
+// SemanticCachePolicy L1 语义缓存是否可读。
 type SemanticCachePolicy struct {
 	AllowRead    bool
 	IntentBucket string
@@ -51,20 +51,20 @@ func cacheIntentBucket(intent domain.Intent) string {
 	}
 }
 
-func ResolveSemanticCachePolicy(route graphstate.WorkflowRoute, message string) SemanticCachePolicy {
+func ResolveSemanticCachePolicy(route domain.WorkflowRoute, message string) SemanticCachePolicy {
 	msg := normalizeCacheQuery(message)
 	if msg == "" {
 		return SemanticCachePolicy{}
 	}
 
 	switch route {
-	case graphstate.RouteReturnPolicy:
+	case domain.RouteReturnPolicy:
 		return SemanticCachePolicy{
 			AllowRead:    true,
 			IntentBucket: cacheIntentBucket(domain.IntentReturnPolicy),
 			Scope:        cacheScopeForIntent(domain.IntentReturnPolicy),
 		}
-	case graphstate.RouteProductInfo:
+	case domain.RouteProductInfo:
 		if !isStableProductKnowledgeQuery(msg) {
 			return SemanticCachePolicy{}
 		}
@@ -73,7 +73,7 @@ func ResolveSemanticCachePolicy(route graphstate.WorkflowRoute, message string) 
 			IntentBucket: cacheIntentBucket(domain.IntentProductInfo),
 			Scope:        cacheScopeForIntent(domain.IntentProductInfo),
 		}
-	case graphstate.RouteBaseQA:
+	case domain.RouteBaseQA:
 		if isBaseQADynamicQuery(msg) {
 			return SemanticCachePolicy{}
 		}

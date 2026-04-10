@@ -1,4 +1,4 @@
-﻿package http
+package http
 
 import (
 	"time"
@@ -29,6 +29,7 @@ type chatResponse struct {
 	NeedHandoff    bool               `json:"need_handoff"`
 	HandoffReason  string             `json:"handoff_reason,omitempty"`
 	References     []knowledgeRef     `json:"references,omitempty"`
+	UsedToolNames  []string           `json:"used_tool_names,omitempty"`
 	ToolExecutions []toolExecution    `json:"tool_executions,omitempty"`
 	Trace          traceResponse      `json:"trace"`
 	Interrupt      *interruptInfo     `json:"interrupt,omitempty"`
@@ -136,19 +137,9 @@ func toChatResponse(out *agentusecase.ChatOutput) *chatResponse {
 		})
 	}
 
-	execs := make([]toolExecution, 0, len(out.ToolExecutions))
-	for _, exec := range out.ToolExecutions {
-		execs = append(execs, toolExecution{
-			Name:       exec.Name,
-			Arguments:  exec.Arguments,
-			Reason:     exec.Reason,
-			Success:    exec.Success,
-			Result:     exec.Result,
-			Error:      exec.Error,
-			LatencyMs:  exec.LatencyMs,
-			OccurredAt: exec.OccurredAt,
-			Metadata:   exec.Metadata,
-		})
+	execs := make([]toolExecution, 0, len(out.UsedToolNames))
+	for _, name := range out.UsedToolNames {
+		execs = append(execs, toolExecution{Name: name, Success: true})
 	}
 
 	steps := make([]traceStep, 0, len(out.Trace.Steps))
@@ -171,6 +162,7 @@ func toChatResponse(out *agentusecase.ChatOutput) *chatResponse {
 		NeedHandoff:    out.NeedHandoff,
 		HandoffReason:  out.HandoffReason,
 		References:     refs,
+		UsedToolNames:  append([]string(nil), out.UsedToolNames...),
 		ToolExecutions: execs,
 		Trace: traceResponse{
 			TraceID:        out.Trace.TraceID,
@@ -233,4 +225,3 @@ func toListSessionsResponse(out *agentusecase.SessionListOutput) *listSessionsRe
 	}
 	return &listSessionsResponse{Sessions: items, Total: out.Total}
 }
-
