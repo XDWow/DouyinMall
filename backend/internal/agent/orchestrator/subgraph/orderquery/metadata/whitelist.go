@@ -1,7 +1,7 @@
 package metadata
 
 func AllowedToolNames() []string {
-	return []string{"query_order"}
+	return []string{"get_order", "list_user_orders", "query_order"}
 }
 
 func AllowedSkillNames() []string {

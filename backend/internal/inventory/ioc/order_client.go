@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-// 鍒濆鍖栬鍗曟湇鍔″鎴风锛堢敤浜庡悓姝ヨ皟鐢ㄦ洿鏂拌鍗曠姸鎬侊級
+// InitOrderClient 初始化订单服务客户端（用于同步调用更新订单状态等）
 func InitOrderClient() orderservice.Client {
-	// etcd閰嶇疆
+	// etcd 配置
 	etcdCfg := config.EtcdConfig{
 		Endpoints: []string{"localhost:12379"},
 	}
@@ -20,16 +20,16 @@ func InitOrderClient() orderservice.Client {
 
 	r, err := etcd.NewEtcdResolver(etcdCfg.Endpoints)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 etcd resolver 澶辫触: %w", err))
+		panic(fmt.Errorf("创建 etcd resolver 失败: %w", err))
 	}
 
-	// 鍒涘缓璁㈠崟鏈嶅姟瀹㈡埛绔?
+	// 创建订单服务客户端
 	cli, err := orderservice.NewClient(
 		"order.service",
 		client.WithResolver(r),
 	)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓璁㈠崟鏈嶅姟瀹㈡埛绔け璐? %w", err))
+		panic(fmt.Errorf("创建订单服务客户端失败: %w", err))
 	}
 
 	return cli

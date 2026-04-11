@@ -9,7 +9,7 @@ import (
 
 type txKey struct{}
 
-// 渚濊禆 *gorm.DB 瀹炵幇浜嬪姟
+// GormTxManager 基于 *gorm.DB 实现 domain.TxManager
 type GormTxManager struct {
 	db *gorm.DB
 }

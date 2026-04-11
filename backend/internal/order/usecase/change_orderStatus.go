@@ -90,7 +90,7 @@ func (uc *ChangeOrderStatusUseCase) Execute(ctx context.Context, cmd ChangeOrder
 		defer cancel()
 
 		if sendErr := uc.producer.SendMessage(c, evt); sendErr != nil {
-			uc.log.Error("鍙戦€佽鍗曠姸鎬佸彉鏇翠簨浠跺け璐?,
+			uc.log.Error("发送订单状态变更事件失败",
 				logger.Error(sendErr),
 				logger.Int64("orderID", evt.OrderID),
 				logger.Int64("outboxID", outboxID))
@@ -98,7 +98,7 @@ func (uc *ChangeOrderStatusUseCase) Execute(ctx context.Context, cmd ChangeOrder
 		}
 
 		if markErr := uc.outboxRepo.MarkSent(c, outboxID); markErr != nil {
-			uc.log.Error("鏍囪 outbox 宸插彂閫佸け璐?,
+			uc.log.Error("标记 outbox 已发送，失败",
 				logger.Error(markErr),
 				logger.Int64("orderID", evt.OrderID),
 				logger.Int64("outboxID", outboxID))
@@ -124,5 +124,3 @@ func applyOrderAction(order *domain.Order, action domain.OrderAction) error {
 		return domain.ErrInvalidStatusTransition
 	}
 }
-
-

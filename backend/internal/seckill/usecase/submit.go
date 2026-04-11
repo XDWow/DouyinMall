@@ -70,12 +70,12 @@ func (uc *SubmitUseCase) Execute(ctx context.Context, cmd SubmitCmd) (*domain.Re
 		return nil, err
 	}
 	switch code {
-	case 1: // 棰勬墸搴撳瓨鏄惁鎴愬姛锛?
+	case 1: // 预扣库存失败（库存不足）
 		return &domain.Result{Status: domain.RequestStatusFail, FailReason: domain.FailReasonOutOfStock}, domain.ErrOutOfStock
-	case 2: // 涓€浜轰竴鍗?
+	case 2: // 一人一单（重复参与）
 		return &domain.Result{Status: domain.RequestStatusFail, FailReason: domain.FailReasonDuplicate}, domain.ErrDuplicateSeckill
 	}
-	// 閫氳繃 redis 鎷︽埅鏍￠獙锛屽ぇ閮ㄥ垎娴侀噺浼氭嫤鍦ㄨ繖
+	// 通过 Redis 拦截校验，大部分流量在这一层被挡住
 	result := domain.Result{RequestNo: requestNo, Status: domain.RequestStatusProcessing}
 
 	evt := domain.Event{
@@ -90,7 +90,7 @@ func (uc *SubmitUseCase) Execute(ctx context.Context, cmd SubmitCmd) (*domain.Re
 	if err = uc.producer.Publish(ctx, evt); err != nil {
 		_ = uc.cache.Compensate(ctx, activity.ID, cmd.UserID, 1, true)
 		_ = uc.cache.SetResult(ctx, domain.Result{RequestNo: requestNo, Status: domain.RequestStatusFail, FailReason: "PUBLISH_FAIL"})
-		return nil, fmt.Errorf("publish seckill event failed: %w", err)
+		return nil, fmt.Errorf("发布秒杀事件失败: %w", err)
 	}
 
 	return &result, nil

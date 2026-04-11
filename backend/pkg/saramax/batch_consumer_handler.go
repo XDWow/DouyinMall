@@ -64,15 +64,15 @@ func (h *BatchHandler[T]) ConsumeClaim(session sarama.ConsumerGroupSession,
 				var t T
 				err := json.Unmarshal(msg.Value, &t)
 				if err != nil {
-					// 娑堟伅鏍煎紡閮戒笉瀵癸紝娌″暐濂藉鐞嗙殑
-					// 浣嗘槸涔熶笉鑳界洿鎺ヨ繑鍥烇紝鍦ㄧ嚎涓婄殑鏃跺€欒缁х画澶勭悊涓嬪幓
-					h.l.Error("鍙嶅簭鍒楀寲娑堟伅浣撳け璐?,
+					// 消息体格式非法，没有好的补救方式
+					// 但也不能直接 return，在线上要继续处理后续消息
+					h.l.Error("反序列化消息体失败",
 						logger.String("topic", msg.Topic),
 						logger.Int32("partition", msg.Partition),
 						logger.Int64("offset", msg.Offset),
-						// 杩欓噷涔熷彲浠ヨ€冭檻鎵撳嵃 msg.Value锛屼絾鏄湁浜涙椂鍊?msg 鏈韩涔熷寘鍚晱鎰熸暟鎹?
+						// 也可考虑打印 msg.Value，但有时 msg 本身含敏感数据
 						logger.Error(err))
-					// 涓嶄腑鏂紝缁х画涓嬩竴涓?
+					// 不中断，继续下一条
 					session.MarkMessage(msg, "")
 					continue
 				}

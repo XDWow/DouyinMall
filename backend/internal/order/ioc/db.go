@@ -11,24 +11,23 @@ import (
 )
 
 func InitDB() *gorm.DB {
-	// 榛樿閰嶇疆鍏滃簳
+	// 默认 DSN 兜底（可被配置覆盖）
 	c := config.DBConfig{
 		DSN: "root:root@tcp(localhost:3306)/mysql",
 	}
 	err := viper.UnmarshalKey("db", &c)
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲璇诲彇閰嶇疆澶辫触: %w", err))
+		panic(fmt.Errorf("数据库初始化读取配置失败: %w", err))
 	}
 
 	database, err := gorm.Open(mysql.Open(c.DSN), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲杩炴帴澶辫触: %w", err))
+		panic(fmt.Errorf("数据库初始化连接失败: %w", err))
 	}
 
-	// 鍒濆鍖?db 鐨勮〃
 	err = db.InitTables(database)
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲琛ㄥけ璐? %w", err))
+		panic(fmt.Errorf("数据库初始化建表失败: %w", err))
 	}
 	return database
 }

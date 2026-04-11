@@ -9,8 +9,8 @@ package main
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/db"
+	"github.com/XDWow/DouyinMall/backend/internal/order/infra/delay_queue"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
-	"github.com/XDWow/DouyinMall/backend/internal/order/infra/queue"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/order/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/order/job"
@@ -20,41 +20,37 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// Injectors from wire.go:
+
 func InitApp() *App {
 	gormDB := ioc.InitDB()
 	cmdable := ioc.InitRedis()
 	orderCache := cache.NewRedisOrderCache(cmdable)
 	loggerV1 := ioc.InitLogger()
-	paymentClient := ioc.InitPaymentClient()
-	client := ioc.InitKafkaClient()
-	syncProducer := ioc.InitKafkaSyncProducer(client)
-	txManager := db.NewGormTxManager(gormDB)
-	saramaProducer := mq.NewSaramaProducer(syncProducer)
-	orderDelayQueue := queue.NewOrderDelayQueue(orderCache, loggerV1)
 	orderRepository := repository.NewOrderRepository(gormDB, orderCache, loggerV1)
-	outboxRepository := repository.NewOutboxRepository(gormDB)
-	createOrderUseCase := usecase.NewCreateOrderUseCase(orderRepository, orderDelayQueue, loggerV1)
+	delayQueue := delay_queue.NewOrderDelayQueue(orderCache, loggerV1)
+	createOrderUseCase := usecase.NewCreateOrderUseCase(orderRepository, delayQueue, loggerV1)
 	getOrderUseCase := usecase.NewGetOrderUseCase(orderRepository, loggerV1)
 	listUserOrderUseCase := usecase.NewListUserOrderUseCase(orderRepository, loggerV1)
+	outboxRepository := repository.NewOutboxRepository(gormDB)
+	client := ioc.InitKafkaClient()
+	syncProducer := ioc.InitKafkaSyncProducer(client)
+	saramaProducer := mq.NewSaramaProducer(syncProducer)
+	txManager := db.NewGormTxManager(gormDB)
 	changeOrderStatusUseCase := usecase.NewChangeOrderStatusUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1)
-	batchCancelOrderUseCase := usecase.NewBatchCancelOrderUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1)
-	dispatchOrderTimeoutJob := job.NewDispatchOrderTimeoutJob(orderDelayQueue, paymentClient, orderRepository, outboxRepository, saramaProducer, txManager, batchCancelOrderUseCase, loggerV1)
-	checkExpiredJob := job.NewCheckExpiredJob(orderRepository, paymentClient, batchCancelOrderUseCase, loggerV1)
-	outboxWorkerJob := job.NewOutboxWorkerJob(outboxRepository, saramaProducer, loggerV1)
-	cron := ioc.InitJobs(dispatchOrderTimeoutJob, checkExpiredJob, outboxWorkerJob, loggerV1)
 	orderHandler := grpc.NewOrderHandler(createOrderUseCase, getOrderUseCase, listUserOrderUseCase, changeOrderStatusUseCase)
 	server := ioc.InitGRPCServer(orderHandler)
-	app := newApp(server, cron)
+	paymentserviceClient := ioc.InitPaymentClient()
+	batchCancelOrderUseCase := usecase.NewBatchCancelOrderUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1)
+	dispatchOrderTimeoutJob := job.NewDispatchOrderTimeoutJob(delayQueue, paymentserviceClient, orderRepository, outboxRepository, saramaProducer, txManager, batchCancelOrderUseCase, loggerV1)
+	checkExpiredJob := job.NewCheckExpiredJob(orderRepository, paymentserviceClient, batchCancelOrderUseCase, loggerV1)
+	outboxWorkerJob := job.NewOutboxWorkerJob(outboxRepository, saramaProducer, loggerV1)
+	cron := ioc.InitJobs(dispatchOrderTimeoutJob, checkExpiredJob, outboxWorkerJob, loggerV1)
+	app := newApp(server, cron, getOrderUseCase, listUserOrderUseCase)
 	return app
 }
 
-func newApp(server server.Server, cron *cron.Cron) *App {
-	return &App{
-		Server:    server,
-		Cron:      cron,
-		Consumers: nil,
-	}
-}
+// wire.go:
 
 type ConsumerComponent interface {
 	Start() error
@@ -64,6 +60,21 @@ type App struct {
 	Server    server.Server
 	Cron      *cron.Cron
 	Consumers []ConsumerComponent
+
+	getOrderUC      *usecase.GetOrderUseCase
+	listUserOrderUC *usecase.ListUserOrderUseCase
 }
 
-
+func newApp(
+	srv server.Server, cron2 *cron.Cron,
+	getOrderUC *usecase.GetOrderUseCase,
+	listUserOrderUC *usecase.ListUserOrderUseCase,
+) *App {
+	return &App{
+		Server:          srv,
+		Cron:            cron2,
+		Consumers:       nil,
+		getOrderUC:      getOrderUC,
+		listUserOrderUC: listUserOrderUC,
+	}
+}

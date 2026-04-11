@@ -47,7 +47,7 @@ func (c *OrderStatusConsumer) Start() error {
 		for {
 			err := cg.Consume(context.Background(), []string{TopicOrderStatusUpdate}, saramax.NewHandler[OrderStatusUpdateEvent](c.logger, c.consume))
 			if err != nil {
-				c.logger.Error("绉掓潃璁㈠崟鐘舵€佹秷璐硅€呴€€鍑?, logger.Error(err))
+				c.logger.Error("秒杀订单状态消费者消费出错", logger.Error(err))
 			}
 		}
 	}()

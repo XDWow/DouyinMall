@@ -17,6 +17,15 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
+func orderQueryResultFromSlots(slots map[string]any) map[string]any {
+	for _, name := range []string{"get_order", "query_order", "list_user_orders"} {
+		if r := support.ToolResultRecordFromSlots(slots, name); r != nil {
+			return r
+		}
+	}
+	return nil
+}
+
 // reState 退换货子图内部状态（多节点串联）。
 type reState struct {
 	Slots           map[string]any
@@ -114,7 +123,7 @@ func reRunEligibility(eligibilityNode *aftersalenode.EligibilityCheckNode) func(
 			Slots:            s.Slots,
 			NeedHandoff:      s.NeedHandoff,
 			AwaitingConfirm:  awaitingConfirm,
-			QueryOrderResult: support.ToolResultRecordFromSlots(s.Slots, "query_order"),
+			QueryOrderResult: orderQueryResultFromSlots(s.Slots),
 		})
 		if err != nil {
 			return reState{}, err

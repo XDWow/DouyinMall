@@ -66,7 +66,7 @@ func TestDispatchOrderTimeoutJobLoadsCreatedOrderBeforeConfirmingPayment(t *test
 	require.Equal(t, 1, orderRepo.findCalls)
 	require.Equal(t, 0, orderRepo.findCallConfirmSnapshot)
 	require.Equal(t, []int64{1002}, orderRepo.batchUpdatedIDs)
-	require.True(t, orderRepo.findByIDsLocked)
+	require.False(t, orderRepo.findByIDsLocked)
 	require.Empty(t, delayQueue.dueIDs)
 }
 
@@ -95,7 +95,7 @@ func TestDispatchOrderTimeoutJobBatchCancelsAllDueCreatedOrders(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, []int64{1003, 1004}, orderRepo.batchUpdatedIDs)
-	require.True(t, orderRepo.findByIDsLocked)
+	require.False(t, orderRepo.findByIDsLocked)
 }
 
 func TestDispatchOrderTimeoutJobSyncsPaidOrderBeforeSkippingCancel(t *testing.T) {

@@ -13,14 +13,14 @@ import (
 func InitDB() *gorm.DB {
 	c := config.DBConfig{DSN: "root:root@tcp(localhost:3306)/douyin_mall"}
 	if err := viper.UnmarshalKey("db", &c); err != nil {
-		panic(fmt.Errorf("read db config failed: %w", err))
+		panic(fmt.Errorf("数据库初始化读取配置失败: %w", err))
 	}
 	database, err := gorm.Open(mysql.Open(c.DSN), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Errorf("open db failed: %w", err))
+		panic(fmt.Errorf("数据库初始化连接失败: %w", err))
 	}
 	if err = db2.InitTables(database); err != nil {
-		panic(fmt.Errorf("init seckill tables failed: %w", err))
+		panic(fmt.Errorf("秒杀表初始化失败: %w", err))
 	}
 	return database
 }

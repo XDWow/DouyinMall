@@ -21,7 +21,7 @@ func NewReturnExchangeQueryNode(registryHasTool orchestratorshared.ToolRegistryC
 
 func (n *ReturnExchangeQueryNode) Invoke(ctx context.Context, input ReturnExchangeQueryInput) (*orchestratorshared.ToolPlanResult, error) {
 	result := &orchestratorshared.ToolPlanResult{}
-	if n.RegistryHasTool == nil || !n.RegistryHasTool(ctx, "query_order") {
+	if n.RegistryHasTool == nil || !n.RegistryHasTool(ctx, "get_order") {
 		result.FinalAnswer = "订单查询服务暂时不可用，已为你转人工处理。"
 		result.NeedHandoff = true
 		result.HandoffReason = "order_service_unavailable"
@@ -34,8 +34,8 @@ func (n *ReturnExchangeQueryNode) Invoke(ctx context.Context, input ReturnExchan
 	}
 
 	result.Plans = []domain.ToolCallPlan{{
-		Name:      "query_order",
-		Arguments: map[string]any{"order_id": orderID, "limit": 1},
+		Name:      "get_order",
+		Arguments: map[string]any{"order_id": orderID},
 	}}
 	result.ReadOnly = true
 	return result, nil

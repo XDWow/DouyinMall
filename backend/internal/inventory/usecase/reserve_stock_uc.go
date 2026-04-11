@@ -24,7 +24,7 @@ func (uc *ReserveStockUsecase) Execute(ctx context.Context, cmd ReserveStockComm
 	for i, item := range cmd.Changes {
 		changes[i] = domain.StockChange{
 			ProductID: item.ProductID,
-			Quantity:  -item.Quantity, // 棰勬墸鏄噺搴撳瓨锛屽彇璐?
+			Quantity:  -item.Quantity, // 预扣为减库存，取负号传入 repo
 		}
 	}
 	return uc.repo.ReserveStock(ctx, cmd.OperationID, changes, cmd.ExpireTime)
@@ -36,7 +36,7 @@ type ReserveStockCommand struct {
 	ExpireTime  int64
 }
 
-// StockItem Quantity 涓烘鏁帮紝琛ㄧず璐拱鏁伴噺锛坲secase 灞傝礋璐ｈ浆涓鸿礋鏁颁紶缁?repo锛?
+// StockItem 中 Quantity 为正数表示购买数量；usecase 负责转为负数传给 repo
 type StockItem struct {
 	ProductID int64
 	Quantity  int32

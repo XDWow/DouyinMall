@@ -31,7 +31,7 @@ func NewGroupedWorkerPool(numWorkers, queueSize int, handler TaskHandler) *Group
 		queueSize = 1024
 	}
 	if handler == nil {
-		panic("TaskHandler 涓虹┖")
+		panic("TaskHandler 为空")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -56,7 +56,7 @@ func NewGroupedWorkerPool(numWorkers, queueSize int, handler TaskHandler) *Group
 func (p *GroupedWorkerPool) Submit(task GroupedTask) error {
 	select {
 	case <-p.ctx.Done():
-		return errors.New("鍗忕▼姹犲叧闂?)
+		return errors.New("协程池已关闭")
 	default:
 	}
 
@@ -67,7 +67,7 @@ func (p *GroupedWorkerPool) Submit(task GroupedTask) error {
 
 	select {
 	case <-p.ctx.Done():
-		return errors.New("鍗忕▼姹犲叧闂?)
+		return errors.New("协程池已关闭")
 	case p.workerChs[workerID] <- task:
 		return nil
 	}

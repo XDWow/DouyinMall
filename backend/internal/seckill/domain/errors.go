@@ -3,15 +3,12 @@ package domain
 import "errors"
 
 var (
-	ErrActivityNotFound   = errors.New("activity not found")
-	ErrActivityNotStarted = errors.New("activity not started")
-	ErrActivityEnded      = errors.New("activity ended")
-	ErrActivityOffline    = errors.New("activity offline")
-	ErrDuplicateSeckill   = errors.New("duplicate seckill")
-	ErrOutOfStock         = errors.New("out of stock")
-	ErrRequestNotFound    = errors.New("request not found")
-	ErrInvalidStatus      = errors.New("invalid status")
+	ErrActivityNotFound   = errors.New("活动不存在")
+	ErrActivityNotStarted = errors.New("活动未开始")
+	ErrActivityEnded      = errors.New("活动已结束")
+	ErrActivityOffline    = errors.New("活动未上线或已下线")
+	ErrDuplicateSeckill   = errors.New("重复秒杀请求")
+	ErrOutOfStock         = errors.New("库存不足")
+	ErrRequestNotFound    = errors.New("请求记录不存在")
+	ErrInvalidStatus      = errors.New("状态非法")
 )
-
-
-

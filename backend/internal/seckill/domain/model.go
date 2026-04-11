@@ -62,10 +62,10 @@ type Result struct {
 
 type Event struct {
 	RequestNo  string `json:"request_no"`
-	ActivityID int64  `json:"activity_id"` // 绠＄鏉€娲诲姩
+	ActivityID int64  `json:"activity_id"` // 秒杀活动 ID
 	UserID     int64  `json:"user_id"`
 
-	// 鐢ㄦ潵寤虹珛璁㈠崟鍟嗗搧鏄庣粏
+	// 用于创建订单商品明细
 	ProductID int64 `json:"product_id"`
 	SKUID     int64 `json:"sku_id"`
 

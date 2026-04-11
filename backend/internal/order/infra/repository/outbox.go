@@ -51,9 +51,9 @@ func (repo *outboxRepository) BatchAdd(ctx context.Context, eventType string, pa
 		})
 	}
 
-	// 璋冪敤 GORM 鐨勬壒閲忔彃鍏ユ帴鍙?
-	// 鎵归噺鎻掑叆鐨勬敹鐩婃潵鑷細鍑忓皯 缃戠粶RTT / 浜嬪姟 / 杩炴帴寮€閿€
-	// 椋庨櫓鏉ヨ嚜鍗曟 SQL 澶ぇ銆侀攣鏃堕棿澶暱锛屾墍浠ユ帶鍒舵壒閲忓ぇ灏?100锛堢粡楠屽€硷紝鍙互鍘嬫祴璋冨弬锛?
+	// 使用 GORM CreateInBatches 批量插入。
+	// 收益：减少网络 RTT、事务与连接开销。
+	// 风险：单次 SQL 过大、锁时间过长，故单批控制在 100（可按压测调参）。
 	if err := conn.CreateInBatches(models, 100).Error; err != nil {
 		return nil, err
 	}

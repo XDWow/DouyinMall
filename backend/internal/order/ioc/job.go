@@ -16,7 +16,7 @@ func InitJobs(
 
 	_, err := c.AddFunc("*/1 * * * * ?", func() {
 		if err := dispatchOrderTimeoutJob.Run(); err != nil {
-			l.Error("DispatchOrderTimeoutJob鎵ц澶辫触", logger.Error(err))
+			l.Error("DispatchOrderTimeoutJob 执行失败", logger.Error(err))
 		}
 	})
 	if err != nil {
@@ -25,7 +25,7 @@ func InitJobs(
 
 	_, err = c.AddFunc("0 */5 * * * ?", func() {
 		if err := checkExpiredJob.Run(); err != nil {
-			l.Error("CheckExpiredJob鎵ц澶辫触", logger.Error(err))
+			l.Error("CheckExpiredJob 执行失败", logger.Error(err))
 		}
 	})
 	if err != nil {
@@ -34,14 +34,14 @@ func InitJobs(
 
 	_, err = c.AddFunc("*/30 * * * * ?", func() {
 		if err := outboxWorkerJob.Run(); err != nil {
-			l.Error("OutboxWorkerJob鎵ц澶辫触", logger.Error(err))
+			l.Error("OutboxWorkerJob 执行失败", logger.Error(err))
 		}
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	l.Info("瀹氭椂浠诲姟鍒濆鍖栧畬鎴?)
+	l.Info("定时任务初始化完成")
 	return c
 }
 

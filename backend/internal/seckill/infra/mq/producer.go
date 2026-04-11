@@ -26,7 +26,7 @@ func NewProducer(producer sarama.SyncProducer) domain.Producer {
 func (p *Producer) Publish(ctx context.Context, evt domain.Event) error {
 	data, err := json.Marshal(evt)
 	if err != nil {
-		return fmt.Errorf("marshal seckill event: %w", err)
+		return fmt.Errorf("序列化秒杀事件失败: %w", err)
 	}
 	_, _, err = p.producer.SendMessage(&sarama.ProducerMessage{
 		Topic: TopicSeckillCreateOrder,
@@ -34,7 +34,7 @@ func (p *Producer) Publish(ctx context.Context, evt domain.Event) error {
 		Value: sarama.ByteEncoder(data),
 	})
 	if err != nil {
-		return fmt.Errorf("publish seckill event: %w", err)
+		return fmt.Errorf("发布秒杀事件到 Kafka 失败: %w", err)
 	}
 	return nil
 }
@@ -52,7 +52,7 @@ type seckillDeadLetterMessage struct {
 func publishSeckillDeadLetter(_ context.Context, producer sarama.SyncProducer, msg seckillDeadLetterMessage) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("marshal seckill dead letter: %w", err)
+		return fmt.Errorf("序列化秒杀死信失败: %w", err)
 	}
 	_, _, err = producer.SendMessage(&sarama.ProducerMessage{
 		Topic: TopicSeckillCreateOrderDeadLetter,
@@ -60,7 +60,7 @@ func publishSeckillDeadLetter(_ context.Context, producer sarama.SyncProducer, m
 		Value: sarama.ByteEncoder(data),
 	})
 	if err != nil {
-		return fmt.Errorf("publish seckill dead letter: %w", err)
+		return fmt.Errorf("发布秒杀死信失败: %w", err)
 	}
 	return nil
 }

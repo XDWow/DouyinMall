@@ -23,9 +23,13 @@ mcp:
     service_name: "order.service"
     direct_addr: "127.0.0.1:8095"
   tools:
-    - key: "query_order"
-      name: "query_order"
-      description: "Query the current user's orders."
+    - key: "get_order"
+      name: "get_order"
+      description: "根据 order_id 查询单笔订单摘要；仅本人订单（与运行时 user_id 一致）。"
+      enabled: true
+    - key: "list_user_orders"
+      name: "list_user_orders"
+      description: "查询当前用户订单列表第一页，固定最多 10 条（用户来自 MCP 运行时上下文）。"
       enabled: true
 
 kafka:

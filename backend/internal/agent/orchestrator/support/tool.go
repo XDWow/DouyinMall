@@ -153,8 +153,11 @@ func HydrateCurrentRefs(session *domain.Session) {
 		session.CurrentRefs.ProductID = id
 	}
 	if id := firstTrustedID(
-		ToolResultRecordFromSlots(session.Slots, "query_order"),
 		ToolResultRecordFromSlots(session.Slots, "get_order"),
+		ToolResultRecordFromSlots(session.Slots, "list_user_orders"),
+		ToolResultRecordFromSlots(session.Slots, "query_order"),
+		ToolResultMapFromSlots(session.Slots, "get_order"),
+		ToolResultMapFromSlots(session.Slots, "list_user_orders"),
 		ToolResultMapFromSlots(session.Slots, "query_order"),
 	); id != "" {
 		session.CurrentRefs.OrderID = id

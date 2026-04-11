@@ -325,11 +325,12 @@ func deriveSeckillFailResult(err error) gin.H {
 	}
 	msg := strings.ToLower(err.Error())
 	switch {
-	case strings.Contains(msg, "out of stock"):
+	case strings.Contains(msg, "out of stock"), strings.Contains(msg, "库存不足"):
 		return gin.H{"request_no": "", "status": "FAIL", "message": "OUT_OF_STOCK"}
-	case strings.Contains(msg, "duplicate"):
+	case strings.Contains(msg, "duplicate"), strings.Contains(msg, "重复秒杀"):
 		return gin.H{"request_no": "", "status": "FAIL", "message": "DUPLICATE"}
-	case strings.Contains(msg, "not started"), strings.Contains(msg, "offline"), strings.Contains(msg, "ended"):
+	case strings.Contains(msg, "not started"), strings.Contains(msg, "offline"), strings.Contains(msg, "ended"),
+		strings.Contains(msg, "未开始"), strings.Contains(msg, "下线"), strings.Contains(msg, "已结束"):
 		return gin.H{"request_no": "", "status": "FAIL", "message": "ACTIVITY_NOT_OPEN"}
 	default:
 		return nil

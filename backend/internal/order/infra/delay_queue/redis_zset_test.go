@@ -1,4 +1,4 @@
-package queue
+package delay_queue
 
 import (
 	"context"
@@ -127,5 +127,3 @@ func (s *stubOrderCache) ZRem(_ context.Context, key string, members ...string) 
 	}
 	return nil
 }
-
-

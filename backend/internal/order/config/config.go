@@ -34,7 +34,7 @@ type ServerConfig struct {
 	EtcdTTL int `yaml:"etcdTTL"`
 }
 
-// LoadConfig 浠庢枃浠跺姞杞介厤缃紝鐜鍙橀噺浼樺厛
+// LoadConfig 从 YAML 加载配置；环境变量可覆盖部分字段
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -46,7 +46,7 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// 鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢
+	// 环境变量覆盖
 	if dsn := os.Getenv("DB_DSN"); dsn != "" {
 		cfg.DB.DSN = dsn
 	}

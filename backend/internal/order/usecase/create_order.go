@@ -37,18 +37,18 @@ func NewCreateOrderUseCase(repo domain.OrderRepository, delayQueue domain.DelayQ
 
 func (uc *CreateOrderUseCase) Execute(ctx context.Context, cmd CreateOrderCmd) (int64, error) {
 	if cmd.UserID <= 0 {
-		return 0, errors.New("invalid user id")
+		return 0, errors.New("无效用户")
 	}
 	if len(cmd.Items) == 0 {
-		return 0, errors.New("order items are required")
+		return 0, errors.New("订单项为空")
 	}
 	if normalizeOrderKind(cmd.OrderKind) == domain.OrderKindSeckill && cmd.ActivityID <= 0 {
-		return 0, errors.New("seckill order requires activity id")
+		return 0, errors.New("秒杀订单的活动id为空")
 	}
 
 	order := toDomainOrder(cmd)
 	if err := uc.repo.Save(ctx, &order); err != nil {
-		uc.log.Error("淇濆瓨璁㈠崟澶辫触", logger.Error(err))
+		uc.log.Error("保存订单失败", logger.Error(err))
 		return 0, err
 	}
 
@@ -61,7 +61,7 @@ func (uc *CreateOrderUseCase) Execute(ctx context.Context, cmd CreateOrderCmd) (
 		defer cancel()
 
 		if err := uc.delayQueue.Enqueue(queueCtx, orderID, expireAt); err != nil {
-			uc.log.Warn("璁㈠崟瓒呮椂浠诲姟鍏ラ槦澶辫触",
+			uc.log.Warn("订单超时任务入队失败",
 				logger.Error(err),
 				logger.Int64("orderID", orderID))
 		}
@@ -116,5 +116,3 @@ func normalizeOrderKind(orderKind string) string {
 	}
 	return orderKind
 }
-
-

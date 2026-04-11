@@ -2,10 +2,10 @@ package db
 
 import "time"
 
-// 璁㈠崟閲囩敤涓讳粠琛ㄨ璁★細
-// orders 琛ㄥ瓨璁㈠崟绾т俊鎭紝
-// order_items 琛ㄥ瓨璁㈠崟涓晢鍝佹槑缁嗭紝
-// 浠ユ敮鎸?1:N 鍏崇郴銆佸璁°€佸璐︿笌鏈潵婕旇繘銆?
+// 订单采用主从表设计：
+// orders 存订单主信息；
+// order_items 存订单行商品明细；
+// 支持 1:N、审计、对账与后续演进。
 
 type OrderModel struct {
 	ID            int64 `gorm:"primaryKey;autoIncrement"`
@@ -20,7 +20,7 @@ type OrderModel struct {
 	PayableTotal  int64
 	DiscountTotal int64
 
-	// 鍦板潃
+	// 地址
 	Street  string
 	City    string
 	State   string `gorm:"index:idx_userID_status"`
@@ -30,7 +30,7 @@ type OrderModel struct {
 	CreatedAt time.Time `gorm:"index:idx_userID_createdAt,sort:desc"`
 	UpdatedAt time.Time
 	ExpiredAt time.Time `gorm:"index:idx_status_expiredAt,sort:asc"`
-	// ORM 鍏崇郴澹版槑锛屽叧绯诲瓧娈碉紝涓嶇湡姝ｈ惤搴?
+	// GORM：与 OrderItem 的一对多关联
 	Items []OrderItemModel `gorm:"foreignKey:OrderID"`
 }
 
