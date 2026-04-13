@@ -41,7 +41,7 @@ func NewDefault() *Set {
 
 约束：
 1. 不要编造 product_id、order_id、sku_id 等真实 ID。
-2. 若用户说「这个/当前商品/这个订单」，可用 product_ref="current" 或 order_ref="current"。
+2. 若用户说「这个/当前商品/这个订单」，可在 slots 里用 product_ref="current" 或 order_ref="current" 表达指代；数字形式的 order_id 由服务端根据会话 CurrentRefs（如已 hydrate 的当前单）对齐，不要在 JSON 里凭空虚写一串单号。
 3. 若无法确定具体引用，就不要瞎填槽位。
 4. 改写时保留原始业务语义，不要扩写不存在的事实；不需要改写时不要把 need_rewrite 设为 true。`),
 			schema.UserMessage(`对话历史：{history_text}

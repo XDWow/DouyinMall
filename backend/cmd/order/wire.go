@@ -56,7 +56,6 @@ func InitApp() *App {
 		grpc.NewOrderHandler,
 		ioc.InitGRPCServer,
 		newApp,
-		wire.Bind(new(job.BatchCancelOrderExecutor), new(*usecase.BatchCancelOrderUseCase)),
 	)
 
 	return nil

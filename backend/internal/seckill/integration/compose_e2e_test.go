@@ -90,8 +90,8 @@ func TestSeckillComposeEndToEnd(t *testing.T) {
 		resultResp, err = seckillClient.GetSeckillResult(pollCtx, &seckillv1.GetSeckillResultReq{
 			RequestNo: submitResp.GetRequestNo(),
 		})
-		return err == nil && resultResp.GetStatus() == "SUCCESS" && resultResp.GetOrderId() != 0
-	}, 20*time.Second, 500*time.Millisecond, "seckill request should finish successfully")
+		return err == nil && resultResp.GetStatus() == "QUALIFIED" && resultResp.GetOrderId() != 0
+	}, 20*time.Second, 500*time.Millisecond, "seckill should qualify with order id for payment")
 
 	orderResp, err := orderClient.GetOrder(ctx, &orderv1.GetOrderReq{OrderId: resultResp.GetOrderId()})
 	require.NoError(t, err)
@@ -325,5 +325,3 @@ func openKafkaProducer(t *testing.T) sarama.SyncProducer {
 
 	return producer
 }
-
-

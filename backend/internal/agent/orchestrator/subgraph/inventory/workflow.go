@@ -45,25 +45,13 @@ func cloneSlotsInv(input map[string]any) map[string]any {
 	return out
 }
 
-func inventoryCheckSlots() func(context.Context, struct{}) (invWire1, error) {
-	return func(ctx context.Context, _ struct{}) (invWire1, error) {
-		var slots map[string]any
-		var entities map[string]string
-		if err := domain.ProcessState(ctx, func(s *domain.State) error {
-			if s == nil {
-				return fmt.Errorf("state is nil")
-			}
-			slots = cloneSlotsInv(s.Session.Slots)
-			entities = s.Intent.Entities
-			globalnode.ApplyIntentFieldsForTools(slots, entities)
-			return nil
-		}); err != nil {
-			return invWire1{}, err
-		}
+func inventoryCheckSlots() func(context.Context, GraphInput) (invWire1, error) {
+	return func(_ context.Context, in GraphInput) (invWire1, error) {
+		slots := in.Slots
 		if slots == nil {
 			slots = map[string]any{}
 		}
-		missing := globalnode.RequiredMissingSlots(domain.IntentInventoryQuery, slots, entities, false)
+		missing := globalnode.RequiredMissingSlots(domain.IntentInventoryQuery, slots, in.Entities, false)
 		return invWire1{Slots: slots, MissingSlots: missing}, nil
 	}
 }

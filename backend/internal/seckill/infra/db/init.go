@@ -7,6 +7,7 @@ func InitTables(db *gorm.DB) error {
 		&SeckillActivity{},
 		&SeckillRequest{},
 		&SeckillOperation{},
+		&SeckillSuccess{},
 	)
 }
 

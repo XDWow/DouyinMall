@@ -91,7 +91,6 @@ func (p *GroupedWorkerPool) worker(workerID int) {
 }
 
 func (p *GroupedWorkerPool) Shutdown() {
-	// 浼橀泤鍏抽棴锛氬厛閫氱煡锛屽啀绛夊緟鍒版墍鏈夊崗绋嬬湡鐨勯€€鍑?
 	p.cancel()
 	p.wg.Wait()
 }

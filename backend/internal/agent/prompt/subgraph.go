@@ -4,7 +4,7 @@ package prompt
 // 具体可调用的工具与技能由运行时绑定（ToolNames / SkillNames + Registry），不在此逐一点名。
 
 const (
-	SubgraphSystemOrderQuery = "你是订单与物流相关客服。以可查得的事实作答，简洁礼貌；证据不足时如实说明。"
+	SubgraphSystemOrderQuery = "你是订单与物流相关客服。简洁礼貌，以工具返回为准。order_ref 等指代由系统对齐 CurrentRefs，勿在回复里编造数字单号；fetch_skill 仅作口径参考。"
 
 	SubgraphSystemInventory = "你是库存相关客服。以可查得的事实作答，明确具体；证据不足时如实说明。"
 

@@ -32,7 +32,6 @@ type reState struct {
 	Message         string
 	Intent          domain.Intent
 	AwaitingConfirm bool
-	Recorder        domain.ToolExecutionSink
 	MissingSlots    []string
 	NeedHandoff     bool
 	HandoffReason   string
@@ -42,27 +41,17 @@ type reState struct {
 	ConfirmStatus   string
 }
 
-func reInitSlots(ctx context.Context, _ struct{}) (reState, error) {
-	var s reState
-	if err := domain.ProcessState(ctx, func(st *domain.State) error {
-		if st == nil {
-			return fmt.Errorf("state is nil")
-		}
-		s.Message = st.Input.Message
-		s.Intent = st.Session.Intent
-		s.AwaitingConfirm = st.Session.AwaitingConfirm
-		s.Recorder = st.Recorder
-		slots := cloneSlotsRE(st.Session.Slots)
-		if slots == nil {
-			slots = map[string]any{}
-		}
-		globalnode.ApplyIntentFieldsForTools(slots, st.Intent.Entities)
-		s.Slots = slots
-		s.MissingSlots = globalnode.RequiredMissingSlots(domain.IntentReturnExchangeApply, slots, st.Intent.Entities, s.AwaitingConfirm)
-		return nil
-	}); err != nil {
-		return reState{}, err
+func reInitSlots(_ context.Context, in GraphInput) (reState, error) {
+	s := reState{
+		Message:         in.Message,
+		Intent:          in.Intent,
+		AwaitingConfirm: in.AwaitingConfirm,
+		Slots:           in.Slots,
 	}
+	if s.Slots == nil {
+		s.Slots = map[string]any{}
+	}
+	s.MissingSlots = globalnode.RequiredMissingSlots(domain.IntentReturnExchangeApply, s.Slots, in.IntentEntities, s.AwaitingConfirm)
 	return s, nil
 }
 
@@ -107,9 +96,12 @@ func reRunQuery(queryNode *aftersalenode.ReturnExchangeQueryNode, toolExec *shar
 				return reState{}, execErr
 			}
 			s.ToolMessages = append(s.ToolMessages, messages...)
-			if s.Recorder != nil {
-				support.HydrateToolResultsIntoSlots(s.Slots, s.Recorder.Snapshot())
-			}
+			_ = domain.ProcessState(ctx, func(st *domain.State) error {
+				if st != nil && st.Recorder != nil {
+					support.HydrateToolResultsIntoSlots(s.Slots, st.Recorder.Snapshot())
+				}
+				return nil
+			})
 		}
 		return s, nil
 	}
@@ -193,9 +185,12 @@ func reSubmitToolsAndHydrate(registry *agenttool.Registry, toolExec *sharednode.
 				return reState{}, execErr
 			}
 			s.ToolMessages = append(s.ToolMessages, messages...)
-			if s.Recorder != nil {
-				support.HydrateToolResultsIntoSlots(s.Slots, s.Recorder.Snapshot())
-			}
+			_ = domain.ProcessState(ctx, func(st *domain.State) error {
+				if st != nil && st.Recorder != nil {
+					support.HydrateToolResultsIntoSlots(s.Slots, st.Recorder.Snapshot())
+				}
+				return nil
+			})
 		}
 		return s, nil
 	}

@@ -50,7 +50,7 @@ func (h *PaymentHandler) NativePrepay(ctx context.Context, req *paymentv1.Native
 
 func (h *PaymentHandler) GetPayment(ctx context.Context, req *paymentv1.GetPaymentRequest) (*paymentv1.GetPaymentResponse, error) {
 	if req.GetBizTradeNo() == "" {
-		return nil, errors.New("biz_trade_no is empty")
+		return nil, errors.New("业务交易号不能为空")
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -65,7 +65,7 @@ func (h *PaymentHandler) GetPayment(ctx context.Context, req *paymentv1.GetPayme
 
 func (h *PaymentHandler) ConfirmPayment(ctx context.Context, req *paymentv1.ConfirmPaymentRequest) (*paymentv1.ConfirmPaymentResponse, error) {
 	if req.GetBizTradeNo() == "" {
-		return nil, errors.New("biz_trade_no is empty")
+		return nil, errors.New("业务交易号不能为空")
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -95,5 +95,3 @@ func toProtoPaymentStatus(s domain.PaymentStatus) paymentv1.PaymentStatus {
 		return paymentv1.PaymentStatus_PaymentStatusUnknown
 	}
 }
-
-

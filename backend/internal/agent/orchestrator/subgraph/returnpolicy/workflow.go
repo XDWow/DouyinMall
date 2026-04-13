@@ -2,68 +2,20 @@ package returnpolicy
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
-	subgraphmeta "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/metadata"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/prompt"
 )
 
-// rpWire L1 / RAG / 模型阶段共用载体。
-type rpWire struct {
-	TenantID     string
-	UserID       int64
-	SessionID    string
-	TraceID      string
-	CheckpointID string
-	RawQuery     string
-	History      []*schema.Message
-	Intent       string
-	SkillNames   []string
-
-	CacheHit   bool
-	HitLevel   string
-	Response   *domain.ChatResult
-	L1Final    string
-	Query      string
-	Documents  []*schema.Document
-	AgentFinal string
-}
-
-func loadReturnPolicyWire(ctx context.Context, skills *agentskill.Registry) (rpWire, error) {
-	var w rpWire
-	err := domain.ProcessState(ctx, func(s *domain.State) error {
-		if s == nil {
-			return fmt.Errorf("state is nil")
-		}
-		w.TenantID = s.Session.TenantID
-		w.UserID = s.Input.UserID
-		w.SessionID = s.Session.SessionID
-		w.TraceID = s.TraceID
-		w.CheckpointID = s.Checkpoint
-		w.RawQuery = s.Session.RawQuery
-		w.History = append([]*schema.Message(nil), s.Session.Messages...)
-		w.Intent = string(s.Session.Intent)
-		w.SkillNames = subgraphmeta.FilteredSkillNames(s.Session.Route, skills)
-		return nil
-	})
-	return w, err
-}
-
-func returnPolicyL1Try(l1 *globalnode.L1SemanticCacheNode, skills *agentskill.Registry) func(context.Context, struct{}) (rpWire, error) {
-	return func(ctx context.Context, _ struct{}) (rpWire, error) {
-		w, err := loadReturnPolicyWire(ctx, skills)
-		if err != nil {
-			return rpWire{}, err
-		}
+func returnPolicyL1Try(l1 *globalnode.L1SemanticCacheNode) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, w GraphInput) (GraphInput, error) {
 		if l1 == nil {
 			return w, nil
 		}
@@ -83,7 +35,7 @@ func returnPolicyL1Try(l1 *globalnode.L1SemanticCacheNode, skills *agentskill.Re
 			AllowRead:    true,
 		})
 		if cacheErr != nil {
-			return rpWire{}, cacheErr
+			return GraphInput{}, cacheErr
 		}
 		if cacheResult != nil && cacheResult.CacheHit {
 			w.CacheHit = true
@@ -95,14 +47,14 @@ func returnPolicyL1Try(l1 *globalnode.L1SemanticCacheNode, skills *agentskill.Re
 	}
 }
 
-func branchAfterReturnPolicyL1(_ context.Context, in rpWire) (string, error) {
+func branchAfterReturnPolicyL1(_ context.Context, in GraphInput) (string, error) {
 	if in.CacheHit {
 		return "ReturnPolicyL1OutputNode", nil
 	}
 	return "ReturnPolicyRAGNode", nil
 }
 
-func buildReturnPolicyL1Output(_ context.Context, in rpWire) (Output, error) {
+func buildReturnPolicyL1Output(_ context.Context, in GraphInput) (Output, error) {
 	return Output{
 		CacheHit:    true,
 		HitLevel:    in.HitLevel,
@@ -111,8 +63,8 @@ func buildReturnPolicyL1Output(_ context.Context, in rpWire) (Output, error) {
 	}, nil
 }
 
-func returnPolicyRAG(rag *ragnode.RAGNode) func(context.Context, rpWire) (rpWire, error) {
-	return func(ctx context.Context, in rpWire) (rpWire, error) {
+func returnPolicyRAG(rag *ragnode.RAGNode) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, in GraphInput) (GraphInput, error) {
 		if rag == nil {
 			return in, nil
 		}
@@ -122,7 +74,7 @@ func returnPolicyRAG(rag *ragnode.RAGNode) func(context.Context, rpWire) (rpWire
 			Intent:  in.Intent,
 		})
 		if ragErr != nil {
-			return rpWire{}, ragErr
+			return GraphInput{}, ragErr
 		}
 		if ragResult != nil {
 			in.Query = ragResult.Query
@@ -132,8 +84,8 @@ func returnPolicyRAG(rag *ragnode.RAGNode) func(context.Context, rpWire) (rpWire
 	}
 }
 
-func returnPolicyModelAgent(agent *sharednode.SubgraphAgent) func(context.Context, rpWire) (rpWire, error) {
-	return func(ctx context.Context, in rpWire) (rpWire, error) {
+func returnPolicyModelAgent(agent *sharednode.SubgraphAgent) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, in GraphInput) (GraphInput, error) {
 		if agent == nil || !agent.Enabled() {
 			return in, nil
 		}
@@ -153,7 +105,7 @@ func returnPolicyModelAgent(agent *sharednode.SubgraphAgent) func(context.Contex
 	}
 }
 
-func buildReturnPolicyFinalOutput(_ context.Context, in rpWire) (Output, error) {
+func buildReturnPolicyFinalOutput(_ context.Context, in GraphInput) (Output, error) {
 	out := Output{
 		Query:       in.Query,
 		Documents:   append([]*schema.Document(nil), in.Documents...),

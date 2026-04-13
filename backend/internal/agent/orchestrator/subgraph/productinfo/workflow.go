@@ -3,71 +3,21 @@ package productinfo
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	productnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/product"
 	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
-	subgraphmeta "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/metadata"
 	productinfometa "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/productinfo/metadata"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/toolexec"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/prompt"
 )
-
-// piWire 商品子图内流水线载体（首节点从 State 快照填充）。
-type piWire struct {
-	TenantID     string
-	UserID       int64
-	SessionID    string
-	TraceID      string
-	CheckpointID string
-	RawQuery     string
-	History      []*schema.Message
-	Intent       string
-	SkillNames   []string
-	IntentFields map[string]string // 本回合 s.Intent.Entities 的拷贝，用于拼工具入参
-
-	CacheHit     bool
-	HitLevel     string
-	Response     *domain.ChatResult
-	L1Final      string
-	Slots        map[string]any
-	MissingSlots []string
-	Documents    []*schema.Document
-	DocsText     string
-	AgentFinal   string
-	AgentTools   []*schema.Message
-}
-
-func loadProductInfoWire(ctx context.Context, skills *agentskill.Registry) (piWire, error) {
-	var w piWire
-	err := domain.ProcessState(ctx, func(s *domain.State) error {
-		if s == nil {
-			return fmt.Errorf("state is nil")
-		}
-		w.TenantID = s.Session.TenantID
-		w.UserID = s.Input.UserID
-		w.SessionID = s.Session.SessionID
-		w.TraceID = s.TraceID
-		w.CheckpointID = s.Checkpoint
-		w.Slots = cloneSlotsPI(s.Session.Slots)
-		w.RawQuery = s.Session.RawQuery
-		w.History = append([]*schema.Message(nil), s.Session.Messages...)
-		w.Intent = string(s.Session.Intent)
-		w.SkillNames = subgraphmeta.FilteredSkillNames(s.Session.Route, skills)
-		w.IntentFields = s.Intent.Entities
-		return nil
-	})
-	return w, err
-}
 
 func cloneSlotsPI(input map[string]any) map[string]any {
 	if len(input) == 0 {
@@ -80,12 +30,8 @@ func cloneSlotsPI(input map[string]any) map[string]any {
 	return out
 }
 
-func productInfoL1Try(l1 *globalnode.L1SemanticCacheNode, skills *agentskill.Registry) func(context.Context, struct{}) (piWire, error) {
-	return func(ctx context.Context, _ struct{}) (piWire, error) {
-		w, err := loadProductInfoWire(ctx, skills)
-		if err != nil {
-			return piWire{}, err
-		}
+func productInfoL1Try(l1 *globalnode.L1SemanticCacheNode) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, w GraphInput) (GraphInput, error) {
 		if l1 == nil {
 			return w, nil
 		}
@@ -105,35 +51,38 @@ func productInfoL1Try(l1 *globalnode.L1SemanticCacheNode, skills *agentskill.Reg
 			AllowRead:    true,
 		})
 		if err != nil {
-			return piWire{}, err
+			return GraphInput{}, err
 		}
 		if res != nil && res.CacheHit {
 			w.CacheHit = true
 			w.HitLevel = res.HitLevel
-			w.Response = res.Response
+			if res.Response != nil {
+				r := *res.Response
+				w.CachedResponse = &r
+			}
 			w.L1Final = res.FinalAnswer
 		}
 		return w, nil
 	}
 }
 
-func branchAfterProductL1(_ context.Context, in piWire) (string, error) {
+func branchAfterProductL1(_ context.Context, in GraphInput) (string, error) {
 	if in.CacheHit {
 		return "ProductInfoL1OutputNode", nil
 	}
 	return "ProductInfoPrepareSlotsNode", nil
 }
 
-func buildProductInfoL1Output(_ context.Context, in piWire) (Output, error) {
+func buildProductInfoL1Output(_ context.Context, in GraphInput) (Output, error) {
 	return Output{
 		CacheHit:    true,
 		HitLevel:    in.HitLevel,
-		Response:    in.Response,
+		Response:    in.CachedResponse,
 		FinalAnswer: in.L1Final,
 	}, nil
 }
 
-func productInfoPrepareSlots(_ context.Context, in piWire) (piWire, error) {
+func productInfoPrepareSlots(_ context.Context, in GraphInput) (GraphInput, error) {
 	slots := cloneSlotsPI(in.Slots)
 	if slots == nil {
 		slots = map[string]any{}
@@ -145,14 +94,14 @@ func productInfoPrepareSlots(_ context.Context, in piWire) (piWire, error) {
 	return in, nil
 }
 
-func branchAfterProductSlotCheck(_ context.Context, in piWire) (string, error) {
+func branchAfterProductSlotCheck(_ context.Context, in GraphInput) (string, error) {
 	if len(in.MissingSlots) > 0 {
 		return "ProductInfoMissingSlotsNode", nil
 	}
 	return "ProductInfoRAGNode", nil
 }
 
-func buildProductInfoMissingOutput(_ context.Context, in piWire) (Output, error) {
+func buildProductInfoMissingOutput(_ context.Context, in GraphInput) (Output, error) {
 	m := in.MissingSlots[0]
 	return Output{
 		FinalAnswer:  globalnode.AskMessageForMissingSlot(domain.IntentProductInfo, m),
@@ -163,8 +112,8 @@ func buildProductInfoMissingOutput(_ context.Context, in piWire) (Output, error)
 	}, nil
 }
 
-func productInfoRAG(rag *ragnode.RAGNode) func(context.Context, piWire) (piWire, error) {
-	return func(ctx context.Context, in piWire) (piWire, error) {
+func productInfoRAG(rag *ragnode.RAGNode) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, in GraphInput) (GraphInput, error) {
 		if rag == nil || !support.IsAdvisoryProductInfo(in.RawQuery) {
 			return in, nil
 		}
@@ -174,7 +123,7 @@ func productInfoRAG(rag *ragnode.RAGNode) func(context.Context, piWire) (piWire,
 			Intent:  in.Intent,
 		})
 		if ragErr != nil {
-			return piWire{}, ragErr
+			return GraphInput{}, ragErr
 		}
 		if ragResult != nil {
 			in.Documents = append([]*schema.Document(nil), ragResult.Documents...)
@@ -184,8 +133,8 @@ func productInfoRAG(rag *ragnode.RAGNode) func(context.Context, piWire) (piWire,
 	}
 }
 
-func productInfoModelAgent(agent *sharednode.SubgraphAgent) func(context.Context, piWire) (piWire, error) {
-	return func(ctx context.Context, in piWire) (piWire, error) {
+func productInfoModelAgent(agent *sharednode.SubgraphAgent) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, in GraphInput) (GraphInput, error) {
 		if agent == nil || !agent.Enabled() {
 			return in, nil
 		}
@@ -208,14 +157,14 @@ func productInfoModelAgent(agent *sharednode.SubgraphAgent) func(context.Context
 	}
 }
 
-func branchAfterProductAgent(_ context.Context, in piWire) (string, error) {
+func branchAfterProductAgent(_ context.Context, in GraphInput) (string, error) {
 	if strings.TrimSpace(in.AgentFinal) != "" {
 		return "ProductInfoAgentAnswerNode", nil
 	}
 	return "ProductInfoRulePlanNode", nil
 }
 
-func buildProductInfoAgentOutput(ctx context.Context, in piWire) (Output, error) {
+func buildProductInfoAgentOutput(ctx context.Context, in GraphInput) (Output, error) {
 	_ = domain.ProcessState(ctx, func(s *domain.State) error {
 		if s != nil && s.Recorder != nil {
 			support.HydrateToolResultsIntoSlots(in.Slots, s.Recorder.Snapshot())
@@ -234,8 +183,8 @@ func buildProductInfoAgentOutput(ctx context.Context, in piWire) (Output, error)
 func productInfoRulePlanAndTools(
 	node *productnode.ProductInfoNode,
 	toolExec *sharednode.ToolExecNode,
-) func(context.Context, piWire) (Output, error) {
-	return func(ctx context.Context, in piWire) (Output, error) {
+) func(context.Context, GraphInput) (Output, error) {
+	return func(ctx context.Context, in GraphInput) (Output, error) {
 		result, err := node.Invoke(ctx, productnode.ProductInfoInput{
 			Slots:    in.Slots,
 			RawQuery: in.RawQuery,

@@ -83,8 +83,6 @@ func (uc *NativePrePaymentUC) Execute(ctx context.Context, cmd PrePaymentCmd) (s
 
 type PrePaymentCmd struct {
 	Amt         domain.Amount
-	BizTradeNo  string
+	BizTradeNo  string // 业务方传，比如 orderID
 	Description string
 }
-
-

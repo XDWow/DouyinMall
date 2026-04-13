@@ -20,6 +20,9 @@ func NewOrderReadNode(registryHasTool orchestratorshared.ToolRegistryCheck) *Ord
 	return &OrderReadNode{RegistryHasTool: registryHasTool}
 }
 
+// Invoke：slots 中有合法正整数 order_id 时计划 get_order；否则在具备列表类工具时计划 list_user_orders 或 query_order。
+// order_id 来自主图槽位合并（含 CurrentRefs）及意图 entities 中的数字字段；order_ref=current 等由 global.ResolveOrderRefFromTrustedRefs 用 CurrentRefs 解析进副本槽位。
+// 缺参门禁与追问文案由主图/global 槽位逻辑负责；本节点只根据已有槽位与工具可用性生成 ToolCallPlan。
 func (n *OrderReadNode) Invoke(ctx context.Context, input OrderReadInput) (*orchestratorshared.ToolPlanResult, error) {
 	result := &orchestratorshared.ToolPlanResult{ReadOnly: true}
 	hasGet := n.RegistryHasTool != nil && n.RegistryHasTool(ctx, "get_order")

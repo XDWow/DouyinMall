@@ -45,25 +45,13 @@ func cloneSlotsCart(input map[string]any) map[string]any {
 	return out
 }
 
-func addToCartCheckSlots() func(context.Context, struct{}) (cartWire1, error) {
-	return func(ctx context.Context, _ struct{}) (cartWire1, error) {
-		var slots map[string]any
-		var entities map[string]string
-		if err := domain.ProcessState(ctx, func(s *domain.State) error {
-			if s == nil {
-				return fmt.Errorf("state is nil")
-			}
-			slots = cloneSlotsCart(s.Session.Slots)
-			entities = s.Intent.Entities
-			globalnode.ApplyIntentFieldsForTools(slots, entities)
-			return nil
-		}); err != nil {
-			return cartWire1{}, err
-		}
+func addToCartCheckSlots() func(context.Context, GraphInput) (cartWire1, error) {
+	return func(_ context.Context, in GraphInput) (cartWire1, error) {
+		slots := in.Slots
 		if slots == nil {
 			slots = map[string]any{}
 		}
-		missing := globalnode.RequiredMissingSlots(domain.IntentAddToCart, slots, entities, false)
+		missing := globalnode.RequiredMissingSlots(domain.IntentAddToCart, slots, in.Entities, false)
 		return cartWire1{Slots: slots, MissingSlots: missing}, nil
 	}
 }

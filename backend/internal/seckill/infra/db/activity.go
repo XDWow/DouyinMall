@@ -24,8 +24,8 @@ func (SeckillActivity) TableName() string { return "seckill_activity" }
 type SeckillRequest struct {
 	ID         int64  `gorm:"primaryKey;autoIncrement"`
 	RequestNo  string `gorm:"type:varchar(64);uniqueIndex"`
-	ActivityID int64  `gorm:"uniqueIndex:uk_activity_user"`
-	UserID     int64  `gorm:"uniqueIndex:uk_activity_user"`
+	ActivityID int64  `gorm:"index:idx_seckill_request_activity_user"`
+	UserID     int64  `gorm:"index:idx_seckill_request_activity_user"`
 	Quantity   int32
 	Status     string `gorm:"type:varchar(32);index"`
 	OrderID    int64

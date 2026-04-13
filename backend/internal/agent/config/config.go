@@ -5,6 +5,7 @@ type Config struct {
 	HTTP          HTTPConfig          `mapstructure:"http"`
 	DB            DBConfig            `mapstructure:"db"`
 	Redis         RedisConfig         `mapstructure:"redis"`
+	Kafka         KafkaConfig         `mapstructure:"kafka"`
 	Etcd          EtcdConfig          `mapstructure:"etcd"`
 	MCP           MCPConfig           `mapstructure:"mcp"`
 	Skill         SkillConfig         `mapstructure:"skill"`
@@ -43,6 +44,15 @@ type RedisConfig struct {
 	Addr     string `mapstructure:"addr"`
 	Password string `mapstructure:"password"`
 	DB       int    `mapstructure:"db"`
+}
+
+// KafkaConfig 会话异步落库等 MQ；未启用时可留空。
+type KafkaConfig struct {
+	Enabled               bool     `mapstructure:"enabled"`
+	Brokers               []string `mapstructure:"brokers"`
+	TopicSessionRound     string   `mapstructure:"topic_session_round"`
+	ConsumerGroup         string   `mapstructure:"consumer_group"`
+	SessionRoundBatchSize int      `mapstructure:"session_round_batch_size"`
 }
 
 type EtcdConfig struct {

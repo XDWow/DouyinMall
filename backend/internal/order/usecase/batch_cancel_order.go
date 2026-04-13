@@ -43,6 +43,8 @@ func (uc *BatchCancelOrderUseCase) Execute(ctx context.Context, orderIDs []int64
 	var cancelIDs []int64
 
 	if err := uc.tx.Tx(ctx, func(ctx context.Context) error {
+		// 超时取消是后台兜底任务，不抢支付成功链路的锁。
+		// 先普通读出候选订单，再以条件更新是否成功作为“真的取消成功”的判定依据。
 		orders, err := uc.orderRepo.FindByIDs(ctx, orderIDs)
 		if err != nil {
 			return err

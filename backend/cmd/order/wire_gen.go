@@ -42,7 +42,7 @@ func InitApp() *App {
 	server := ioc.InitGRPCServer(orderHandler)
 	paymentserviceClient := ioc.InitPaymentClient()
 	batchCancelOrderUseCase := usecase.NewBatchCancelOrderUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1)
-	dispatchOrderTimeoutJob := job.NewDispatchOrderTimeoutJob(delayQueue, paymentserviceClient, orderRepository, outboxRepository, saramaProducer, txManager, batchCancelOrderUseCase, loggerV1)
+	dispatchOrderTimeoutJob := job.NewDispatchOrderTimeoutJob(delayQueue, paymentserviceClient, orderRepository, batchCancelOrderUseCase, changeOrderStatusUseCase, loggerV1)
 	checkExpiredJob := job.NewCheckExpiredJob(orderRepository, paymentserviceClient, batchCancelOrderUseCase, loggerV1)
 	outboxWorkerJob := job.NewOutboxWorkerJob(outboxRepository, saramaProducer, loggerV1)
 	cron := ioc.InitJobs(dispatchOrderTimeoutJob, checkExpiredJob, outboxWorkerJob, loggerV1)

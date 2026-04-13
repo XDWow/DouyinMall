@@ -7,46 +7,36 @@ import (
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
-	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
+	"github.com/XDWow/DouyinMall/backend/internal/order/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 	paymentv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1"
 	paymentservice "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1/paymentservice"
 )
 
 type DispatchOrderTimeoutJob struct {
-	delayQueue    domain.DelayQueue
-	paymentCli    paymentservice.Client
-	orderRepo     domain.OrderRepository
-	outboxRepo    domain.OutboxRepository
-	producer      mq.SaramaProducer
-	tx            domain.TxManager
-	batchCancelUC BatchCancelOrderExecutor
-	l             logger.LoggerV1
-}
-
-type BatchCancelOrderExecutor interface {
-	Execute(ctx context.Context, orderIDs []int64) error
+	delayQueue          domain.DelayQueue
+	paymentCli          paymentservice.Client
+	orderRepo           domain.OrderRepository
+	batchCancelUC       *usecase.BatchCancelOrderUseCase
+	changeOrderStatusUC *usecase.ChangeOrderStatusUseCase
+	l                   logger.LoggerV1
 }
 
 func NewDispatchOrderTimeoutJob(
 	delayQueue domain.DelayQueue,
 	paymentCli paymentservice.Client,
 	orderRepo domain.OrderRepository,
-	outboxRepo domain.OutboxRepository,
-	producer mq.SaramaProducer,
-	tx domain.TxManager,
-	batchCancelUC BatchCancelOrderExecutor,
+	batchCancelUC *usecase.BatchCancelOrderUseCase,
+	changeOrderStatusUC *usecase.ChangeOrderStatusUseCase,
 	l logger.LoggerV1,
 ) *DispatchOrderTimeoutJob {
 	return &DispatchOrderTimeoutJob{
-		delayQueue:    delayQueue,
-		paymentCli:    paymentCli,
-		orderRepo:     orderRepo,
-		outboxRepo:    outboxRepo,
-		producer:      producer,
-		tx:            tx,
-		batchCancelUC: batchCancelUC,
-		l:             l,
+		delayQueue:          delayQueue,
+		paymentCli:          paymentCli,
+		orderRepo:           orderRepo,
+		batchCancelUC:       batchCancelUC,
+		changeOrderStatusUC: changeOrderStatusUC,
+		l:                   l,
 	}
 }
 
@@ -120,62 +110,20 @@ func (j *DispatchOrderTimeoutJob) shouldCancelDueOrder(ctx context.Context, orde
 		return false, err
 	}
 	if status == paymentv1.PaymentStatus_PaymentStatusSuccess {
-		if err := j.syncPaidOrder(ctx, &order); err != nil {
+		_, err := j.changeOrderStatusUC.Execute(ctx, usecase.ChangeOrderStatusCmd{
+			OrderID: order.ID,
+			Action:  domain.OrderActionPay,
+		})
+		if err != nil {
+			if errors.Is(err, domain.ErrInvalidStatusTransition) {
+				return false, nil
+			}
 			return false, err
 		}
 		return false, nil
 	}
 
 	return true, nil
-}
-
-// syncPaidOrder 支付已成功：把本地订单更新为 PAID 并追加 outbox 状态事件。
-func (j *DispatchOrderTimeoutJob) syncPaidOrder(ctx context.Context, order *domain.Order) error {
-	paidOrder := *order
-	paidOrder.Status = domain.OrderStatusPaid
-	event := domain.BuildOrderStatusUpdateEvent(&paidOrder)
-
-	var outboxID int64
-	err := j.tx.Tx(ctx, func(ctx context.Context) error {
-		if err := j.orderRepo.UpdateStatus(ctx, order.ID, domain.OrderStatusCreated, domain.OrderStatusPaid); err != nil {
-			if errors.Is(err, domain.ErrRecordNotFound) {
-				return nil
-			}
-			return err
-		}
-		var addErr error
-		outboxID, addErr = j.outboxRepo.Add(ctx, domain.EventTypeOrderStatusChanged, event)
-		return addErr
-	})
-	if err != nil {
-		return err
-	}
-	if outboxID == 0 {
-		return nil
-	}
-
-	go j.sendStatusEvent(outboxID, event)
-	return nil
-}
-
-func (j *DispatchOrderTimeoutJob) sendStatusEvent(outboxID int64, event domain.OrderStatusUpdateEvent) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if err := j.producer.SendMessage(ctx, event); err != nil {
-		j.l.Error("发送订单状态变更事件失败",
-			logger.Error(err),
-			logger.Int64("orderID", event.OrderID),
-			logger.Int64("outboxID", outboxID))
-		return
-	}
-
-	if err := j.outboxRepo.MarkSent(ctx, outboxID); err != nil {
-		j.l.Error("标记 outbox 已发送失败",
-			logger.Error(err),
-			logger.Int64("orderID", event.OrderID),
-			logger.Int64("outboxID", outboxID))
-	}
 }
 
 func (j *DispatchOrderTimeoutJob) confirmPayment(ctx context.Context, orderID int64) (paymentv1.PaymentStatus, error) {

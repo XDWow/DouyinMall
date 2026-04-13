@@ -5,9 +5,7 @@ import (
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
-	"github.com/cloudwego/eino/schema"
 
-	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	fallbacknode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/fallback"
@@ -15,15 +13,6 @@ import (
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 )
-
-type Output struct {
-	CacheHit    bool
-	HitLevel    string
-	Response    *domain.ChatResult
-	FinalAnswer string
-	Query       string
-	Documents   []*schema.Document
-}
 
 func Build(
 	_ context.Context,
@@ -36,9 +25,9 @@ func Build(
 	maxAnswerTokens int,
 ) (compose.AnyGraph, error) {
 	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, maxAnswerTokens)
-	g := compose.NewGraph[struct{}, Output]()
+	g := compose.NewGraph[GraphInput, Output]()
 
-	if err := g.AddLambdaNode("FallbackL1TryNode", compose.InvokableLambda(fallbackInit(l1Cache, skills)),
+	if err := g.AddLambdaNode("FallbackL1TryNode", compose.InvokableLambda(fallbackInit(l1Cache)),
 		compose.WithNodeName("FallbackL1TryNode")); err != nil {
 		return nil, err
 	}

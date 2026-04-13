@@ -52,5 +52,3 @@ type OrderItemModel struct {
 func (OrderItemModel) TableName() string {
 	return "order_items"
 }
-
-

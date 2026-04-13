@@ -17,23 +17,21 @@ type AsyncHandler[T any] struct {
 }
 
 func (h AsyncHandler[T]) Setup(session sarama.ConsumerGroupSession) error {
-	// 鍟ヤ篃涓嶅共
 	return nil
 }
 
 func (h AsyncHandler[T]) Cleanup(session sarama.ConsumerGroupSession) error {
-	/// 鍟ヤ篃涓嶅共
 	return nil
 }
 
-// 寮傛娑堣垂锛屾壒閲忔彁浜?
+// ConsumeClaim 异步消费、批量提交 offset：先在一段时间窗口内收集一批消息，再 errgroup 并发处理，最后统一 MarkMessage。
 func (h AsyncHandler[T]) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	ch := claim.Messages()
 	batchsize := h.batchsize
 	for {
 		var eg errgroup.Group
 		msgs := make([]*sarama.ConsumerMessage, 0, batchsize)
-		// 闃叉涓€鐩村噾涓嶅涓€鎵?鏃犳硶鎻愪氦
+		// 防止一直凑不够一批导致无法提交 offset。
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		done := false
 		for i := 0; i < batchsize && !done; i++ {
@@ -41,29 +39,24 @@ func (h AsyncHandler[T]) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 			case <-ctx.Done():
 				done = true
 			case msg, ok := <-ch:
-				if !ok { // channel 琚叧闂簡
+				if !ok {
 					cancel()
 					return nil
 				}
 				msgs = append(msgs, msg)
-				// 寮傛澶勭悊娑堟伅
 				eg.Go(func() error {
 					var err error
 					var t T
 					if err = json.Unmarshal(msg.Value, &t); err != nil {
-						// 消息格式都不对，没啥好处理的
-						// 但是也不能直接返回，在线上的时候要继续处理下去
 						h.l.Error("反序列化消息体失败",
 							logger.String("topic", msg.Topic),
 							logger.Int32("partition", msg.Partition),
 							logger.Int64("offset", msg.Offset),
-							// 这里也可以考虑打印 msg.Value，但是有些时候 msg 本身也包含敏感数据
 							logger.Error(err))
-						// 不中断，继续下一个
 						return nil
 					}
 
-					for i := 0; i < 3; i++ { // 重试机制
+					for i := 0; i < 3; i++ {
 						err = h.fn(msg, t)
 						if err == nil {
 							break
@@ -75,7 +68,8 @@ func (h AsyncHandler[T]) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 							logger.Int32("partition", msg.Partition),
 							logger.Int64("offset", msg.Offset))
 					}
-					return nil // 蹇界暐閿欒锛屽皯涓€涓鏁版病鍏崇郴
+					// 忽略错误，避免阻塞 errgroup；统计上可再补 metric。
+					return nil
 				})
 			}
 		}
@@ -87,7 +81,7 @@ func (h AsyncHandler[T]) ConsumeClaim(session sarama.ConsumerGroupSession, claim
 	}
 }
 
-// 浼犲叆瀹炵幇濂界殑鑷畾涔?consume
+// NewAsyncHandler 构造异步 Handler；batchsize 为每批最多拉取条数（再并发处理）。
 func NewAsyncHandler[T any](l logger.LoggerV1, consume func(msg *sarama.ConsumerMessage, t T) error, batchsize int) *AsyncHandler[T] {
 	return &AsyncHandler[T]{
 		l:         l,

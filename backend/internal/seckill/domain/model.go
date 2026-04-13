@@ -11,16 +11,22 @@ const (
 
 const (
 	RequestStatusProcessing = "PROCESSING"
-	RequestStatusSuccess    = "SUCCESS"
-	RequestStatusFail       = "FAIL"
+	// RequestStatusQualified 已抢到资格：创单成功，待支付（轮询到此可停，转支付/订单域）。
+	RequestStatusQualified = "QUALIFIED"
+	RequestStatusFail      = "FAIL"
+	// RequestStatusLegacySuccess 历史库中可能仍为 SUCCESS，仅用于关单补偿等兼容。
+	RequestStatusLegacySuccess = "SUCCESS"
 )
 
 const (
-	FailReasonOutOfStock      = "OUT_OF_STOCK"
-	FailReasonCreateOrderFail = "CREATE_ORDER_FAIL"
-	FailReasonDuplicate       = "DUPLICATE"
-	FailReasonActivityMissing = "ACTIVITY_NOT_FOUND"
-	FailReasonActivityNotOpen = "ACTIVITY_NOT_OPEN"
+	FailReasonOutOfStock           = "OUT_OF_STOCK"
+	FailReasonCreateOrderFail      = "CREATE_ORDER_FAIL"
+	FailReasonDuplicate            = "DUPLICATE"
+	FailReasonUserAlreadySucceeded = "USER_ALREADY_SUCCEEDED"
+	FailReasonActivityMissing      = "ACTIVITY_NOT_FOUND"
+	FailReasonActivityNotOpen      = "ACTIVITY_NOT_OPEN"
+	FailReasonOrderCanceled        = "ORDER_CANCELED"
+	FailReasonOrderRefunded        = "ORDER_REFUNDED"
 )
 
 type Activity struct {
@@ -72,5 +78,3 @@ type Event struct {
 	SeckillPrice int64 `json:"seckill_price"`
 	Quantity     int32 `json:"quantity"`
 }
-
-

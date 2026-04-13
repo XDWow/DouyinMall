@@ -28,7 +28,7 @@ func InitApp() *App {
 	nativePrePaymentUC := ioc.InitNativePrePaymentUC(paymentRepository, loggerV1, nativeApiService)
 	syncWechatOrderUC := ioc.InitSyncWechatOrderUC(nativeApiService, payCallbackUC, loggerV1)
 	getPaymentUC := usecase.NewGetPaymentUC(paymentRepository, loggerV1)
-	confirmPaymentUC := usecase.NewConfirmPaymentUC(paymentRepository, syncWechatOrderUC, payCallbackUC)
+	confirmPaymentUC := usecase.NewConfirmPaymentUC(paymentRepository, syncWechatOrderUC)
 	paymentHandler := grpc.NewPaymentHandler(nativePrePaymentUC, getPaymentUC, confirmPaymentUC)
 	server := ioc.InitGRPCServer(paymentHandler)
 	ginxServer := ioc.InitHTTPServer(payCallbackUC, loggerV1)

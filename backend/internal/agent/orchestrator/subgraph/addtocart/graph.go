@@ -5,23 +5,12 @@ import (
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
-	"github.com/cloudwego/eino/schema"
 
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	cartnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/cart"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 )
-
-type Output struct {
-	FinalAnswer   string
-	NeedHandoff   bool
-	HandoffReason string
-	ReadOnly      bool
-	ToolMessages  []*schema.Message
-	AwaitingUser  bool
-	MissingSlots  []string
-}
 
 func Build(
 	_ context.Context,
@@ -38,7 +27,7 @@ func Build(
 	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, maxAnswerTokens)
 	toolExecNode := sharednode.NewToolExecNode(registry)
 
-	g := compose.NewGraph[struct{}, Output]()
+	g := compose.NewGraph[GraphInput, Output]()
 	if err := g.AddLambdaNode("AddToCartCheckSlotsNode", compose.InvokableLambda(addToCartCheckSlots()),
 		compose.WithNodeName("AddToCartCheckSlotsNode")); err != nil {
 		return nil, err
