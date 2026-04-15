@@ -13,11 +13,11 @@ func InitOrderClient() orderservice.Client {
 	endpoints := viper.GetStringSlice("etcd.endpoints")
 	r, err := etcd.NewEtcdResolver(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("create etcd resolver failed: %w", err))
+		panic(fmt.Errorf("创建 etcd resolver 失败: %w", err))
 	}
 	c, err := orderservice.NewClient("order.service", client.WithResolver(r))
 	if err != nil {
-		panic(fmt.Errorf("create order client failed: %w", err))
+		panic(fmt.Errorf("创建订单服务客户端失败: %w", err))
 	}
 	return c
 }

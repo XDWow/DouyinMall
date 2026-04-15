@@ -3,6 +3,18 @@ package support
 import "strings"
 
 // MergeSlots 把增量槽位合并进目标槽位，只覆盖非空值。
+// StringStringMapSnapshot 返回与 src 键值相同的新 map（空 src 返回 nil），用于子图入口与 Session 解耦。
+func StringStringMapSnapshot(src map[string]string) map[string]string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(src))
+	for k, v := range src {
+		out[k] = v
+	}
+	return out
+}
+
 func MergeSlots(dst map[string]any, src map[string]any) {
 	if dst == nil || len(src) == 0 {
 		return

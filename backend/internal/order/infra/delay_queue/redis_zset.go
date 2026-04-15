@@ -1,10 +1,11 @@
-package queue
+package delay_queue
 
 import (
 	"context"
 	"strconv"
 	"time"
 
+	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/cache"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
@@ -19,7 +20,7 @@ type OrderDelayQueue struct {
 	log   logger.LoggerV1
 }
 
-func NewOrderDelayQueue(cache cache.OrderCache, log logger.LoggerV1) *OrderDelayQueue {
+func NewOrderDelayQueue(cache cache.OrderCache, log logger.LoggerV1) domain.DelayQueue {
 	return &OrderDelayQueue{
 		cache: cache,
 		log:   log,
@@ -32,8 +33,8 @@ func (q *OrderDelayQueue) Enqueue(ctx context.Context, orderID int64, executeAt 
 	}, 0)
 }
 
-func (q *OrderDelayQueue) DrainDue(ctx context.Context, now time.Time) ([]int64, error) {
-	deadline := strconv.FormatInt(now.UnixMilli(), 10)
+func (q *OrderDelayQueue) DrainDue(ctx context.Context, t time.Time) ([]int64, error) {
+	deadline := strconv.FormatInt(t.UnixMilli(), 10)
 	orderIDs := make([]int64, 0)
 
 	for {
@@ -48,7 +49,7 @@ func (q *OrderDelayQueue) DrainDue(ctx context.Context, now time.Time) ([]int64,
 		for _, member := range members {
 			orderID, convErr := parseOrderID(member)
 			if convErr != nil {
-				q.log.Warn("璁㈠崟寤舵椂闃熷垪涓瓨鍦ㄩ潪娉曟垚鍛?,
+				q.log.Warn("订单延时队列中存在非法成员",
 					logger.String("member", member),
 					logger.Error(convErr))
 				continue

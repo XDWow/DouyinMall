@@ -1,0 +1,191 @@
+# 生产向共享中间件（无 Elasticsearch）。勿使用示例密码上线。
+#
+# 1) cp docker-compose.middleware.env.example .env.middleware
+# 2) 编辑 .env.middleware（至少 MYSQL_ROOT_PASSWORD、REDIS_PASSWORD、KAFKA_HOST_ADVERTISE）
+# 3) docker compose --env-file .env.middleware -f docker-compose.middleware.yml up -d
+#
+# 两机部署（中间件一台、微服务另一台）——与「全在同一台 Docker 里」不同：
+# - 应用机解析不到 douyinmall-mysql；配置里写「中间件机在应用机网络上可达的 IP + 映射端口」
+#   （同 VPC 用内网 IP；走公网则用弹性公网 IP/域名 + 安全组限源，见 docker-compose.middleware.env.example）。
+# - 中间件机 *_BIND_ADDRESS 须对应用机可达（示例 env 用 0.0.0.0）；务必用云安全组/防火墙只放行应用机来源。
+# - KAFKA_HOST_ADVERTISE = 上面同一套「应用机连 broker 时应使用的 IP/域名」，端口与 KAFKA_PUBLISH_PORT_EXTERNAL 一致。
+#
+# 若微服务容器也跑在本机同一 compose 网络里：仍可用 douyinmall-mysql:3306、kafka:9092，与宿主机映射无关。
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: douyinmall-mysql
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_BIND_ADDRESS:-127.0.0.1}:${MYSQL_PUBLISH_PORT:-13306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in env file}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-douyinmall}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=512
+      - --default-authentication-plugin=caching_sha2_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - douyinmall-net
+    security_opt:
+      - no-new-privileges:true
+    cpus: 2.0
+    mem_limit: 2g
+    mem_reservation: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 45s
+
+  redis:
+    image: redis/redis-stack-server:7.4.0-v3
+    container_name: douyinmall-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PUBLISH_PORT:-16379}:6379"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in env file}
+    command:
+      - redis-stack-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --requirepass
+      - ${REDIS_PASSWORD:?set REDIS_PASSWORD in env file}
+    volumes:
+      - redis-data:/data
+    networks:
+      - douyinmall-net
+    security_opt:
+      - no-new-privileges:true
+    cpus: 1.0
+    mem_limit: 2g
+    mem_reservation: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.12
+    container_name: douyinmall-etcd
+    restart: unless-stopped
+    ports:
+      - "${ETCD_BIND_ADDRESS:-127.0.0.1}:${ETCD_PUBLISH_PORT:-12379}:2379"
+    command: >
+      etcd
+      --name=douyinmall-etcd
+      --data-dir=/etcd
+      --listen-client-urls=http://0.0.0.0:2379
+      --advertise-client-urls=http://douyinmall-etcd:2379
+      --quota-backend-bytes=8589934592
+      --auto-compaction-mode=periodic
+      --auto-compaction-retention=1
+    volumes:
+      - etcd-data:/etcd
+    networks:
+      - douyinmall-net
+    security_opt:
+      - no-new-privileges:true
+    cpus: 1.0
+    mem_limit: 512m
+    mem_reservation: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "etcdctl --endpoints=http://127.0.0.1:2379 endpoint health",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  kafka:
+    image: apache/kafka:4.1.1
+    container_name: douyinmall-kafka
+    restart: unless-stopped
+    ports:
+      - "${KAFKA_BIND_ADDRESS:-0.0.0.0}:${KAFKA_PUBLISH_PORT_PLAIN:-9092}:9092"
+      - "${KAFKA_BIND_ADDRESS:-0.0.0.0}:${KAFKA_PUBLISH_PORT_EXTERNAL:-29092}:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,HOST://:29092,CONTROLLER://:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://${KAFKA_HOST_ADVERTISE:?set KAFKA_HOST_ADVERTISE in env file}:${KAFKA_PUBLISH_PORT_EXTERNAL:-29092}
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    networks:
+      - douyinmall-net
+    security_opt:
+      - no-new-privileges:true
+    cpus: 2.0
+    mem_limit: 2g
+    mem_reservation: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    stop_grace_period: 60s
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+volumes:
+  mysql-data:
+  redis-data:
+  etcd-data:
+
+networks:
+  douyinmall-net:
+    driver: bridge

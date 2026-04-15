@@ -2,12 +2,9 @@ package domain
 
 import "context"
 
-// TxManager 浜嬪姟绠＄悊鍣ㄦ帴鍙ｏ紝鐢ㄤ簬澶勭悊鏁版嵁搴撲簨鍔?
-// 鏀惧湪domain灞傝€屼笉鏄痷secase灞傦紝閬垮厤寰幆渚濊禆
+// TxManager 事务管理器，用于包裹数据库事务。
+// 放在 domain 层而非 usecase，避免循环依赖。
 type TxManager interface {
-	// Tx 鍦ㄤ簨鍔′腑鎵ц鎿嶄綔
-	// 濡傛灉fn杩斿洖error锛屼簨鍔′細鍥炴粴锛涘惁鍒欐彁浜?
+	// Tx 在事务中执行 fn；fn 返回 error 则回滚，否则提交。
 	Tx(ctx context.Context, fn func(context.Context) error) error
 }
-
-

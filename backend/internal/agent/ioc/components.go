@@ -3,11 +3,13 @@ package ioc
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
 	agentcache "github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 	agentllm "github.com/XDWow/DouyinMall/backend/internal/agent/infra/llm"
+	agentmq "github.com/XDWow/DouyinMall/backend/internal/agent/infra/mq"
 	agentrag "github.com/XDWow/DouyinMall/backend/internal/agent/infra/rag"
 	agentrepository "github.com/XDWow/DouyinMall/backend/internal/agent/infra/repository"
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
@@ -20,6 +22,8 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+
+	pkglogger "github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
 // Components groups the Eino components and runtime-facing capabilities
@@ -95,7 +99,42 @@ func InitComponents(
 	}
 
 	store := agentcache.NewRedisStore(rdb)
-	sessionRepo := agentrepository.NewSessionRepository(db, agentcache.NewRedisSessionCache(store, 24*time.Hour, 10))
+	sessionCache := agentcache.NewRedisSessionCache(store, 24*time.Hour, 10)
+
+	var roundPublisher agentrepository.SessionRoundAsyncPublisher
+	if cfg.Kafka.Enabled {
+		if len(cfg.Kafka.Brokers) == 0 {
+			return nil, fmt.Errorf("kafka.enabled is true but kafka.brokers is empty")
+		}
+		kafkaClient, err := NewKafkaClient(cfg.Kafka)
+		if err != nil {
+			return nil, fmt.Errorf("init kafka client failed: %w", err)
+		}
+		producer, err := NewKafkaSyncProducer(kafkaClient)
+		if err != nil {
+			_ = kafkaClient.Close()
+			return nil, fmt.Errorf("init kafka sync producer failed: %w", err)
+		}
+		topic := strings.TrimSpace(cfg.Kafka.TopicSessionRound)
+		group := strings.TrimSpace(cfg.Kafka.ConsumerGroup)
+		roundPublisher = agentmq.NewSessionRoundProducer(producer, topic)
+
+		cons := agentmq.NewSessionRoundConsumer(
+			kafkaClient,
+			db,
+			pkglogger.L(),
+			topic,
+			group,
+			cfg.Kafka.SessionRoundBatchSize,
+		)
+		if err := cons.Start(); err != nil {
+			_ = producer.Close()
+			_ = kafkaClient.Close()
+			return nil, fmt.Errorf("start session round kafka consumer failed: %w", err)
+		}
+	}
+
+	sessionRepo := agentrepository.NewSessionRepository(db, sessionCache, roundPublisher)
 	conversationWindow := cfg.Workflow.ConversationWindow
 	if conversationWindow <= 0 {
 		conversationWindow = 5

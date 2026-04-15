@@ -3,12 +3,15 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type GormActivityRepository struct{ db *gorm.DB }
@@ -98,6 +101,62 @@ func (r *GormActivityRepository) DecreaseStock(ctx context.Context, activityID i
 	})
 }
 
+// TryDeductStockAndClaimSuccess 同一事务：扣减活动库存（与 DecreaseStock 相同语义）+ 插入 seckill_success。
+func (r *GormActivityRepository) TryDeductStockAndClaimSuccess(ctx context.Context, activityID, userID int64, requestNo string, quantity int32) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		op := db.SeckillOperation{
+			OperationID: "deduct_" + requestNo,
+			ActivityID:  activityID,
+			RequestNo:   requestNo,
+			Delta:       -quantity,
+			Type:        "DEDUCT",
+			CreatedAt:   time.Now(),
+		}
+		if err := tx.Create(&op).Error; err != nil {
+			if isDuplicate(err) {
+				return nil
+			}
+			return err
+		}
+		res := tx.Model(&db.SeckillActivity{}).
+			Where("id = ? AND available_stock >= ? AND status = ? AND start_time <= ? AND end_time >= ?",
+				activityID, quantity, domain.ActivityStatusOnline, time.Now(), time.Now()).
+			Updates(map[string]interface{}{
+				"available_stock": gorm.Expr("available_stock - ?", quantity),
+				"version":         gorm.Expr("version + 1"),
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return domain.ErrOutOfStock
+		}
+		succ := db.SeckillSuccess{
+			ActivityID: activityID,
+			UserID:     userID,
+			RequestNo:  requestNo,
+			OrderID:    0,
+		}
+		if err := tx.Create(&succ).Error; err != nil {
+			if isDuplicate(err) {
+				return domain.ErrSeckillSuccessAlreadyClaimed
+			}
+			return err
+		}
+		return nil
+	})
+}
+
+func (r *GormActivityRepository) DeleteSuccessClaim(ctx context.Context, activityID, userID int64) error {
+	return r.db.WithContext(ctx).Where("activity_id = ? AND user_id = ?", activityID, userID).Delete(&db.SeckillSuccess{}).Error
+}
+
+func (r *GormActivityRepository) UpdateSuccessOrderID(ctx context.Context, activityID, userID, orderID int64) error {
+	return r.db.WithContext(ctx).Model(&db.SeckillSuccess{}).
+		Where("activity_id = ? AND user_id = ?", activityID, userID).
+		Update("order_id", orderID).Error
+}
+
 func (r *GormActivityRepository) IncreaseStock(ctx context.Context, activityID int64, operationID string, quantity int32) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		op := db.SeckillOperation{
@@ -153,20 +212,12 @@ func (r *GormRequestRepository) FindByRequestNo(ctx context.Context, requestNo s
 	return toDomainRequest(model), nil
 }
 
-func (r *GormRequestRepository) FindByOrderID(ctx context.Context, orderID int64) (*domain.Request, error) {
-	var model db.SeckillRequest
-	if err := r.db.WithContext(ctx).Where("order_id = ?", orderID).First(&model).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, domain.ErrRequestNotFound
-		}
-		return nil, err
-	}
-	return toDomainRequest(model), nil
-}
-
 func (r *GormRequestRepository) FindByActivityUser(ctx context.Context, activityID, userID int64) (*domain.Request, error) {
 	var model db.SeckillRequest
-	if err := r.db.WithContext(ctx).Where("activity_id = ? AND user_id = ?", activityID, userID).First(&model).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Where("activity_id = ? AND user_id = ?", activityID, userID).
+		Order("id DESC").
+		First(&model).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -175,18 +226,46 @@ func (r *GormRequestRepository) FindByActivityUser(ctx context.Context, activity
 	return toDomainRequest(model), nil
 }
 
-func (r *GormRequestRepository) MarkSuccess(ctx context.Context, requestNo string, orderID int64) error {
-	return r.db.WithContext(ctx).Model(&db.SeckillRequest{}).Where("request_no = ?", requestNo).Updates(map[string]interface{}{
-		"status":   domain.RequestStatusSuccess,
-		"order_id": orderID,
-	}).Error
+func (r *GormRequestRepository) MarkQualified(ctx context.Context, requestNo string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var cur db.SeckillRequest
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("request_no = ?", requestNo).
+			First(&cur).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return domain.ErrRequestNotFound
+			}
+			return err
+		}
+		if cur.Status == domain.RequestStatusQualified {
+			return nil
+		}
+		if cur.Status != domain.RequestStatusProcessing {
+			return fmt.Errorf("seckill MarkQualified: request_no=%s 状态=%s 非 PROCESSING", requestNo, cur.Status)
+		}
+		return tx.Model(&db.SeckillRequest{}).Where("request_no = ?", requestNo).Updates(map[string]interface{}{
+			"status": domain.RequestStatusQualified,
+		}).Error
+	})
 }
 
 func (r *GormRequestRepository) MarkFail(ctx context.Context, requestNo string, failReason string) error {
 	return r.db.WithContext(ctx).Model(&db.SeckillRequest{}).Where("request_no = ?", requestNo).Updates(map[string]interface{}{
 		"status":      domain.RequestStatusFail,
 		"fail_reason": failReason,
+		"order_id":    0,
 	}).Error
+}
+
+func (r *GormRequestRepository) MarkFailByRequestNoIfActive(ctx context.Context, requestNo string, failReason string) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&db.SeckillRequest{}).
+		Where("request_no = ? AND status IN ?", requestNo, []string{domain.RequestStatusProcessing, domain.RequestStatusQualified, domain.RequestStatusLegacySuccess}).
+		Updates(map[string]interface{}{
+			"status":      domain.RequestStatusFail,
+			"fail_reason": failReason,
+			"order_id":    0,
+		})
+	return res.RowsAffected, res.Error
 }
 
 func toDomainActivity(model db.SeckillActivity) *domain.Activity {
@@ -209,6 +288,12 @@ func toDomainActivity(model db.SeckillActivity) *domain.Activity {
 }
 
 func toDomainRequest(model db.SeckillRequest) *domain.Request {
+	orderID := model.OrderID
+	if orderID == 0 && model.RequestNo != "" && model.Status != domain.RequestStatusFail {
+		if v, err := strconv.ParseInt(model.RequestNo, 10, 64); err == nil {
+			orderID = v
+		}
+	}
 	return &domain.Request{
 		ID:         model.ID,
 		RequestNo:  model.RequestNo,
@@ -216,7 +301,7 @@ func toDomainRequest(model db.SeckillRequest) *domain.Request {
 		UserID:     model.UserID,
 		Quantity:   model.Quantity,
 		Status:     model.Status,
-		OrderID:    model.OrderID,
+		OrderID:    orderID,
 		FailReason: model.FailReason,
 		CreatedAt:  model.CreatedAt,
 		UpdatedAt:  model.UpdatedAt,
@@ -230,5 +315,3 @@ func isDuplicate(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "1062") || strings.Contains(msg, "Duplicate entry")
 }
-
-

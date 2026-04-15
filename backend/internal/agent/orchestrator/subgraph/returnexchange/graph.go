@@ -4,23 +4,11 @@ import (
 	"context"
 
 	"github.com/cloudwego/eino/compose"
-	"github.com/cloudwego/eino/schema"
 
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	aftersalenode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/aftersale"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 )
-
-type Output struct {
-	FinalAnswer     string
-	NeedHandoff     bool
-	HandoffReason   string
-	ReadOnly        bool
-	AwaitingConfirm bool
-	ToolMessages    []*schema.Message
-	AwaitingUser    bool
-	MissingSlots    []string
-}
 
 func Build(
 	_ context.Context,
@@ -35,7 +23,7 @@ func Build(
 	}
 
 	toolExecNode := sharednode.NewToolExecNode(registry)
-	g := compose.NewGraph[struct{}, Output]()
+	g := compose.NewGraph[GraphInput, Output]()
 
 	if err := g.AddLambdaNode("ReturnExchangeInitSlotsNode", compose.InvokableLambda(reInitSlots),
 		compose.WithNodeName("ReturnExchangeInitSlotsNode")); err != nil {

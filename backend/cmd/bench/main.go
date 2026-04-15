@@ -345,7 +345,7 @@ func runSeckillBench(cfg benchConfig) (metricSummary, error) {
 	}
 
 	var successCount int
-	if err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ? AND status = 'SUCCESS'", activityID).Scan(&successCount); err != nil {
+	if err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_success WHERE activity_id = ?", activityID).Scan(&successCount); err != nil {
 		return metricSummary{}, err
 	}
 
@@ -399,7 +399,7 @@ func runSeckillDuplicate(cfg benchConfig) (metricSummary, error) {
 SELECT COUNT(1) FROM (
   SELECT user_id
   FROM seckill_request
-  WHERE activity_id = ? AND status = 'SUCCESS'
+  WHERE activity_id = ? AND status IN ('PROCESSING','QUALIFIED','SUCCESS')
   GROUP BY user_id
   HAVING COUNT(1) > 1
 ) t`, activityID).Scan(&duplicateUsers); err != nil {
@@ -473,12 +473,21 @@ func createSeckillActivity(client seckillservice.Client, stock int, price int64)
 
 func waitForSeckillSettlement(db *sql.DB, activityID int64, deadline time.Time) error {
 	for time.Now().Before(deadline) {
-		var processing int
-		err := db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ? AND status = 'PROCESSING'", activityID).Scan(&processing)
+		var total int
+		err := db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ?", activityID).Scan(&total)
 		if err != nil {
 			return err
 		}
-		if processing == 0 {
+		if total == 0 {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		var pending int
+		err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ? AND status = 'PROCESSING'", activityID).Scan(&pending)
+		if err != nil {
+			return err
+		}
+		if pending == 0 {
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -569,5 +578,3 @@ func percentile(sorted []float64, p float64) float64 {
 	}
 	return sorted[pos]
 }
-
-

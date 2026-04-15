@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+
 	"github.com/XDWow/DouyinMall/backend/internal/payment/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
@@ -17,14 +18,12 @@ func NewGetPaymentUC(repo domain.PaymentRepository, l logger.LoggerV1) *GetPayme
 }
 
 type QueryPaymentCmd struct {
-	BizTradeNo string // 杩欎釜灏辨槸鏀粯浜ゆ槗鍗曠殑涓婚敭
+	BizTradeNo string // 业务侧支付单主键（与预下单时传入的商户单号一致）
 }
 
 func (uc *GetPaymentUC) Execute(ctx context.Context, cmd QueryPaymentCmd) (domain.Payment, error) {
 	if cmd.BizTradeNo == "" {
-		return domain.Payment{}, errors.New("涓氬姟浜ゆ槗鍙蜂负绌?)
+		return domain.Payment{}, errors.New("业务交易号不能为空")
 	}
 	return uc.repo.GetPayment(ctx, cmd.BizTradeNo)
 }
-
-

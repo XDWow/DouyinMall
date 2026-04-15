@@ -18,6 +18,13 @@ redis:
   password: ""
   db: 0
 
+kafka:
+  enabled: false
+  brokers: []
+  topic_session_round: "agent-session-round-persist"
+  consumer_group: "agent-session-round-consumer"
+  session_round_batch_size: 32
+
 etcd:
   endpoints:
     - "douyinmall-etcd:2379"

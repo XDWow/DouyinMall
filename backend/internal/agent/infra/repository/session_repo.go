@@ -16,14 +16,21 @@ import (
 	agentdb "github.com/XDWow/DouyinMall/backend/internal/agent/infra/db"
 )
 
+// SessionRoundAsyncPublisher 可选依赖：实现后 SaveRoundPersistent 改为发 Kafka，由消费者批量落库。
+type SessionRoundAsyncPublisher interface {
+	PublishRound(ctx context.Context, session domain.Session, userMessage, assistantMessage domain.SessionMessage) error
+}
+
 type sessionRepository struct {
-	db    *gorm.DB
-	cache agentcache.SessionCache
+	db              *gorm.DB
+	cache           agentcache.SessionCache
+	roundAsyncQueue SessionRoundAsyncPublisher
 }
 
 // NewSessionRepository 会话仓储：直接持 *gorm.DB，表模型见 infra/db/model.go。
-func NewSessionRepository(db *gorm.DB, cache agentcache.SessionCache) domainrepo.SessionRepository {
-	return &sessionRepository{db: db, cache: cache}
+// roundAsync 非 nil 时，SaveRoundPersistent 只入队 Kafka，不再同步写库（需启动对应消费者）。
+func NewSessionRepository(db *gorm.DB, cache agentcache.SessionCache, roundAsync SessionRoundAsyncPublisher) domainrepo.SessionRepository {
+	return &sessionRepository{db: db, cache: cache, roundAsyncQueue: roundAsync}
 }
 
 func (s *sessionRepository) Load(ctx context.Context, sessionID string) (*domain.Session, []domain.SessionMessage, error) {
@@ -124,6 +131,9 @@ func (s *sessionRepository) SaveRound(ctx context.Context, session domain.Sessio
 }
 
 func (s *sessionRepository) SaveRoundPersistent(ctx context.Context, session domain.Session, userMessage domain.SessionMessage, assistantMessage domain.SessionMessage) error {
+	if s.roundAsyncQueue != nil {
+		return s.roundAsyncQueue.PublishRound(ctx, session, userMessage, assistantMessage)
+	}
 	messages := make([]domain.SessionMessage, 0, 2)
 	if userMessage.Content != "" {
 		messages = append(messages, userMessage)

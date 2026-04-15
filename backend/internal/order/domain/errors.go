@@ -2,7 +2,5 @@ package domain
 
 import "errors"
 
-// ErrRecordNotFound 璁板綍涓嶅瓨鍦ㄩ敊璇?
+// ErrRecordNotFound 表示记录不存在。
 var ErrRecordNotFound = errors.New("record not found")
-
-

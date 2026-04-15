@@ -2,70 +2,21 @@ package fallback
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	fallbacknode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/fallback"
 	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
-	subgraphmeta "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/metadata"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/prompt"
 )
 
-type fbWire struct {
-	TenantID     string
-	UserID       int64
-	SessionID    string
-	TraceID      string
-	CheckpointID string
-	RawQuery     string
-	Intent       string
-	History      []*schema.Message
-	SkillNames   []string
-	SeedAnswer   string
-
-	CacheHit   bool
-	HitLevel   string
-	Response   *domain.ChatResult
-	L1Final    string
-	Query      string
-	Documents  []*schema.Document
-	AgentFinal string
-}
-
-func loadFallbackWire(ctx context.Context, skills *agentskill.Registry) (fbWire, error) {
-	var w fbWire
-	err := domain.ProcessState(ctx, func(s *domain.State) error {
-		if s == nil {
-			return fmt.Errorf("state is nil")
-		}
-		w.TenantID = s.Session.TenantID
-		w.UserID = s.Input.UserID
-		w.SessionID = s.Session.SessionID
-		w.TraceID = s.TraceID
-		w.CheckpointID = s.Checkpoint
-		w.RawQuery = s.Session.RawQuery
-		w.Intent = string(s.Session.Intent)
-		w.History = append([]*schema.Message(nil), s.Session.Messages...)
-		w.SeedAnswer = s.Session.FinalAnswer
-		w.SkillNames = subgraphmeta.FilteredSkillNames(s.Session.Route, skills)
-		return nil
-	})
-	return w, err
-}
-
-func fallbackInit(l1 *globalnode.L1SemanticCacheNode, skills *agentskill.Registry) func(context.Context, struct{}) (fbWire, error) {
-	return func(ctx context.Context, _ struct{}) (fbWire, error) {
-		w, err := loadFallbackWire(ctx, skills)
-		if err != nil {
-			return fbWire{}, err
-		}
+func fallbackInit(l1 *globalnode.L1SemanticCacheNode) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, w GraphInput) (GraphInput, error) {
 		if l1 == nil {
 			return w, nil
 		}
@@ -85,7 +36,7 @@ func fallbackInit(l1 *globalnode.L1SemanticCacheNode, skills *agentskill.Registr
 			AllowRead:    true,
 		})
 		if cacheErr != nil {
-			return fbWire{}, cacheErr
+			return GraphInput{}, cacheErr
 		}
 		if cacheResult != nil && cacheResult.CacheHit {
 			w.CacheHit = true
@@ -97,14 +48,14 @@ func fallbackInit(l1 *globalnode.L1SemanticCacheNode, skills *agentskill.Registr
 	}
 }
 
-func branchAfterFallbackL1(_ context.Context, in fbWire) (string, error) {
+func branchAfterFallbackL1(_ context.Context, in GraphInput) (string, error) {
 	if in.CacheHit {
 		return "FallbackL1OutputNode", nil
 	}
 	return "FallbackRAGNode", nil
 }
 
-func buildFallbackL1Output(_ context.Context, in fbWire) (Output, error) {
+func buildFallbackL1Output(_ context.Context, in GraphInput) (Output, error) {
 	return Output{
 		CacheHit:    true,
 		HitLevel:    in.HitLevel,
@@ -113,8 +64,8 @@ func buildFallbackL1Output(_ context.Context, in fbWire) (Output, error) {
 	}, nil
 }
 
-func fallbackRAG(rag *ragnode.RAGNode) func(context.Context, fbWire) (fbWire, error) {
-	return func(ctx context.Context, in fbWire) (fbWire, error) {
+func fallbackRAG(rag *ragnode.RAGNode) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, in GraphInput) (GraphInput, error) {
 		if rag == nil {
 			return in, nil
 		}
@@ -124,7 +75,7 @@ func fallbackRAG(rag *ragnode.RAGNode) func(context.Context, fbWire) (fbWire, er
 			Intent:  in.Intent,
 		})
 		if err != nil {
-			return fbWire{}, err
+			return GraphInput{}, err
 		}
 		if ragResult != nil {
 			in.Query = ragResult.Query
@@ -134,8 +85,8 @@ func fallbackRAG(rag *ragnode.RAGNode) func(context.Context, fbWire) (fbWire, er
 	}
 }
 
-func fallbackModelAgent(agent *sharednode.SubgraphAgent) func(context.Context, fbWire) (fbWire, error) {
-	return func(ctx context.Context, in fbWire) (fbWire, error) {
+func fallbackModelAgent(agent *sharednode.SubgraphAgent) func(context.Context, GraphInput) (GraphInput, error) {
+	return func(ctx context.Context, in GraphInput) (GraphInput, error) {
 		if agent == nil || !agent.Enabled() {
 			return in, nil
 		}
@@ -155,14 +106,14 @@ func fallbackModelAgent(agent *sharednode.SubgraphAgent) func(context.Context, f
 	}
 }
 
-func branchAfterFallbackAgent(_ context.Context, in fbWire) (string, error) {
+func branchAfterFallbackAgent(_ context.Context, in GraphInput) (string, error) {
 	if strings.TrimSpace(in.AgentFinal) != "" {
 		return "FallbackAgentOutputNode", nil
 	}
 	return "FallbackBaseQANode", nil
 }
 
-func buildFallbackAgentOutput(_ context.Context, in fbWire) (Output, error) {
+func buildFallbackAgentOutput(_ context.Context, in GraphInput) (Output, error) {
 	return Output{
 		FinalAnswer: in.AgentFinal,
 		Query:       in.Query,
@@ -170,8 +121,8 @@ func buildFallbackAgentOutput(_ context.Context, in fbWire) (Output, error) {
 	}, nil
 }
 
-func fallbackBaseQA(base *fallbacknode.BaseQANode) func(context.Context, fbWire) (Output, error) {
-	return func(ctx context.Context, in fbWire) (Output, error) {
+func fallbackBaseQA(base *fallbacknode.BaseQANode) func(context.Context, GraphInput) (Output, error) {
+	return func(ctx context.Context, in GraphInput) (Output, error) {
 		out := Output{
 			FinalAnswer: in.SeedAnswer,
 			Query:       in.Query,

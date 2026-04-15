@@ -8,7 +8,7 @@ import (
 )
 
 type ReleaseStockCommand struct {
-	OperationID string // 鏈release鎿嶄綔鐨処D锛堝order_123_release锛?
+	OperationID string // 本次 release 操作 ID（如 order_123_release）
 }
 
 type ReleaseStockUseCase struct {
@@ -22,7 +22,7 @@ func NewReleaseStockUseCase(repo domain.InventoryRepository, l logger.LoggerV1) 
 
 func (uc *ReleaseStockUseCase) Execute(ctx context.Context, cmd ReleaseStockCommand) error {
 	if cmd.OperationID == "" {
-		return errors.New("OperationID涓虹┖")
+		return errors.New("OperationID 为空")
 	}
 	return uc.repo.ReleaseStock(ctx, cmd.OperationID)
 }

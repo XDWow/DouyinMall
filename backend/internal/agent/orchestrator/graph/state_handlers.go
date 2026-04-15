@@ -17,7 +17,7 @@ import (
 // 3) 边上传递的 *domain.State 以 in/out 为权威读写目标（与官方「通过改 Input/Output 影响节点」一致）。
 // 4) GenLocalState 的 S 与边上指针可能不同；仅输入为子图 Output 的节点需用 ProcessState 读 S。线性段每个 Pre/Post 末尾 syncGenFromEdge(in|out, st)，使 S 与边上一致。
 //
-// 5) 若节点 Lambda 的 I/O 不是 *domain.State（例如 Apply* 节点为 subgraph.Output→*State），则无法对该节点使用「O 为 *State 的 PostHandler」以外的同一套 Handler 类型对齐；此类节点仍用 Lambda 内 ProcessState 合并（官方推荐的另一种形态）。
+// 5) 子图边界：主图通过 Prepare*（*domain.State → 子图 GraphInput）与 AddGraphNode 连接子图；子图内为 compose.Graph[GraphInput, Output]。Apply*（Output→*State）的 Lambda I/O 不是纯 *State 时，在 Lambda 内用 ProcessState 合并回共享状态（与 Eino 文档中「边类型与 GenLocalState 不完全一致」的写法一致）。
 
 func syncGenFromEdge(edge, gen *domain.State) {
 	if edge == nil || gen == nil {

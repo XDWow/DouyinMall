@@ -68,7 +68,7 @@ func (c *SeckillConsumer) Start() error {
 				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 					return
 				}
-				c.logger.Error("绉掓潃涓嬪崟娑堣垂鑰呴€€鍑?, logger.Error(err))
+				c.logger.Error("秒杀下单消费者消费出错", logger.Error(err))
 			}
 		}
 	}()
@@ -98,15 +98,15 @@ func (c *SeckillConsumer) Cleanup(_ sarama.ConsumerGroupSession) error {
 }
 
 func (c *SeckillConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	// Kafka 浼氭寜 partition 璋冪敤 ConsumeClaim銆?
-	// 杩欓噷涓哄綋鍓?partition 鍒涘缓涓€涓笓灞炲鐞嗗櫒锛岃礋璐ｏ細
-	// 1. 璇诲彇杩欎釜 partition 鐨勬秷鎭€?
-	// 2. 鎸?activity_id 鍒嗗彂鍒板垎缁勫崗绋嬫睜銆?
-	// 3. 鎺ユ敹 worker 澶勭悊缁撴灉銆?
-	// 4. 鎸?offset 杩炵画鍖洪棿鎺ㄨ繘鎻愪氦銆?
+	// Kafka 按 partition 调用 ConsumeClaim。
+	// 为当前 partition 创建专用处理器，负责：
+	// 1. 读取本 partition 消息
+	// 2. 按 activity_id 投递到分组协程池
+	// 3. 接收 worker 处理结果
+	// 4. 按 offset 连续区间推进提交
 	processor := newSeckillPartitionProcessor(c, session, claim)
 
-	// 褰撳墠 partition 澶勭悊鍣ㄩ€€鍑烘椂锛岄€氱煡杩樻病鏉ュ緱鍙婂洖鍐欑粨鏋滅殑 worker 鍋滄鍥炲啓銆?
+	// 当前 partition 处理器退出时，通知尚未回写结果的 worker 停止回写。
 	defer close(processor.processorDone)
 	return processor.run()
 }
@@ -117,18 +117,18 @@ type createOrderTask struct {
 	ResultCh chan<- createOrderResult
 	ClaimCtx context.Context
 
-	// ProcessorDone 浼氬湪褰撳墠 partition 澶勭悊鍣ㄩ€€鍑烘椂鍏抽棴銆?
-	// worker 鍥炲啓缁撴灉鍓嶄細鍏堢湅瀹冿紝閬垮厤 partition 宸茬粨鏉熷悗杩樺線缁撴灉閫氶亾閲屽啓銆?
+	// ProcessorDone 在当前 partition 处理器退出时关闭
+	// worker 回写结果前会先监听它，避免 partition 已结束后仍往结果通道写
 	ProcessorDone <-chan struct{}
 }
 
 type createOrderResult struct {
-	// Message 淇濈暀 Kafka 鍘熷浣嶇偣锛屽悗闈㈠啓姝讳俊鍜屾彁浜?offset 閮借鐢?
+	// Message 保留 Kafka 原始位点，后续写死信与提交 offset 都要用。
 	Message *sarama.ConsumerMessage
 	Event   seckilldomain.Event
 
-	// Err 鏄湰鍦伴噸璇曞悗鐨勬渶缁堢粨鏋?
-	// nil 琛ㄧず澶勭悊鎴愬姛锛岄潪 nil 琛ㄧず瑕佽繘姝讳俊
+	// Err 为本地重试后的最终结果：
+	// nil 表示处理成功；非 nil 表示需要进死信。
 	Err error
 }
 
@@ -139,22 +139,22 @@ type seckillPartitionProcessor struct {
 
 	messageCh <-chan *sarama.ConsumerMessage
 
-	// taskResultCh 鍙厑璁稿綋鍓?partition 澶勭悊鍣ㄨ嚜宸辫
-	// 杩欐牱 offset 鎻愪氦閫昏緫濮嬬粓鍙湪涓€涓?goroutine 鍐咃紝椤哄簭鏈€绋冲畾
+	// taskResultCh 只允许当前 partition 处理器自己读
+	// 这样 offset 提交逻辑始终只在一个 goroutine 内，顺序最稳定
 	taskResultCh chan createOrderResult
 
-	// commitWindow 璁板綍鍝簺 offset 宸插畬鎴愶紝浠ュ強褰撳墠鏈€澶氳兘鎻愪氦鍒板摢
+	// commitWindow 记录哪些 offset 已完成，以及当前最多能提交到哪里
 	commitWindow *partitionCommitWindow
 
-	// processorDone 鏄綋鍓?partition 澶勭悊鍣ㄧ殑閫€鍑轰俊鍙?
+	// processorDone 是当前 partition 处理器的退出信号
 	processorDone chan struct{}
 
-	// pendingTaskCount 琛ㄧず鈥滃凡缁忎氦缁?worker锛屼絾杩樻病澶勭悊瀹屸€濈殑浠诲姟鏁般€?
-	// 瀹冧篃鐢ㄦ潵缁欏崟涓儹鐐?partition 鍋氳儗鍘?
+	// pendingTaskCount 表示「已交给 worker、但尚未处理完」的任务数
+	// 也用于给单个热点 partition 做背压
 	pendingTaskCount int
 
-	// messageStreamClosed 琛ㄧず claim.Messages() 宸茶 Sarama 鍏抽棴銆?
-	// 杩欒〃绀哄綋鍓嶈繖杞?claim 宸茬粡娌℃湁鏂版秷鎭細鍐嶈繘鏉?
+	// messageStreamClosed 表示 claim.Messages() 已被 Sarama 关闭
+	// 即本轮 claim 不会再有新消息进来
 	messageStreamClosed bool
 }
 
@@ -185,7 +185,7 @@ func (p *seckillPartitionProcessor) run() error {
 			}
 		case msg, ok := <-p.messageSelectCh():
 			if !ok {
-				// 褰撳墠杩欒疆 claim 宸茬粡娌℃湁鏂版秷鎭簡锛屼絾杩樿鎶婂凡鎶曞嚭鍘荤殑浠诲姟鏀跺畬
+				// 当前 claim 已无新消息，但仍需把已投递的任务收完
 				p.messageStreamClosed = true
 				continue
 			}
@@ -197,18 +197,18 @@ func (p *seckillPartitionProcessor) run() error {
 }
 
 func (p *seckillPartitionProcessor) shouldExit() bool {
-	// 姝ｅ父閫€鍑哄彧渚濊禆鈥滄秷鎭祦缁撴潫鈥濊繖鏉¤矾寰勩€?
-	// session 缁撴潫鍒欏湪 select 閲岀洿鎺ラ€€鍑恒€?
-	return p.messageStreamClosed && p.pendingTaskCount == 0
+	// 正常退出只依赖「消息流结束」这条路径
+	// session 结束则在 select 里直接 return
+	return p.messageStreamClosed && p.pendingTaskCount == 0 // 优雅退出
 }
 
-// messageSelectCh 杩斿洖褰撳墠 select 搴旇鐩戝惉鐨勬秷鎭€氶亾銆?
-// 褰撳墠 partition 涓嶈缁х画璇绘秷鎭椂锛岃繖閲岃繑鍥?nil锛岃 select 鏆傚仠璇绘秷鎭€?
+// messageSelectCh 返回当前 select 应监听的消费通道。
+// 当前 partition 不应继续读消息时返回 nil，让 select 暂停读消息。
 func (p *seckillPartitionProcessor) messageSelectCh() <-chan *sarama.ConsumerMessage {
-	// 杩欎笁绉嶆儏鍐甸兘涓嶅啀缁х画璇伙細
-	// 1. session 宸茬粨鏉燂紝搴旇浼樺厛閫€鍑恒€?
-	// 2. Sarama 宸插叧闂綋鍓?claim 鐨勬秷鎭祦銆?
-	// 3. 褰撳墠 partition 鏈畬鎴愪换鍔″お澶氾紝鍏堝仛鑳屽帇銆?
+	// 以下三种情况不再继续读：
+	// 1. session 已结束，应优先退出。
+	// 2. Sarama 已关闭当前 claim 的消息流。
+	// 3. 当前 partition 未完成任务过多，先做背压。
 	if p.session.Context().Err() != nil || p.messageStreamClosed || p.pendingTaskCount >= seckillPartitionMaxInFlight {
 		return nil
 	}
@@ -216,12 +216,12 @@ func (p *seckillPartitionProcessor) messageSelectCh() <-chan *sarama.ConsumerMes
 }
 
 func (p *seckillPartitionProcessor) handleMessage(msg *sarama.ConsumerMessage) error {
-	// 鐢ㄥ綋鍓?partition 绗竴鏉＄湅鍒扮殑娑堟伅鍒濆鍖栨彁浜ょ獥鍙ｃ€?
+	// 用当前 partition 第一条见到的消息初始化提交窗口
 	p.commitWindow.observe(msg.Offset)
 
 	var evt seckilldomain.Event
 	if err := json.Unmarshal(msg.Value, &evt); err != nil {
-		p.consumer.logger.Error("绉掓潃娑堟伅鍙嶅簭鍒楀寲澶辫触",
+		p.consumer.logger.Error("秒杀消息反序列化失败",
 			logger.Error(err),
 			logger.String("topic", msg.Topic),
 			logger.Int32("partition", msg.Partition),
@@ -234,8 +234,8 @@ func (p *seckillPartitionProcessor) handleMessage(msg *sarama.ConsumerMessage) e
 		return err
 	}
 
-	// 杩欓噷鍙〃绀轰换鍔″凡缁忔垚鍔熶氦缁?worker銆?
-	// 鐪熸鑳戒笉鑳芥彁浜?offset锛岃绛?worker 澶勭悊缁撴潫鍚庡啀鐪嬨€?
+	// 这里只表示任务已成功交给 worker。
+	// 能否提交 offset 要等 worker 处理结束后再看。
 	p.pendingTaskCount++
 	return nil
 }
@@ -244,10 +244,10 @@ func (p *seckillPartitionProcessor) handleResult(result createOrderResult) error
 	p.pendingTaskCount--
 
 	if result.Err != nil {
-		// 涓氬姟澶辫触涓嶈兘鎶婃暣涓?partition 姘歌繙鍗℃銆?
-		// 鏈湴閲嶈瘯鑰楀敖鍚庤浆姝讳俊锛涘彧鏈夎繛姝讳俊閮藉彂涓嶅嚭鍘绘椂锛屾墠鎷掔粷鎻愪氦 offset銆?
+		// 业务失败不能把整条 partition 永远卡死
+		// 本地重试耗尽后转死信；只有连死信都发不出去时，才拒绝提交 offset
 		if err := p.consumer.sendCreateOrderDeadLetter(p.session.Context(), result); err != nil {
-			p.consumer.logger.Error("绉掓潃涓嬪崟澶辫触娑堟伅鍙戦€佹淇″け璐?,
+			p.consumer.logger.Error("秒杀下单失败消息发送死信失败",
 				logger.Error(err),
 				logger.Int64("activityID", result.Event.ActivityID),
 				logger.String("requestNo", result.Event.RequestNo),
@@ -256,7 +256,7 @@ func (p *seckillPartitionProcessor) handleResult(result createOrderResult) error
 			return err
 		}
 	}
-
+	// 忍忍吧，秒杀抢不到没关系
 	p.commitWindow.markDone(p.session, result.Message.Offset)
 	return nil
 }
@@ -267,11 +267,11 @@ type partitionCommitWindow struct {
 
 	initialized bool
 
-	// nextCommit 琛ㄧず Kafka 涓嬩竴娆″彲浠ヤ粠鍝釜 offset 寮€濮嬬户缁秷璐广€?
-	// 渚嬪 10 鍜?11 閮藉畬鎴愬悗锛宯extCommit 浼氭帹杩涘埌 12銆?
+	// nextCommit 表示 Kafka 下一次可以从哪个 offset 继续消费。
+	// 例如 10 与 11 都完成后，nextCommit 会推进到 12。
 	nextCommit int64
 
-	// doneOffsets 璁板綍鈥滃凡缁忓畬鎴愶紝浣嗗洜涓哄墠闈㈣繕鏈夌┖娲烇紝鏆傛椂杩樹笉鑳芥彁浜も€濈殑 offset銆?
+	// doneOffsets 记录「已完成，但因前面还有空洞，暂时还不能提交」的 offset。
 	doneOffsets map[int64]struct{}
 }
 
@@ -301,9 +301,10 @@ func (w *partitionCommitWindow) markDone(session sarama.ConsumerGroupSession, of
 
 	w.doneOffsets[offset] = struct{}{}
 
+	// 检查有没有形成连续区间，如果形成了，提交 offset
 	advanced := false
 	for {
-		// 鍙湁褰㈡垚杩炵画瀹屾垚鍖洪棿锛屾彁浜ょ獥鍙ｆ墠鑳界户缁悜鍚庢帹杩涖€?
+		// 只有形成连续完成区间，提交窗口才能继续向后推进。
 		if _, ok := w.doneOffsets[w.nextCommit]; !ok {
 			break
 		}
@@ -312,19 +313,20 @@ func (w *partitionCommitWindow) markDone(session sarama.ConsumerGroupSession, of
 		advanced = true
 	}
 	if advanced {
-		// Kafka 鎻愪氦鐨勬槸鈥滀笅涓€鏉″緟娑堣垂 offset鈥濓紝涓嶆槸鍒氬垰澶勭悊瀹岀殑閭ｄ竴鏉°€?
+		// Kafka 提交的是「下一条待消费 offset」，不是刚刚处理完的那一条。
 		session.MarkOffset(w.topic, w.partition, w.nextCommit, "")
 	}
 }
 
+// 处理 task 的任务
 func (c *SeckillConsumer) handleCreateOrderTask(_ context.Context, _ int64, task interface{}) error {
 	createTask, ok := task.(createOrderTask)
 	if !ok {
-		return errors.New("invalid seckill create order task")
+		return errors.New("任务无效")
 	}
 
-	// 鐪熸鐨勭鏉€涓氬姟閾捐矾鍦ㄨ繖閲屾墽琛岋細
-	// 骞傜瓑妫€鏌?-> 鎵ｅ簱瀛?-> 鍒涘缓璁㈠崟 -> 鏍囪鎴愬姛锛涘け璐ユ椂璧拌ˉ鍋裤€?
+	// 秒杀下单业务链路在此执行：
+	// 幂等检查 -> 一人一单校验 -> 扣库存 -> 创建订单 -> 标记成功，失败时走补偿
 	err := c.processCreateOrderWithRetry(createTask.Message, createTask.Event)
 	select {
 	case createTask.ResultCh <- createOrderResult{
@@ -339,9 +341,9 @@ func (c *SeckillConsumer) handleCreateOrderTask(_ context.Context, _ int64, task
 }
 
 func (c *SeckillConsumer) submitCreateOrderTask(msg *sarama.ConsumerMessage, evt seckilldomain.Event, resultCh chan<- createOrderResult, claimCtx context.Context, processorDone <-chan struct{}) error {
-	// 鎸?activity_id 璺敱鍒板垎缁勫崗绋嬫睜銆?
-	// 鍚屼竴涓椿鍔ㄤ細钀藉埌鍚屼竴涓?worker锛屽湪鍗曟満鍐呬覆琛屾墽琛岋紱
-	// 涓嶅悓娲诲姩鍙互钀藉埌涓嶅悓 worker锛屽苟琛屾墽琛屻€?
+	// 按 activity_id 路由到分组协程池
+	// 同一活动落到同一 worker，在单机上串行执行
+	// 不同活动可落到不同 worker，并行执行
 	return c.activityTaskPool.Submit(pool.GroupedTask{
 		GroupID: evt.ActivityID,
 		Task: createOrderTask{
@@ -359,7 +361,7 @@ func (c *SeckillConsumer) sendCreateOrderDeadLetter(ctx context.Context, result 
 		return result.Err
 	}
 
-	// 姝讳俊閲屼繚鐣欏師濮嬩簨浠跺拰 Kafka 浣嶇偣锛屾柟渚垮悗缁帓鏌ュ拰浜哄伐琛ュ崟銆?
+	// 死信里保留原始事件与 Kafka 位点，便于后续排查与人工补单。
 	msg := seckillDeadLetterMessage{
 		Event:           result.Event,
 		Error:           result.Err.Error(),
@@ -372,7 +374,7 @@ func (c *SeckillConsumer) sendCreateOrderDeadLetter(ctx context.Context, result 
 	if err := publishSeckillDeadLetter(ctx, c.producer, msg); err != nil {
 		return err
 	}
-	c.logger.Error("绉掓潃涓嬪崟澶勭悊澶辫触锛屽凡鎶曢€掓淇℃秷鎭?,
+	c.logger.Error("秒杀下单处理失败，已投递死信消息",
 		logger.Int64("activityID", result.Event.ActivityID),
 		logger.String("requestNo", result.Event.RequestNo),
 		logger.Int("attempts", seckillCreateOrderRetryTimes),
@@ -381,6 +383,7 @@ func (c *SeckillConsumer) sendCreateOrderDeadLetter(ctx context.Context, result 
 	return nil
 }
 
+// 带重试的创建秒杀订单
 func (c *SeckillConsumer) processCreateOrderWithRetry(msg *sarama.ConsumerMessage, evt seckilldomain.Event) error {
 	var err error
 	for attempt := 1; attempt <= seckillCreateOrderRetryTimes; attempt++ {
@@ -402,15 +405,17 @@ func (c *SeckillConsumer) processCreateOrderWithRetry(msg *sarama.ConsumerMessag
 				logger.Int64("offset", msg.Offset))
 		}
 		if attempt < seckillCreateOrderRetryTimes {
-			c.logger.Warn("绉掓潃涓嬪崟澶勭悊澶辫触锛屽噯澶囬噸璇?, fields...)
+			c.logger.Warn("秒杀下单处理失败，准备重试", fields...)
 			continue
 		}
-		c.logger.Error("绉掓潃涓嬪崟澶勭悊澶辫触锛岃揪鍒伴噸璇曚笂闄?, fields...)
+		c.logger.Error("秒杀下单处理失败，已达重试上限", fields...)
 	}
 	return err
 }
 
+// 真正核心逻辑
 func (c *SeckillConsumer) processCreateOrderEvent(evt seckilldomain.Event) error {
+	// 幂等性检查
 	_, canProcess, err := c.checkRequestIdempotency(context.Background(), evt)
 	if err != nil {
 		return err
@@ -419,16 +424,22 @@ func (c *SeckillConsumer) processCreateOrderEvent(evt seckilldomain.Event) error
 		return nil
 	}
 
-	if err = c.activityRepo.DecreaseStock(context.Background(), evt.ActivityID, evt.RequestNo, evt.Quantity); err != nil {
+	// 一人一单：与扣活动库存在同一事务（TryDeductStockAndClaimSuccess → seckill_success 唯一 activity_id+user_id）
+	if err = c.activityRepo.TryDeductStockAndClaimSuccess(context.Background(), evt.ActivityID, evt.UserID, evt.RequestNo, evt.Quantity); err != nil {
 		if errors.Is(err, seckilldomain.ErrOutOfStock) {
 			return c.failAndCompensate(evt, seckilldomain.FailReasonOutOfStock, true)
+		}
+		if errors.Is(err, seckilldomain.ErrSeckillSuccessAlreadyClaimed) {
+			return c.failAndCompensate(evt, seckilldomain.FailReasonUserAlreadySucceeded, true)
 		}
 		return err
 	}
 
 	orderID, err := strconv.ParseInt(evt.RequestNo, 10, 64)
+	// 回滚
 	if err != nil {
 		_ = c.activityRepo.IncreaseStock(context.Background(), evt.ActivityID, "restore_"+evt.RequestNo+"_invalid_order", evt.Quantity)
+		_ = c.activityRepo.DeleteSuccessClaim(context.Background(), evt.ActivityID, evt.UserID)
 		return c.failAndCompensate(evt, seckilldomain.FailReasonCreateOrderFail, true)
 	}
 
@@ -447,28 +458,55 @@ func (c *SeckillConsumer) processCreateOrderEvent(evt seckilldomain.Event) error
 			ConvertedPrice:   evt.SeckillPrice,
 		}},
 	})
-	if err != nil && !isDuplicate(err) {
+	createErr := err
+	if createErr != nil && !isDuplicate(createErr) {
 		_ = c.activityRepo.IncreaseStock(context.Background(), evt.ActivityID, "restore_"+evt.RequestNo+"_create_order", evt.Quantity)
+		_ = c.activityRepo.DeleteSuccessClaim(context.Background(), evt.ActivityID, evt.UserID)
 		return c.failAndCompensate(evt, seckilldomain.FailReasonCreateOrderFail, true)
 	}
+	if createErr != nil && isDuplicate(createErr) {
+		// 区分：① 本 order_id 已落库（MQ 重试）② 其它唯一冲突（不应在 seckill_success 已占位后仍发生）
+		getResp, gerr := c.orderClient.GetOrder(context.Background(), &orderv1.GetOrderReq{OrderId: orderID})
+		if gerr != nil || getResp.GetOrder() == nil {
+			_ = c.activityRepo.IncreaseStock(context.Background(), evt.ActivityID, "restore_"+evt.RequestNo+"_seckill_order_dup", evt.Quantity)
+			_ = c.activityRepo.DeleteSuccessClaim(context.Background(), evt.ActivityID, evt.UserID)
+			return c.failAndCompensate(evt, seckilldomain.FailReasonUserAlreadySucceeded, true)
+		}
+		ord := getResp.GetOrder()
+		if ord.GetUserId() != evt.UserID || ord.GetActivityId() != evt.ActivityID || ord.GetOrderKind() != orderdomain.OrderKindSeckill {
+			_ = c.activityRepo.IncreaseStock(context.Background(), evt.ActivityID, "restore_"+evt.RequestNo+"_create_order_mismatch", evt.Quantity)
+			_ = c.activityRepo.DeleteSuccessClaim(context.Background(), evt.ActivityID, evt.UserID)
+			return c.failAndCompensate(evt, seckilldomain.FailReasonCreateOrderFail, true)
+		}
+	}
 
-	if err = c.requestRepo.MarkSuccess(context.Background(), evt.RequestNo, orderID); err != nil {
+	if err = c.activityRepo.UpdateSuccessOrderID(context.Background(), evt.ActivityID, evt.UserID, orderID); err != nil {
+		return err
+	}
+	// status 修改为拿到资格，前端轮询过来，发现订单创建好了，就拿这个 orderID 去调支付
+	if err = c.requestRepo.MarkQualified(context.Background(), evt.RequestNo); err != nil {
 		return err
 	}
 	return c.cache.SetResult(context.Background(), seckilldomain.Result{
 		RequestNo: evt.RequestNo,
-		Status:    seckilldomain.RequestStatusSuccess,
+		Status:    seckilldomain.RequestStatusQualified,
 		OrderID:   orderID,
 	})
 }
 
-// checkRequestIdempotency 鍋氱鏉€璇锋眰鐨勫箓绛夋鏌?
-// 杩斿洖 true 琛ㄧず杩欐潯娑堟伅鍏佽缁х画鎵ц涓氬姟
-// 杩斿洖 false 琛ㄧず宸茬粡琚箓绛夋尅鎺夛紝涓嶉渶瑕侀噸澶嶅鐞?
+// checkRequestIdempotency 以 request_no 为粒度做幂等：与「本条 Kafka 消息所代表的一次提交」一一对应
+// seckill_request 表仅保证 request_no 唯一，记录每次抢购尝试；「一人一单」由 seckill_success
+// 表唯一 (activity_id,user_id) 与 TryDeductStockAndClaimSuccess 同事务写入（失败补偿后可新 request_no）
+//
+// 失败与重投：failAndCompensate 等路径会 MarkFail；创单成功路径 MarkQualified
+// 之后 rebalance、broker 重投等再次收到同一消息时，canProcess=false
+//
+// 返回 true 表示允许继续执行业务；false 表示本条消息已被幂等丢弃
 func (c *SeckillConsumer) checkRequestIdempotency(ctx context.Context, evt seckilldomain.Event) (*seckilldomain.Request, bool, error) {
 	req, err := c.requestRepo.FindByRequestNo(ctx, evt.RequestNo)
 	if err == nil {
-		return req, req.Status == seckilldomain.RequestStatusProcessing, nil
+		canProcess := req.Status == seckilldomain.RequestStatusProcessing
+		return req, canProcess, nil
 	}
 	if !errors.Is(err, seckilldomain.ErrRequestNotFound) {
 		return nil, false, err
@@ -484,14 +522,14 @@ func (c *SeckillConsumer) checkRequestIdempotency(ctx context.Context, evt secki
 	if err = c.requestRepo.Create(ctx, req); err == nil {
 		return req, true, nil
 	}
-	// 涓€浜轰竴鍗曞厹搴曟牎楠岋紝鎴戝湪 activity+uesrID 涓婂姞浜嗗敮涓€绱㈠紩
+	// request_no 唯一：并发下同一消息的重复插入，丢弃
 	if errors.Is(err, seckilldomain.ErrDuplicateSeckill) {
-		// 鍛戒腑 request_no 鎴栤€滄椿鍔?+ 鐢ㄦ埛鈥濈殑鍞竴绾︽潫锛岄兘璇存槑杩欐璇锋眰搴旇骞傜瓑鎸℃帀銆?
 		return nil, false, nil
 	}
 	return nil, false, err
 }
 
+// 设置 request_no 状态为失败，并补偿恢复 redis
 func (c *SeckillConsumer) failAndCompensate(evt seckilldomain.Event, reason string, removeUser bool) error {
 	if err := c.requestRepo.MarkFail(context.Background(), evt.RequestNo, reason); err != nil {
 		return err
@@ -513,5 +551,3 @@ func isDuplicate(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "1062") || strings.Contains(msg, "Duplicate entry")
 }
-
-

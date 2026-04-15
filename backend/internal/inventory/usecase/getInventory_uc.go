@@ -11,7 +11,7 @@ type GetInventoryUseCase struct {
 	l    logger.LoggerV1
 }
 
-// 涓氬姟涓崟涓拰鎵归噺鏌ヨ锛屽彧闇€涓€涓?usecase 閫昏緫锛岄伩鍏嶅ぇ閲忛噸澶嶄唬鐮?
+// GetInventoryQuery 单商品与批量查询共用同一套用例逻辑，避免重复代码
 type GetInventoryQuery struct {
 	ProductID []int64
 }
@@ -26,7 +26,7 @@ func (uc *GetInventoryUseCase) Execute(ctx context.Context, q GetInventoryQuery)
 		if v > 0 {
 			IDs = append(IDs, v)
 		} else {
-			uc.l.Error("鍟嗗搧id鏃犳晥", logger.Int64("ID", v))
+			uc.l.Error("商品 id 无效", logger.Int64("ID", v))
 		}
 	}
 

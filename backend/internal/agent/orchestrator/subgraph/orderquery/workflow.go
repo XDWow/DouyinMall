@@ -12,7 +12,6 @@ import (
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	ordernode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/order"
-	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	subgraphmeta "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/metadata"
 	orderquerymeta "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/orderquery/metadata"
@@ -44,19 +43,9 @@ func cloneSlotsOrder(input map[string]any) map[string]any {
 	return out
 }
 
-func prepareSlots() func(context.Context, struct{}) (midSlots, error) {
-	return func(ctx context.Context, _ struct{}) (midSlots, error) {
-		var slots map[string]any
-		if err := domain.ProcessState(ctx, func(s *domain.State) error {
-			if s == nil {
-				return fmt.Errorf("state is nil")
-			}
-			slots = cloneSlotsOrder(s.Session.Slots)
-			globalnode.ApplyIntentFieldsForTools(slots, s.Intent.Entities)
-			return nil
-		}); err != nil {
-			return midSlots{}, err
-		}
+func prepareSlots() func(context.Context, GraphInput) (midSlots, error) {
+	return func(_ context.Context, in GraphInput) (midSlots, error) {
+		slots := in.Slots
 		if slots == nil {
 			slots = map[string]any{}
 		}
@@ -86,7 +75,7 @@ func runOrderModelAgent(agent *sharednode.SubgraphAgent, skills *agentskill.Regi
 		}
 		slotCtx, _ := json.Marshal(in.Slots)
 		final, tmsgs, runErr := agent.Run(ctx, sharednode.SubgraphAgentInput{
-			ToolNames:    orderquerymeta.AllowedToolNames(),
+			ToolNames:    orderquerymeta.ModelAgentToolNames(),
 			SkillNames:   skillNames,
 			SlotsContext: string(slotCtx),
 			UserQuery:    rawQuery,
@@ -103,14 +92,6 @@ func runOrderModelAgent(agent *sharednode.SubgraphAgent, skills *agentskill.Regi
 	}
 }
 
-func buildOrderOutputFromAgent(_ context.Context, in postAgent) (Output, error) {
-	return Output{
-		FinalAnswer:  in.AgentFinal,
-		ReadOnly:     true,
-		ToolMessages: append([]*schema.Message(nil), in.AgentTools...),
-	}, nil
-}
-
 func runOrderRulePlanAndTools(
 	node *ordernode.OrderReadNode,
 	toolExec *sharednode.ToolExecNode,
@@ -125,6 +106,7 @@ func runOrderRulePlanAndTools(
 			NeedHandoff:   result.NeedHandoff,
 			HandoffReason: result.HandoffReason,
 			ReadOnly:      result.ReadOnly,
+			ToolMessages:  append([]*schema.Message(nil), in.AgentTools...),
 		}
 		if len(result.Plans) == 0 || toolExec == nil {
 			return out, nil
@@ -141,14 +123,7 @@ func runOrderRulePlanAndTools(
 		if err != nil {
 			return Output{}, err
 		}
-		out.ToolMessages = append([]*schema.Message(nil), messages...)
+		out.ToolMessages = append(append([]*schema.Message(nil), in.AgentTools...), messages...)
 		return out, nil
 	}
-}
-
-func branchAfterOrderAgent(_ context.Context, in postAgent) (string, error) {
-	if strings.TrimSpace(in.AgentFinal) != "" {
-		return "OrderQueryAgentAnswerNode", nil
-	}
-	return "OrderQueryRulePlanNode", nil
 }

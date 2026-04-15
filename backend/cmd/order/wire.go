@@ -5,8 +5,8 @@ package main
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/db"
+	"github.com/XDWow/DouyinMall/backend/internal/order/infra/delay_queue"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
-	"github.com/XDWow/DouyinMall/backend/internal/order/infra/queue"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/order/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/order/job"
@@ -25,6 +25,9 @@ type App struct {
 	Server    server.Server
 	Cron      *cron.Cron
 	Consumers []ConsumerComponent
+
+	getOrderUC      *usecase.GetOrderUseCase
+	listUserOrderUC *usecase.ListUserOrderUseCase
 }
 
 func InitApp() *App {
@@ -38,7 +41,7 @@ func InitApp() *App {
 		db.NewGormTxManager,
 		cache.NewRedisOrderCache,
 		mq.NewSaramaProducer,
-		queue.NewOrderDelayQueue,
+		delay_queue.NewOrderDelayQueue,
 		repository.NewOrderRepository,
 		repository.NewOutboxRepository,
 		usecase.NewCreateOrderUseCase,
@@ -55,15 +58,20 @@ func InitApp() *App {
 		newApp,
 	)
 
-	return &App{}
+	return nil
 }
 
-func newApp(server server.Server, cron *cron.Cron) *App {
+func newApp(
+	srv server.Server,
+	cron *cron.Cron,
+	getOrderUC *usecase.GetOrderUseCase,
+	listUserOrderUC *usecase.ListUserOrderUseCase,
+) *App {
 	return &App{
-		Server:    server,
-		Cron:      cron,
-		Consumers: nil,
+		Server:          srv,
+		Cron:            cron,
+		Consumers:       nil,
+		getOrderUC:      getOrderUC,
+		listUserOrderUC: listUserOrderUC,
 	}
 }
-
-

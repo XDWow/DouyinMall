@@ -2,22 +2,18 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/XDWow/DouyinMall/backend/internal/order/usecase"
+	"github.com/XDWow/DouyinMall/backend/pkg/mcpruntime"
 	mcpproto "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-
-	"github.com/XDWow/DouyinMall/backend/pkg/mcpruntime"
-	orderv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1"
-	orderservice "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1/orderservice"
 )
 
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
-	Upstream UpstreamConfig `mapstructure:"upstream"`
+	Upstream UpstreamConfig `mapstructure:"upstream"` // 保留：网关或文档；进程内直连 UC 时不使用
 	Tools    []ToolConfig   `mapstructure:"tools"`
 }
 
@@ -40,12 +36,14 @@ type ToolConfig struct {
 }
 
 type Adapter struct {
-	client orderservice.Client
+	getOrder      *usecase.GetOrderUseCase
+	listUserOrder *usecase.ListUserOrderUseCase
 }
 
-func NewServer(cfg Config, client orderservice.Client) (http.Handler, error) {
+// NewServer 构建 MCP HTTP 处理器；get / list 分别走 GetOrder、ListUserOrder 用例。
+func NewServer(cfg Config, getOrder *usecase.GetOrderUseCase, listUserOrder *usecase.ListUserOrderUseCase) (http.Handler, error) {
 	cfg = applyDefaults(cfg)
-	adapter := &Adapter{client: client}
+	adapter := &Adapter{getOrder: getOrder, listUserOrder: listUserOrder}
 	server := mcpserver.NewMCPServer(
 		cfg.Server.Name,
 		cfg.Server.Version,
@@ -58,13 +56,18 @@ func NewServer(cfg Config, client orderservice.Client) (http.Handler, error) {
 			continue
 		}
 		switch tool.Key {
-		case "query_order":
+		case "get_order":
 			server.AddTool(mcpproto.NewTool(
 				tool.Name,
 				mcpproto.WithDescription(tool.Description),
-				mcpproto.WithNumber("order_id", mcpproto.Description("Order ID to query")),
-				mcpproto.WithNumber("limit", mcpproto.Description("Maximum number of orders to return"), mcpproto.DefaultNumber(5)),
-			), adapter.QueryOrder)
+				mcpproto.WithNumber("order_id", mcpproto.Description("订单 ID"), mcpproto.Required()),
+			), adapter.GetOrder)
+		case "list_user_orders", "query_order":
+			// query_order 为历史配置键，与 list_user_orders 等价
+			server.AddTool(mcpproto.NewTool(
+				tool.Name,
+				mcpproto.WithDescription(tool.Description),
+			), adapter.ListUserOrders)
 		}
 	}
 
@@ -74,56 +77,54 @@ func NewServer(cfg Config, client orderservice.Client) (http.Handler, error) {
 	), nil
 }
 
-func (a *Adapter) QueryOrder(ctx context.Context, req mcpproto.CallToolRequest) (*mcpproto.CallToolResult, error) {
+func (a *Adapter) GetOrder(ctx context.Context, req mcpproto.CallToolRequest) (*mcpproto.CallToolResult, error) {
 	runtime := mcpruntime.FromContext(ctx)
 	if runtime.UserID <= 0 {
-		return mcpproto.NewToolResultError("missing runtime user_id"), nil
+		return mcpproto.NewToolResultError("缺少运行上下文 user_id"), nil
 	}
 
-	var args struct {
-		OrderID int64 `json:"order_id"`
-		Limit   int32 `json:"limit"`
-	}
+	var args getOrderArgs
 	if err := req.BindArguments(&args); err != nil {
-		return mcpproto.NewToolResultError("invalid arguments: " + err.Error()), nil
+		return mcpproto.NewToolResultError("参数无效: " + err.Error()), nil
 	}
-	if args.Limit <= 0 {
-		args.Limit = 5
+	if args.OrderID <= 0 {
+		return mcpproto.NewToolResultError("order_id 必填且须为正整数"), nil
 	}
 
-	resp, err := a.client.ListOrder(ctx, &orderv1.ListOrderReq{
-		UserId: runtime.UserID,
-		Limit:  args.Limit,
-	})
+	order, err := a.getOrder.Execute(ctx, usecase.GetOrderCmd{OrderID: args.OrderID})
 	if err != nil {
-		return mcpproto.NewToolResultError("query order failed: " + err.Error()), nil
+		return mcpproto.NewToolResultError("查询订单失败: " + err.Error()), nil
+	}
+	if order.UserID != runtime.UserID {
+		return mcpproto.NewToolResultError("订单不存在或无权查看"), nil
 	}
 
-	type orderSummary struct {
-		OrderID     int64  `json:"order_id"`
-		Status      string `json:"status"`
-		TotalAmount int64  `json:"total_amount"`
-		Currency    string `json:"currency"`
-		CreatedAt   int64  `json:"created_at"`
+	v, ok := domainOrderToItemView(order)
+	if !ok {
+		return mcpproto.NewToolResultError("订单数据异常"), nil
 	}
-	items := make([]orderSummary, 0, len(resp.GetOrders()))
-	for _, order := range resp.GetOrders() {
-		if args.OrderID > 0 && order.GetOrderId() != args.OrderID {
-			continue
-		}
-		items = append(items, orderSummary{
-			OrderID:     order.GetOrderId(),
-			Status:      order.GetOrderStatus().String(),
-			TotalAmount: order.GetTotalAmount(),
-			Currency:    order.GetCurrency(),
-			CreatedAt:   order.GetCreatedAt(),
-		})
-	}
-	if args.OrderID > 0 && len(items) == 0 {
-		return mcpproto.NewToolResultError(fmt.Sprintf("order %d not found", args.OrderID)), nil
+	return mcpproto.NewToolResultText(marshalGetOrderPayload(getOrderPayload{Order: v})), nil
+}
+
+func (a *Adapter) ListUserOrders(ctx context.Context, req mcpproto.CallToolRequest) (*mcpproto.CallToolResult, error) {
+	runtime := mcpruntime.FromContext(ctx)
+	if runtime.UserID <= 0 {
+		return mcpproto.NewToolResultError("缺少运行上下文 user_id"), nil
 	}
 
-	return mcpproto.NewToolResultText(toJSON(map[string]any{"orders": items})), nil
+	var args listUserOrdersArgs
+	if err := req.BindArguments(&args); err != nil {
+		return mcpproto.NewToolResultError("参数无效: " + err.Error()), nil
+	}
+
+	cmd := toFirstPageListCmd(runtime.UserID)
+	result, err := a.listUserOrder.Execute(cmd)
+	if err != nil {
+		return mcpproto.NewToolResultError("查询订单列表失败: " + err.Error()), nil
+	}
+
+	views := toQueryOrderItemViews(result.Orders)
+	return mcpproto.NewToolResultText(marshalListUserOrdersPayload(listUserOrdersPayload{Orders: views})), nil
 }
 
 func applyDefaults(cfg Config) Config {
@@ -134,19 +135,56 @@ func applyDefaults(cfg Config) Config {
 		cfg.Server.Version = "1.0.0"
 	}
 	if len(cfg.Tools) == 0 {
-		cfg.Tools = []ToolConfig{{
-			Key:         "query_order",
-			Name:        "query_order",
-			Description: "Query the current user's orders.",
-			Enabled:     true,
-		}}
+		cfg.Tools = []ToolConfig{
+			{
+				Key:         "get_order",
+				Name:        "get_order",
+				Description: "根据 order_id 查询单笔订单详情摘要；仅允许查询当前上下文用户本人的订单。",
+				Enabled:     true,
+			},
+			{
+				Key:         "list_user_orders",
+				Name:        "list_user_orders",
+				Description: "查询当前上下文用户订单列表第一页，固定最多 10 条。",
+				Enabled:     true,
+			},
+		}
 	}
+	cfg.Tools = completeToolSet(cfg.Tools)
 	return cfg
 }
 
-func toJSON(v any) string {
-	data, _ := json.Marshal(v)
-	return string(data)
+// completeToolSet 保证「单笔」与「列表」各至少有一个已启用的 tool。
+// 旧配置只写 query_order（列表）时也会自动补上 get_order，避免 MCP 只暴露一个 tool。
+func completeToolSet(tools []ToolConfig) []ToolConfig {
+	hasGet, hasList := false, false
+	for _, t := range tools {
+		if !t.Enabled {
+			continue
+		}
+		switch t.Key {
+		case "get_order":
+			hasGet = true
+		case "list_user_orders", "query_order":
+			hasList = true
+		}
+	}
+	out := append([]ToolConfig(nil), tools...)
+	if !hasGet {
+		out = append(out, ToolConfig{
+			Key:         "get_order",
+			Name:        "get_order",
+			Description: "根据 order_id 查询单笔订单详情摘要；仅允许查询当前上下文用户本人的订单。",
+			Enabled:     true,
+		})
+	}
+	if !hasList {
+		out = append(out, ToolConfig{
+			Key:         "list_user_orders",
+			Name:        "list_user_orders",
+			Description: "查询当前上下文用户订单列表第一页，固定最多 10 条。",
+			Enabled:     true,
+		})
+	}
+	return out
 }
-
-

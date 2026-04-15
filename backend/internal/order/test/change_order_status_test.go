@@ -80,6 +80,35 @@ func TestChangeOrderStatusReturnsUnchangedResult(t *testing.T) {
 	require.Zero(t, orderRepo.updatedOrderID)
 }
 
+func TestBatchCancelOrderEmptyOrderIDs(t *testing.T) {
+	orderRepo := &stubStatusOrderRepo{}
+	outboxRepo := &stubOutboxRepo{}
+	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	uc := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
+
+	require.NoError(t, uc.Execute(context.Background(), nil))
+	require.NoError(t, uc.Execute(context.Background(), []int64{}))
+	require.False(t, orderRepo.findByIDsLocked)
+}
+
+func TestBatchCancelOrderSkipsNonCreated(t *testing.T) {
+	outboxRepo := &stubOutboxRepo{}
+	orderRepo := &stubStatusOrderRepo{
+		ordersByID: map[int64]domain.Order{
+			21: {ID: 21, UserID: 201, Status: domain.OrderStatusPaid},
+		},
+	}
+	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	uc := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
+
+	require.NoError(t, uc.Execute(context.Background(), []int64{21}))
+	require.False(t, orderRepo.findByIDsLocked)
+	outboxRepo.mu.Lock()
+	defer outboxRepo.mu.Unlock()
+	require.Empty(t, outboxRepo.batchAddIDs)
+	require.Empty(t, outboxRepo.batchMarkSentIDs)
+}
+
 func TestBatchCancelOrderMarksSentByOutboxID(t *testing.T) {
 	outboxRepo := &stubOutboxRepo{batchAddIDs: []int64{301, 302}}
 	orderRepo := &stubStatusOrderRepo{
@@ -103,26 +132,62 @@ func TestBatchCancelOrderMarksSentByOutboxID(t *testing.T) {
 	defer outboxRepo.mu.Unlock()
 	require.Equal(t, []int64{301, 302}, outboxRepo.batchMarkSentIDs)
 	require.Empty(t, outboxRepo.retryIDs)
-	require.True(t, orderRepo.findByIDsLocked)
+	require.False(t, orderRepo.findByIDsLocked)
+	require.Equal(t, []int64{11, 12}, orderRepo.batchUpdatedIDs)
+}
+
+func TestBatchCancelOrderFailsWhenBatchUpdateStatusFails(t *testing.T) {
+	outboxRepo := &stubOutboxRepo{batchAddIDs: []int64{401}}
+	orderRepo := &stubStatusOrderRepo{
+		ordersByID: map[int64]domain.Order{
+			31: {ID: 31, UserID: 301, Status: domain.OrderStatusCreated},
+			32: {ID: 32, UserID: 302, Status: domain.OrderStatusCreated},
+		},
+		batchUpdateErr: domain.ErrRecordNotFound,
+	}
+	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	uc := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
+
+	err := uc.Execute(context.Background(), []int64{31, 32})
+	require.ErrorIs(t, err, domain.ErrRecordNotFound)
+
+	outboxRepo.mu.Lock()
+	defer outboxRepo.mu.Unlock()
+	require.Empty(t, outboxRepo.batchMarkSentIDs)
+	require.Equal(t, []int64{31, 32}, orderRepo.batchUpdatedIDs)
 }
 
 type stubStatusOrderRepo struct {
-	order            domain.Order
-	ordersByID       map[int64]domain.Order
-	findByIDsLocked  bool
-	updatedOrderID   int64
-	updatedFrom      domain.OrderStatus
-	updatedTo        domain.OrderStatus
-	batchUpdatedIDs  []int64
-	batchUpdatedFrom domain.OrderStatus
-	batchUpdatedTo   domain.OrderStatus
+	order               domain.Order
+	ordersByID          map[int64]domain.Order
+	findByIDErr         error
+	findByIDsLocked     bool
+	updateStatusErrByID map[int64]error
+	updatedOrderID      int64
+	updatedOrderIDs     []int64
+	updatedFrom         domain.OrderStatus
+	updatedTo           domain.OrderStatus
+	batchUpdatedIDs     []int64
+	batchUpdatedFrom    domain.OrderStatus
+	batchUpdatedTo      domain.OrderStatus
+	batchUpdateErr      error
 }
 
 func (s *stubStatusOrderRepo) Save(context.Context, *domain.Order) error {
 	return nil
 }
 
-func (s *stubStatusOrderRepo) FindByID(context.Context, int64) (domain.Order, error) {
+func (s *stubStatusOrderRepo) FindByID(_ context.Context, orderID int64) (domain.Order, error) {
+	if s.findByIDErr != nil {
+		return domain.Order{}, s.findByIDErr
+	}
+	if s.ordersByID != nil {
+		o, ok := s.ordersByID[orderID]
+		if !ok {
+			return domain.Order{}, domain.ErrRecordNotFound
+		}
+		return o, nil
+	}
 	return s.order, nil
 }
 
@@ -156,8 +221,16 @@ func (s *stubStatusOrderRepo) findByIDs(orderIDs []int64) ([]*domain.Order, erro
 
 func (s *stubStatusOrderRepo) UpdateStatus(_ context.Context, orderID int64, fromStatus, toStatus domain.OrderStatus) error {
 	s.updatedOrderID = orderID
+	s.updatedOrderIDs = append(s.updatedOrderIDs, orderID)
 	s.updatedFrom = fromStatus
 	s.updatedTo = toStatus
+	if err := s.updateStatusErrByID[orderID]; err != nil {
+		return err
+	}
+	if order, ok := s.ordersByID[orderID]; ok {
+		order.Status = toStatus
+		s.ordersByID[orderID] = order
+	}
 	return nil
 }
 
@@ -173,6 +246,20 @@ func (s *stubStatusOrderRepo) BatchUpdateStatus(_ context.Context, orderIDs []in
 	s.batchUpdatedIDs = append([]int64(nil), orderIDs...)
 	s.batchUpdatedFrom = fromStatus
 	s.batchUpdatedTo = toStatus
+	if s.batchUpdateErr != nil {
+		return s.batchUpdateErr
+	}
+	for _, id := range orderIDs {
+		if err, ok := s.updateStatusErrByID[id]; ok && err != nil {
+			return err
+		}
+	}
+	for _, id := range orderIDs {
+		if order, ok := s.ordersByID[id]; ok {
+			order.Status = toStatus
+			s.ordersByID[id] = order
+		}
+	}
 	return nil
 }
 
@@ -271,5 +358,3 @@ func (s *stubSyncProducer) AddOffsetsToTxn(map[string][]*sarama.PartitionOffsetM
 func (s *stubSyncProducer) AddMessageToTxn(*sarama.ConsumerMessage, string, *string) error {
 	return nil
 }
-
-

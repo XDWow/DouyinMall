@@ -30,16 +30,6 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
 
-// subgraphEntryInput 子图入口占位；业务数据在主图共享 *domain.State（经线性段 Pre 已 sync 到 GenLocalState）。
-func subgraphEntryInput(_ context.Context, state *domain.State) (struct{}, error) {
-	if state == nil {
-		return struct{}{}, fmt.Errorf("state is nil")
-	}
-	return struct{}{}, nil
-}
-
-// Package graph：Eino 主图编译，全图共享 *domain.State。
-
 type Config struct {
 	InterruptBeforeNodes []string
 }
@@ -58,9 +48,9 @@ type Builder struct {
 	IntentAndSlot   *globalnode.IntentAndSlotNode
 	// SlotMerge 逻辑在 IntentAndSlotNode 的 StatePre 内紧随意图之后执行（不再单独占主图节点）。
 	SlotMerge *globalnode.SlotMergeNode
-	AskUser         *globalnode.AskUserNode
-	Route           *globalnode.RouteNode
-	Finalize        *globalnode.FinalizeNode
+	AskUser   *globalnode.AskUserNode
+	Route     *globalnode.RouteNode
+	Finalize  *globalnode.FinalizeNode
 
 	OrderRead           *ordernode.OrderReadNode
 	InventoryRead       *inventorynode.InventoryReadNode
@@ -151,216 +141,7 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *domain.Stat
 		}
 	}
 
-	if err := g.AddLambdaNode("PrepareReturnPolicyInputNode", compose.InvokableLambda(subgraphEntryInput),
-		compose.WithNodeName("PrepareReturnPolicyInputNode")); err != nil {
-		return err
-	}
-
-	if err := g.AddLambdaNode("ApplyReturnPolicyResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result returnpolicy.Output) (*domain.State, error) {
-			var current *domain.State
-			if err := domain.ProcessState(ctx, func(state *domain.State) error {
-				if state == nil {
-					return fmt.Errorf("state is nil")
-				}
-				current = state
-				state.Session.AwaitingUser = false
-				state.Session.MissingSlots = nil
-				if result.CacheHit {
-					state.Response = result.Response
-					state.Session.CacheHitLevel = result.HitLevel
-					state.Session.FinalAnswer = result.FinalAnswer
-					if result.Response != nil {
-						state.Session.Intent = result.Response.Intent
-					}
-					state.Session.Route = domain.RouteReturnPolicy
-					return nil
-				}
-				state.Session.FinalAnswer = result.FinalAnswer
-				state.Rewrite.Query = result.Query
-				state.Rewrite.Reason = ""
-				state.Retrieval.Documents = append([]*schema.Document(nil), result.Documents...)
-				state.Answer.CacheableHint = boolPtr(true)
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-			if current == nil {
-				return nil, fmt.Errorf("state is nil")
-			}
-			return current, nil
-		}), compose.WithNodeName("ApplyReturnPolicyResultNode")); err != nil {
-		return err
-	}
-
-	if err := g.AddLambdaNode("PrepareOrderQueryInputNode", compose.InvokableLambda(subgraphEntryInput),
-		compose.WithNodeName("PrepareOrderQueryInputNode")); err != nil {
-		return err
-	}
-	if err := g.AddLambdaNode("ApplyOrderQueryResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result orderquery.Output) (*domain.State, error) {
-			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages, false)
-		}), compose.WithNodeName("ApplyOrderQueryResultNode")); err != nil {
-		return err
-	}
-
-	if err := g.AddLambdaNode("PrepareInventoryInputNode", compose.InvokableLambda(subgraphEntryInput),
-		compose.WithNodeName("PrepareInventoryInputNode")); err != nil {
-		return err
-	}
-	if err := g.AddLambdaNode("ApplyInventoryResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result inventory.Output) (*domain.State, error) {
-			if result.AwaitingUser {
-				return applySubgraphSlotWait(ctx, b, result.MissingSlots, result.FinalAnswer)
-			}
-			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages, false)
-		}), compose.WithNodeName("ApplyInventoryResultNode")); err != nil {
-		return err
-	}
-
-	if err := g.AddLambdaNode("PrepareAddToCartInputNode", compose.InvokableLambda(subgraphEntryInput),
-		compose.WithNodeName("PrepareAddToCartInputNode")); err != nil {
-		return err
-	}
-	if err := g.AddLambdaNode("ApplyAddToCartResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result addtocart.Output) (*domain.State, error) {
-			if result.AwaitingUser {
-				return applySubgraphSlotWait(ctx, b, result.MissingSlots, result.FinalAnswer)
-			}
-			return applyToolFlowResult(ctx, result.FinalAnswer, result.NeedHandoff, result.HandoffReason, result.ReadOnly, result.ToolMessages, false)
-		}), compose.WithNodeName("ApplyAddToCartResultNode")); err != nil {
-		return err
-	}
-
-	if err := g.AddLambdaNode("PrepareProductInfoInputNode", compose.InvokableLambda(subgraphEntryInput),
-		compose.WithNodeName("PrepareProductInfoInputNode")); err != nil {
-		return err
-	}
-	if err := g.AddLambdaNode("ApplyProductInfoResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result productinfo.Output) (*domain.State, error) {
-			if result.AwaitingUser {
-				return applySubgraphSlotWait(ctx, b, result.MissingSlots, result.FinalAnswer)
-			}
-			var current *domain.State
-			if err := domain.ProcessState(ctx, func(state *domain.State) error {
-				if state == nil {
-					return fmt.Errorf("state is nil")
-				}
-				current = state
-				state.Session.AwaitingUser = false
-				state.Session.MissingSlots = nil
-				if result.CacheHit {
-					state.Response = result.Response
-					state.Session.CacheHitLevel = result.HitLevel
-					state.Session.FinalAnswer = result.FinalAnswer
-					if result.Response != nil {
-						state.Session.Intent = result.Response.Intent
-					}
-					state.Session.Route = domain.RouteProductInfo
-					return nil
-				}
-				state.Session.FinalAnswer = result.FinalAnswer
-				state.Session.NeedHandoff = result.NeedHandoff
-				state.Session.HandoffReason = result.HandoffReason
-				state.Session.ReadOnly = result.ReadOnly
-				support.HydrateToolResults(state)
-				support.ResetToolState(state)
-				state.Rewrite.Query = result.Query
-				state.Rewrite.Reason = ""
-				state.Retrieval.Documents = append([]*schema.Document(nil), result.Documents...)
-				state.Answer.CacheableHint = boolPtr(true)
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-			return current, nil
-		}), compose.WithNodeName("ApplyProductInfoResultNode")); err != nil {
-		return err
-	}
-
-	if err := g.AddLambdaNode("PrepareReturnExchangeInputNode", compose.InvokableLambda(subgraphEntryInput),
-		compose.WithNodeName("PrepareReturnExchangeInputNode")); err != nil {
-		return err
-	}
-	if err := g.AddLambdaNode("ApplyReturnExchangeResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result returnexchange.Output) (*domain.State, error) {
-			if result.AwaitingUser {
-				return applySubgraphSlotWait(ctx, b, result.MissingSlots, result.FinalAnswer)
-			}
-			var current *domain.State
-			if err := domain.ProcessState(ctx, func(state *domain.State) error {
-				if state == nil {
-					return fmt.Errorf("state is nil")
-				}
-				current = state
-				state.Session.FinalAnswer = result.FinalAnswer
-				state.Session.NeedHandoff = result.NeedHandoff
-				state.Session.HandoffReason = result.HandoffReason
-				state.Session.ReadOnly = result.ReadOnly
-				state.Session.AwaitingConfirm = result.AwaitingConfirm
-				state.Session.AwaitingUser = false
-				state.Session.MissingSlots = nil
-				support.HydrateToolResults(state)
-				support.ResetToolState(state)
-				state.Answer.CacheableHint = boolPtr(false)
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-			if current != nil && result.AwaitingConfirm {
-				reply := result.FinalAnswer
-				resp := current.EnsureResponse()
-				resp.Reply = reply
-				resp.Intent = current.Session.Intent
-				resp.Status = domain.ReplyStatusFallback
-				resp.Confidence = 0.9
-				current.Session.FinalAnswer = reply
-				current.Answer.CacheableHint = boolPtr(false)
-				current.Interrupt = &domain.InterruptState{
-					Payload: map[string]any{"confirm": true, "message": reply},
-				}
-				return current, nil
-			}
-			return current, nil
-		}), compose.WithNodeName("ApplyReturnExchangeResultNode")); err != nil {
-		return err
-	}
-
-	if err := g.AddLambdaNode("PrepareBaseQAInputNode", compose.InvokableLambda(subgraphEntryInput),
-		compose.WithNodeName("PrepareBaseQAInputNode")); err != nil {
-		return err
-	}
-	if err := g.AddLambdaNode("ApplyBaseQAResultNode", compose.InvokableLambda(
-		func(ctx context.Context, result baseqa.Output) (*domain.State, error) {
-			var current *domain.State
-			if err := domain.ProcessState(ctx, func(state *domain.State) error {
-				if state == nil {
-					return fmt.Errorf("state is nil")
-				}
-				current = state
-				state.Session.AwaitingUser = false
-				state.Session.MissingSlots = nil
-				if result.CacheHit {
-					state.Response = result.Response
-					state.Session.CacheHitLevel = result.HitLevel
-					state.Session.FinalAnswer = result.FinalAnswer
-					if result.Response != nil {
-						state.Session.Intent = result.Response.Intent
-					}
-					state.Session.Route = domain.RouteBaseQA
-					return nil
-				}
-				state.Session.FinalAnswer = result.FinalAnswer
-				state.Rewrite.Query = result.Query
-				state.Rewrite.Reason = ""
-				state.Retrieval.Documents = append([]*schema.Document(nil), result.Documents...)
-				state.Answer.CacheableHint = boolPtr(len(result.Documents) > 0)
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-			return current, nil
-		}), compose.WithNodeName("ApplyBaseQAResultNode")); err != nil {
+	if err := b.addSubgraphBridgeNodes(g); err != nil {
 		return err
 	}
 

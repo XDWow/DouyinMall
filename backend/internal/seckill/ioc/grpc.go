@@ -16,7 +16,7 @@ func InitGRPCServer(handler *transportgrpc.Handler) server.Server {
 	endpoints := viper.GetStringSlice("etcd.endpoints")
 	r, err := etcd.NewEtcdRegistry(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("create etcd registry failed: %w", err))
+		panic(fmt.Errorf("创建 etcd 注册中心失败: %w", err))
 	}
 	port := viper.GetInt("grpc.server.port")
 	serviceName := viper.GetString("grpc.server.name")

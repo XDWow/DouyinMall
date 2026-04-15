@@ -7,7 +7,5 @@ import (
 
 type DelayQueue interface {
 	Enqueue(ctx context.Context, orderID int64, executeAt time.Time) error
-	DrainDue(ctx context.Context, now time.Time) ([]int64, error)
+	DrainDue(ctx context.Context, t time.Time) ([]int64, error)
 }
-
-

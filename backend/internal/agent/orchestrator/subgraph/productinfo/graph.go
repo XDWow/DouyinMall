@@ -5,9 +5,7 @@ import (
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
-	"github.com/cloudwego/eino/schema"
 
-	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	productnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/product"
@@ -15,21 +13,6 @@ import (
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 )
-
-type Output struct {
-	CacheHit      bool
-	HitLevel      string
-	Response      *domain.ChatResult
-	FinalAnswer   string
-	NeedHandoff   bool
-	HandoffReason string
-	ReadOnly      bool
-	ToolMessages  []*schema.Message
-	Query         string
-	Documents     []*schema.Document
-	AwaitingUser  bool
-	MissingSlots  []string
-}
 
 func Build(
 	_ context.Context,
@@ -47,9 +30,9 @@ func Build(
 
 	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, maxAnswerTokens)
 	toolExecNode := sharednode.NewToolExecNode(registry)
-	g := compose.NewGraph[struct{}, Output]()
+	g := compose.NewGraph[GraphInput, Output]()
 
-	if err := g.AddLambdaNode("ProductInfoL1TryNode", compose.InvokableLambda(productInfoL1Try(l1Cache, skills)),
+	if err := g.AddLambdaNode("ProductInfoL1TryNode", compose.InvokableLambda(productInfoL1Try(l1Cache)),
 		compose.WithNodeName("ProductInfoL1TryNode")); err != nil {
 		return nil, err
 	}

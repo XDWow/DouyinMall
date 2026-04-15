@@ -18,7 +18,7 @@ func InitKafkaClient() sarama.Client {
 	cfg.Producer.Return.Successes = true
 	client, err := sarama.NewClient(brokers, cfg)
 	if err != nil {
-		panic(err)
+		panic("初始化 Kafka Client 失败: " + err.Error())
 	}
 	return client
 }
@@ -26,7 +26,7 @@ func InitKafkaClient() sarama.Client {
 func InitKafkaSyncProducer(client sarama.Client) sarama.SyncProducer {
 	producer, err := sarama.NewSyncProducerFromClient(client)
 	if err != nil {
-		panic(err)
+		panic("初始化 Kafka SyncProducer 失败: " + err.Error())
 	}
 	return producer
 }

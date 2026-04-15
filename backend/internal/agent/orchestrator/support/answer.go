@@ -29,7 +29,16 @@ func TemplateAnswer(st *domain.State) string {
 
 	switch st.Session.Route {
 	case domain.RouteOrderQuery:
-		if result := ToolResultMap(st, "query_order"); len(result) > 0 {
+		if r := ToolResultMap(st, "get_order"); len(r) > 0 {
+			if ord, ok := r["order"].(map[string]any); ok && ord != nil {
+				return fmt.Sprintf("订单 %v 当前状态为 %v。", ord["order_id"], ord["status"])
+			}
+		}
+		result := ToolResultMap(st, "list_user_orders")
+		if len(result) == 0 {
+			result = ToolResultMap(st, "query_order")
+		}
+		if len(result) > 0 {
 			if orders, ok := result["orders"].([]any); ok && len(orders) > 0 {
 				first, _ := orders[0].(map[string]any)
 				if len(orders) == 1 && first != nil {

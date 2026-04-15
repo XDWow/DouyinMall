@@ -175,7 +175,7 @@ func hasDynamicCacheTool(state *domain.State) bool {
 
 func isDynamicCacheTool(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "query_order", "get_inventory", "add_to_cart", "create_after_sale_request":
+	case "query_order", "list_user_orders", "get_order", "get_inventory", "add_to_cart", "create_after_sale_request":
 		return true
 	default:
 		return false

@@ -34,7 +34,7 @@ func NewSyncWechatOrderUC(
 func (uc *SyncWechatOrderUC) SyncWechatInfo(ctx context.Context, bizTradeNo string) error {
 	resp, err := uc.svc.QueryOrderByOutTradeNo(ctx, bizTradeNo)
 	if err != nil {
-		uc.l.Error("鏌ヨ寰俊鏀粯鍗曞け璐?,
+		uc.l.Error("查询微信支付单失败",
 			logger.String("biz_trade_no", bizTradeNo),
 			logger.Error(err))
 		return err
@@ -47,7 +47,7 @@ func (uc *SyncWechatOrderUC) SyncWechatInfo(ctx context.Context, bizTradeNo stri
 	}
 
 	if err = uc.payCallbackUC.UpdatePaymentByTxn(ctx, cmd); err != nil {
-		uc.l.Error("鏍规嵁寰俊鏀粯鍗曟洿鏂版湰鍦版敮浠樿褰曞け璐?,
+		uc.l.Error("根据微信订单更新本地支付记录失败",
 			logger.String("biz_trade_no", bizTradeNo),
 			logger.Error(err))
 		return err

@@ -10,5 +10,5 @@ ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/order .
 COPY --from=builder /app/internal/order/config/docker.yaml ./internal/order/config/dev.yaml
-EXPOSE 8095
+EXPOSE 8095 19092
 ENTRYPOINT ["./order"]

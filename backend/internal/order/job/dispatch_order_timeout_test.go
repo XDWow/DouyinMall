@@ -29,7 +29,8 @@ func TestDispatchOrderTimeoutJobSkipsNonCreatedOrdersBeforeConfirmingPayment(t *
 	outboxRepo := &stubTimeoutOutboxRepo{}
 	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
 	batchCancelUC := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
-	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, batchCancelUC, logger.NewNopLogger())
+	changeUC := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
+	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, batchCancelUC, changeUC, logger.NewNopLogger())
 
 	err := job.Run()
 
@@ -57,7 +58,8 @@ func TestDispatchOrderTimeoutJobLoadsCreatedOrderBeforeConfirmingPayment(t *test
 	outboxRepo := &stubTimeoutOutboxRepo{batchAddIDs: []int64{1}}
 	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
 	batchCancelUC := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
-	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, batchCancelUC, logger.NewNopLogger())
+	changeUC := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
+	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, batchCancelUC, changeUC, logger.NewNopLogger())
 
 	err := job.Run()
 
@@ -66,7 +68,7 @@ func TestDispatchOrderTimeoutJobLoadsCreatedOrderBeforeConfirmingPayment(t *test
 	require.Equal(t, 1, orderRepo.findCalls)
 	require.Equal(t, 0, orderRepo.findCallConfirmSnapshot)
 	require.Equal(t, []int64{1002}, orderRepo.batchUpdatedIDs)
-	require.True(t, orderRepo.findByIDsLocked)
+	require.False(t, orderRepo.findByIDsLocked)
 	require.Empty(t, delayQueue.dueIDs)
 }
 
@@ -89,13 +91,14 @@ func TestDispatchOrderTimeoutJobBatchCancelsAllDueCreatedOrders(t *testing.T) {
 	outboxRepo := &stubTimeoutOutboxRepo{batchAddIDs: []int64{1, 2}}
 	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
 	batchCancelUC := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
-	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, batchCancelUC, logger.NewNopLogger())
+	changeUC := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
+	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, batchCancelUC, changeUC, logger.NewNopLogger())
 
 	err := job.Run()
 
 	require.NoError(t, err)
 	require.Equal(t, []int64{1003, 1004}, orderRepo.batchUpdatedIDs)
-	require.True(t, orderRepo.findByIDsLocked)
+	require.False(t, orderRepo.findByIDsLocked)
 }
 
 func TestDispatchOrderTimeoutJobSyncsPaidOrderBeforeSkippingCancel(t *testing.T) {
@@ -115,7 +118,8 @@ func TestDispatchOrderTimeoutJobSyncsPaidOrderBeforeSkippingCancel(t *testing.T)
 	}
 	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
 	batchCancelUC := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
-	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, batchCancelUC, logger.NewNopLogger())
+	changeUC := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
+	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, batchCancelUC, changeUC, logger.NewNopLogger())
 
 	err := job.Run()
 

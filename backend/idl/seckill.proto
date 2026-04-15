@@ -74,6 +74,7 @@ message GetSeckillResultReq {
 
 message GetSeckillResultResp {
   string request_no = 1;
+  // PROCESSING 处理中；QUALIFIED 已抢到资格待支付；FAIL 未抢到或失败
   string status = 2;
   int64 order_id = 3;
   string fail_reason = 4;

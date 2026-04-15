@@ -3,6 +3,7 @@ package global
 import (
 	"strings"
 
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	orchestratorshared "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 )
@@ -27,6 +28,27 @@ func ApplyIntentFieldsForTools(slots map[string]any, intentFields map[string]str
 			}
 		default:
 			slots[key] = val
+		}
+	}
+}
+
+// ResolveOrderRefFromTrustedRefs：模型在意图 JSON 的 entities 里输出指代（如 order_ref=current），
+// 数字 order_id 由本函数用会话 CurrentRefs（工具 hydrate / 持久化的「当前单」）解析进 slots，供下游规则节点调单。
+func ResolveOrderRefFromTrustedRefs(slots map[string]any, intentFields map[string]string, refs domain.CurrentRefs) {
+	if slots == nil || len(intentFields) == 0 {
+		return
+	}
+	if strings.TrimSpace(orchestratorshared.SlotString(slots, "order_id")) != "" {
+		return
+	}
+	ref := strings.ToLower(strings.TrimSpace(intentFields["order_ref"]))
+	if ref == "" {
+		return
+	}
+	switch ref {
+	case "current", "this":
+		if id := support.DigitsOnlyID(refs.OrderID); id != "" {
+			slots["order_id"] = id
 		}
 	}
 }

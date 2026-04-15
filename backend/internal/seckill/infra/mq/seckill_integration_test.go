@@ -61,7 +61,7 @@ func TestSeckillHappyPath(t *testing.T) {
 
 	req, err := requestRepo.FindByRequestNo(ctx, result.RequestNo)
 	require.NoError(t, err)
-	assert.Equal(t, seckilldomain.RequestStatusSuccess, req.Status)
+	assert.Equal(t, seckilldomain.RequestStatusQualified, req.Status)
 	assert.Equal(t, int64(1), req.OrderID)
 
 	require.Len(t, orderClient.created, 1)
@@ -79,7 +79,7 @@ func TestSeckillHappyPath(t *testing.T) {
 	cached, err := cache.GetResult(ctx, result.RequestNo)
 	require.NoError(t, err)
 	require.NotNil(t, cached)
-	assert.Equal(t, seckilldomain.RequestStatusSuccess, cached.Status)
+	assert.Equal(t, seckilldomain.RequestStatusQualified, cached.Status)
 	assert.Equal(t, req.OrderID, cached.OrderID)
 
 	statusConsumer := NewOrderStatusConsumer(nil, requestRepo, activityRepo, cache, log)
@@ -92,6 +92,20 @@ func TestSeckillHappyPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), activity.AvailableStock)
 	assert.Equal(t, int32(1), cache.stock[activityID])
+
+	req, err = requestRepo.FindByRequestNo(ctx, result.RequestNo)
+	require.NoError(t, err)
+	assert.Equal(t, seckilldomain.RequestStatusFail, req.Status)
+	assert.Equal(t, seckilldomain.FailReasonOrderCanceled, req.FailReason)
+	assert.Equal(t, int64(0), req.OrderID)
+	_, claimed := activityRepo.successClaimKey[actUserKey(activityID, 2001)]
+	assert.False(t, claimed)
+	assert.False(t, cache.hasUser(activityID, 2001))
+	cached, err = cache.GetResult(ctx, result.RequestNo)
+	require.NoError(t, err)
+	require.NotNil(t, cached)
+	assert.Equal(t, seckilldomain.RequestStatusFail, cached.Status)
+	assert.Equal(t, seckilldomain.FailReasonOrderCanceled, cached.FailReason)
 }
 
 func TestSeckillCreateOrderFailCompensates(t *testing.T) {
@@ -172,12 +186,18 @@ func (g *sequenceIDGenerator) GenerateID() string {
 type recordingOrderClient struct {
 	mu      sync.Mutex
 	created []*orderv1.CreateOrderReq
+	byID    map[int64]*orderv1.CreateOrderReq
 }
 
 func (c *recordingOrderClient) CreateOrder(_ context.Context, req *orderv1.CreateOrderReq, _ ...callopt.Option) (*orderv1.CreateOrderResp, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.created = append(c.created, req)
+	if c.byID == nil {
+		c.byID = make(map[int64]*orderv1.CreateOrderReq)
+	}
+	copied := *req
+	c.byID[req.GetOrderId()] = &copied
 	return &orderv1.CreateOrderResp{OrderId: req.GetOrderId()}, nil
 }
 
@@ -185,8 +205,19 @@ func (c *recordingOrderClient) ChangeOrderStatus(context.Context, *orderv1.Chang
 	return nil, errors.New("not implemented")
 }
 
-func (c *recordingOrderClient) GetOrder(context.Context, *orderv1.GetOrderReq, ...callopt.Option) (*orderv1.GetOrderResp, error) {
-	return nil, errors.New("not implemented")
+func (c *recordingOrderClient) GetOrder(_ context.Context, req *orderv1.GetOrderReq, _ ...callopt.Option) (*orderv1.GetOrderResp, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r, ok := c.byID[req.GetOrderId()]
+	if !ok {
+		return &orderv1.GetOrderResp{}, nil
+	}
+	return &orderv1.GetOrderResp{Order: &orderv1.Order{
+		OrderId:    r.GetOrderId(),
+		UserId:     r.GetUserId(),
+		OrderKind:  r.GetOrderKind(),
+		ActivityId: r.GetActivityId(),
+	}}, nil
 }
 
 func (c *recordingOrderClient) ListOrder(context.Context, *orderv1.ListOrderReq, ...callopt.Option) (*orderv1.ListOrderResp, error) {
@@ -216,16 +247,18 @@ func (f *failingOrderClientStub) ListOrder(context.Context, *orderv1.ListOrderRe
 var _ orderservice.Client = (*failingOrderClientStub)(nil)
 
 type memoryActivityRepo struct {
-	mu         sync.Mutex
-	nextID     int64
-	activities map[int64]*seckilldomain.Activity
-	operations map[string]struct{}
+	mu              sync.Mutex
+	nextID          int64
+	activities      map[int64]*seckilldomain.Activity
+	operations      map[string]struct{}
+	successClaimKey map[string]struct{}
 }
 
 func newMemoryActivityRepo() *memoryActivityRepo {
 	return &memoryActivityRepo{
-		activities: make(map[int64]*seckilldomain.Activity),
-		operations: make(map[string]struct{}),
+		activities:      make(map[int64]*seckilldomain.Activity),
+		operations:      make(map[string]struct{}),
+		successClaimKey: make(map[string]struct{}),
 	}
 }
 
@@ -296,32 +329,63 @@ func (r *memoryActivityRepo) IncreaseStock(_ context.Context, activityID int64, 
 	return nil
 }
 
+func (r *memoryActivityRepo) TryDeductStockAndClaimSuccess(_ context.Context, activityID, userID int64, requestNo string, quantity int32) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	actKey := actUserKey(activityID, userID)
+	if _, ok := r.successClaimKey[actKey]; ok {
+		return seckilldomain.ErrSeckillSuccessAlreadyClaimed
+	}
+	op := "deduct_" + requestNo
+	if _, ok := r.operations[op]; ok {
+		return nil
+	}
+	activity, ok := r.activities[activityID]
+	if !ok {
+		return seckilldomain.ErrActivityNotFound
+	}
+	if activity.AvailableStock < quantity {
+		return seckilldomain.ErrOutOfStock
+	}
+	activity.AvailableStock -= quantity
+	r.operations[op] = struct{}{}
+	r.successClaimKey[actKey] = struct{}{}
+	return nil
+}
+
+func (r *memoryActivityRepo) DeleteSuccessClaim(_ context.Context, activityID, userID int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.successClaimKey, actUserKey(activityID, userID))
+	return nil
+}
+
+func (r *memoryActivityRepo) UpdateSuccessOrderID(context.Context, int64, int64, int64) error {
+	return nil
+}
+
 type memoryRequestRepo struct {
-	mu        sync.Mutex
-	nextID    int64
-	byReq     map[string]*seckilldomain.Request
-	byActUser map[string]string
+	mu     sync.Mutex
+	nextID int64
+	byReq  map[string]*seckilldomain.Request
 }
 
 func newMemoryRequestRepo() *memoryRequestRepo {
 	return &memoryRequestRepo{
-		byReq:     make(map[string]*seckilldomain.Request),
-		byActUser: make(map[string]string),
+		byReq: make(map[string]*seckilldomain.Request),
 	}
 }
 
 func (r *memoryRequestRepo) Create(_ context.Context, request *seckilldomain.Request) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	key := actUserKey(request.ActivityID, request.UserID)
-	if _, ok := r.byActUser[key]; ok {
-		return fmt.Errorf("duplicate request")
+	if _, ok := r.byReq[request.RequestNo]; ok {
+		return seckilldomain.ErrDuplicateSeckill
 	}
 	r.nextID++
 	copied := *request
 	copied.ID = r.nextID
 	r.byReq[copied.RequestNo] = &copied
-	r.byActUser[key] = copied.RequestNo
 	request.ID = copied.ID
 	return nil
 }
@@ -334,43 +398,66 @@ func (r *memoryRequestRepo) FindByRequestNo(_ context.Context, requestNo string)
 		return nil, seckilldomain.ErrRequestNotFound
 	}
 	copied := *req
-	return &copied, nil
-}
-
-func (r *memoryRequestRepo) FindByOrderID(_ context.Context, orderID int64) (*seckilldomain.Request, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, req := range r.byReq {
-		if req.OrderID == orderID {
-			copied := *req
-			return &copied, nil
+	if copied.OrderID == 0 && copied.RequestNo != "" && copied.Status != seckilldomain.RequestStatusFail {
+		if v, err := strconv.ParseInt(copied.RequestNo, 10, 64); err == nil {
+			copied.OrderID = v
 		}
 	}
-	return nil, seckilldomain.ErrRequestNotFound
+	return &copied, nil
 }
 
 func (r *memoryRequestRepo) FindByActivityUser(_ context.Context, activityID, userID int64) (*seckilldomain.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	reqNo, ok := r.byActUser[actUserKey(activityID, userID)]
-	if !ok {
+	var best *seckilldomain.Request
+	for _, req := range r.byReq {
+		if req.ActivityID != activityID || req.UserID != userID {
+			continue
+		}
+		if best == nil || req.ID > best.ID {
+			c := *req
+			best = &c
+		}
+	}
+	if best == nil {
 		return nil, nil
 	}
-	copied := *r.byReq[reqNo]
-	return &copied, nil
+	return best, nil
 }
 
-func (r *memoryRequestRepo) MarkSuccess(_ context.Context, requestNo string, orderID int64) error {
+func (r *memoryRequestRepo) MarkQualified(_ context.Context, requestNo string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cur, ok := r.byReq[requestNo]
+	if !ok {
+		return seckilldomain.ErrRequestNotFound
+	}
+	if cur.Status == seckilldomain.RequestStatusQualified {
+		return nil
+	}
+	if cur.Status != seckilldomain.RequestStatusProcessing {
+		return fmt.Errorf("seckill MarkQualified: request_no=%s 状态=%s 非 PROCESSING", requestNo, cur.Status)
+	}
+	cur.Status = seckilldomain.RequestStatusQualified
+	cur.FailReason = ""
+	return nil
+}
+
+func (r *memoryRequestRepo) MarkFailByRequestNoIfActive(_ context.Context, requestNo string, failReason string) (int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	req, ok := r.byReq[requestNo]
 	if !ok {
-		return seckilldomain.ErrRequestNotFound
+		return 0, nil
 	}
-	req.Status = seckilldomain.RequestStatusSuccess
-	req.OrderID = orderID
-	req.FailReason = ""
-	return nil
+	if req.Status != seckilldomain.RequestStatusProcessing && req.Status != seckilldomain.RequestStatusQualified &&
+		req.Status != seckilldomain.RequestStatusLegacySuccess {
+		return 0, nil
+	}
+	req.Status = seckilldomain.RequestStatusFail
+	req.FailReason = failReason
+	req.OrderID = 0
+	return 1, nil
 }
 
 func (r *memoryRequestRepo) MarkFail(_ context.Context, requestNo string, failReason string) error {
@@ -382,6 +469,7 @@ func (r *memoryRequestRepo) MarkFail(_ context.Context, requestNo string, failRe
 	}
 	req.Status = seckilldomain.RequestStatusFail
 	req.FailReason = failReason
+	req.OrderID = 0
 	return nil
 }
 
@@ -492,5 +580,3 @@ func (c *memoryCache) hasUser(activityID, userID int64) bool {
 func actUserKey(activityID, userID int64) string {
 	return strconv.FormatInt(activityID, 10) + ":" + strconv.FormatInt(userID, 10)
 }
-
-

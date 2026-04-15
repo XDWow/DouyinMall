@@ -43,37 +43,40 @@ func (uc *BatchCancelOrderUseCase) Execute(ctx context.Context, orderIDs []int64
 	var cancelIDs []int64
 
 	if err := uc.tx.Tx(ctx, func(ctx context.Context) error {
-		// 蹇呴』瑕佹煡鍒颁俊鎭紝鍚庣画鍙?event 瑕佺敤锛屼笖浜嬪姟涓€寮€濮嬪氨褰撳墠璇伙紝鎶婅繖浜涢兘閿佷綇锛岄伩鍏嶅苟鍙戦棶棰?
-		orders, err := uc.orderRepo.FindByIDsForUpdate(ctx, orderIDs)
+		// 超时取消是后台兜底任务，不抢支付成功链路的锁。
+		// 先普通读出候选订单，再以条件更新是否成功作为“真的取消成功”的判定依据。
+		orders, err := uc.orderRepo.FindByIDs(ctx, orderIDs)
 		if err != nil {
 			return err
 		}
 
+		toCancelIDs := make([]int64, 0, len(orders))
 		events = make([]domain.OrderStatusUpdateEvent, 0, len(orders))
 		payloads := make([]any, 0, len(orders))
-		cancelIDs = make([]int64, 0, len(orders))
 
 		for _, order := range orders {
 			if order.Status != domain.OrderStatusCreated {
 				continue
 			}
+			toCancelIDs = append(toCancelIDs, order.ID)
 
 			canceledOrder := *order
 			canceledOrder.Status = domain.OrderStatusCanceled
 			event := domain.BuildOrderStatusUpdateEvent(&canceledOrder)
-
-			cancelIDs = append(cancelIDs, order.ID)
 			events = append(events, event)
 			payloads = append(payloads, event)
 		}
 
-		if len(events) == 0 {
+		if len(toCancelIDs) == 0 {
 			return nil
 		}
 
-		if err := uc.orderRepo.BatchUpdateStatus(ctx, cancelIDs, domain.OrderStatusCreated, domain.OrderStatusCanceled); err != nil {
+		if err := uc.orderRepo.BatchUpdateStatus(ctx, toCancelIDs, domain.OrderStatusCreated, domain.OrderStatusCanceled); err != nil {
 			return err
 		}
+
+		cancelIDs = toCancelIDs
+
 		var addErr error
 		outboxIDs, addErr = uc.outboxRepo.BatchAdd(ctx, domain.EventTypeOrderStatusChanged, payloads)
 		return addErr
@@ -107,18 +110,16 @@ func (uc *BatchCancelOrderUseCase) batchSendMessages(orderIDs, outboxIDs []int64
 			}
 
 			failedOrderIDs = append(failedOrderIDs, orderIDs[i])
-			uc.log.Error("鍙戦€佸彇娑堣鍗曚簨浠跺け璐?, logger.Error(err), logger.Int64("orderID", orderIDs[i]), logger.Int64("outboxID", outboxIDs[i]))
+			uc.log.Error("发送取消订单事件失败", logger.Error(err), logger.Int64("orderID", orderIDs[i]), logger.Int64("outboxID", outboxIDs[i]))
 		}
 	}
 
 	if len(successOutboxIDs) > 0 {
 		if err := uc.outboxRepo.BatchMarkSent(ctx, successOutboxIDs); err != nil {
-			uc.log.Error("鎵归噺鏍囪 outbox 宸插彂閫佸け璐?, logger.Error(err), logger.Int("count", len(successOutboxIDs)))
+			uc.log.Error("批量标记 outbox 已发送失败", logger.Error(err), logger.Int("count", len(successOutboxIDs)))
 		}
 	}
 	if len(failedOrderIDs) > 0 {
-		uc.log.Warn("閮ㄥ垎鍙栨秷璁㈠崟浜嬩欢鍙戦€佸け璐?, logger.Int("count", len(failedOrderIDs)))
+		uc.log.Warn("部分取消订单事件发送失败", logger.Int("count", len(failedOrderIDs)))
 	}
 }
-
-

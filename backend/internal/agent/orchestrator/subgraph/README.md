@@ -1,8 +1,25 @@
-# subgraph：业务子图（Eino 多节点）
+# subgraph：业务子图（Eino）
 
-每个业务子目录对应主图的一条路由；**`graph.go`** 的 `Build` 注册 **`compose.Graph[struct{}, Output]`**（入口占位，节点内 **`ProcessState` 读 State**），**`workflow.go`** 放中间类型与分支逻辑。
+每个业务子目录对应主图 `RouteNode` 的一条出边。子图对外类型为 **`compose.Graph[GraphInput, Output]`**：
 
-总览见 **[`docs/面试-AI客服工作流.md`](../../docs/面试-AI客服工作流.md)**（主图 0→1、子图 DAG、同步/异步）。子图只产出 **`Output`**；对外话术与落库在主图 **`FinalizeNode`**。
+- **`GraphInput`**：子图入口显式入参（Eino 边上类型），由主图 **`Prepare*InputNode`** 调用各包 **`InputFromState(*domain.State, …)`** 组装。
+- **`Output`**：子图对主图的契约（话术、工具消息、追问标记等），经主图 **`Apply*ResultNode`** 写回 `*domain.State`。
+
+主图线性段仍以 `*domain.State` 为主，配合 **`StatePre` / `StatePost`**（见 `../graph/state_handlers.go`）。主图与子图之间的节点注册集中在 **`../graph/subgraph_bridge.go`**。
+
+总览见 **[`docs/面试-AI客服工作流.md`](../../docs/面试-AI客服工作流.md)**。子图只产出 **`Output`**；对外模板与落库在主图 **`FinalizeNode`**。
+
+---
+
+## 单包文件约定（学习/Eino 对齐时建议统一）
+
+| 文件 | 职责 |
+|------|------|
+| **`graph.go`** | `Build`：仅注册节点、边、分支；`compose.NewGraph[GraphInput, Output]`。 |
+| **`io.go`** | **`GraphInput`**、**`Output`**、**`InputFromState`**（子图 I/O 契约；入口与 Session 解耦：`InputFromState` 用新 map / 解引用再取址等方式避免误共享；需读 `Recorder` 等仍在 `ProcessState`）。 |
+| **`workflow.go`** | 子图内 Lambda、中间 wire 类型、分支函数；**优先用边上类型传递**，仅在需要读 Recorder 等共享资源时使用 `domain.ProcessState`。 |
+| **`metadata/`** | 工具/技能白名单等与路由相关的静态配置。 |
+| **`config/`**（若有） | 本子图可调参数或规格说明。 |
 
 ---
 
@@ -10,9 +27,7 @@
 
 ### `orderquery/`
 
-`START` → `OrderQueryPrepareSlotsNode` → `OrderQueryModelAgentNode` → **分支** → `OrderQueryAgentAnswerNode` | `OrderQueryRulePlanNode` → `END`
-
-- 模型有非空答复则走 `AgentAnswer`；否则 `OrderReadNode` + `ToolExec`。
+`START` → `OrderQueryPrepareSlotsNode` → `OrderQueryModelAgentNode` → `OrderQueryRulePlanNode`（槽位；`order_ref`→CurrentRefs→`order_id`）→ `END`
 
 ### `inventory/`
 
@@ -34,7 +49,7 @@
 
 - 无模型或模型无输出时 `FinalAnswer` 可为空，由主图 Finalize 模板兜底。
 
-### `fallback/`
+### `fallback/`（主图中 **BaseQAGraph**）
 
 `START` → `FallbackL1TryNode` → **分支** → `FallbackL1OutputNode` | `FallbackRAGNode` → `FallbackModelAgentNode` → **分支** → `FallbackAgentOutputNode` | `FallbackBaseQANode` → `END`
 

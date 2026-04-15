@@ -12,7 +12,7 @@ type pipelineProvider interface {
 	Pipeline() redis.Pipeliner
 }
 
-// RedisCache 鍙彁渚涘熀纭€ Redis 鑳藉姏锛屼笉鍏冲績绉掓潃涓氬姟璇箟銆?
+// RedisCache 只封装基础 Redis 能力，不包含秒杀业务语义。
 type RedisCache struct {
 	cmd     redis.Cmdable
 	txPiper pipelineProvider
@@ -48,7 +48,7 @@ func (c *RedisCache) EvalInt64(ctx context.Context, script string, keys []string
 
 func (c *RedisCache) Pipeline() (redis.Pipeliner, error) {
 	if c.txPiper == nil {
-		return nil, errors.New("redis client 涓嶆敮鎸?pipeline")
+		return nil, errors.New("redis client 不支持 pipeline")
 	}
 	return c.txPiper.Pipeline(), nil
 }
