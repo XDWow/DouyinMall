@@ -39,7 +39,7 @@ func NewFinalizeNode(
 	}
 }
 
-// FinalizeSession 汇总回复、流式输出、落库与缓存；与图编排解耦，可直接单测。
+// FinalizeSession 汇总回复、流式输出、落库与缓存；与图编排解耦，可直接单测
 func (n *FinalizeNode) FinalizeSession(ctx context.Context, st *domain.State) error {
 	if st == nil {
 		return fmt.Errorf("state is required")
@@ -184,7 +184,8 @@ func (n *FinalizeNode) persistTurn(ctx context.Context, state *domain.State, res
 	state.Session.ApplyPersistedFields(persistedSnapshot)
 
 	if n.SessionService != nil {
-		history := agentsession.FromSchemaMessages(persistedSnapshot.SessionID, append([]*schema.Message(nil), state.Session.Messages...))
+		transcriptBase := agentsession.VisibleTranscriptSchemaMessages(state.Session.Messages)
+		history := agentsession.FromSchemaMessages(persistedSnapshot.SessionID, append([]*schema.Message(nil), transcriptBase...))
 		if strings.TrimSpace(userMsg.Content) != "" {
 			history = append(history, userMsg)
 		}
