@@ -62,23 +62,25 @@ func (f *Facade) ClearSession(ctx context.Context, input ClearSessionInput) erro
 }
 
 type ChatInput struct {
-	SessionID   string
-	UserID      int64
-	Message     string
-	ResumeToken string
-	Metadata    map[string]string
+	SessionID      string
+	UserID         int64
+	Message        string
+	ResumeToken    string
+	InterruptID    string
+	ResumeDataJSON string
+	Metadata       map[string]string
 }
 
 type ChatOutput struct {
-	SessionID     string
-	TraceID       string
-	Status        domain.ReplyStatus
-	Reply         string
-	Intent        domain.Intent
-	Confidence    float64
-	NeedHandoff   bool
-	HandoffReason string
-	References    []KnowledgeRef
+	SessionID      string
+	TraceID        string
+	Status         domain.ReplyStatus
+	Reply          string
+	Intent         domain.Intent
+	Confidence     float64
+	NeedHandoff    bool
+	HandoffReason  string
+	References     []KnowledgeRef
 	UsedToolNames  []string
 	ToolExecutions []ToolExecution
 	Trace          Trace
@@ -175,6 +177,7 @@ type TraceStep struct {
 
 type InterruptInfo struct {
 	CheckpointID string
+	InterruptID  string
 	RerunNodes   []string
 }
 

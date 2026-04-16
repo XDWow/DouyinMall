@@ -884,5 +884,3 @@ func (p *kClient) ClearSession(ctx context.Context, Req *v1.ClearSessionRequest)
 	}
 	return _result.GetSuccess(), nil
 }
-
-

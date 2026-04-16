@@ -9,7 +9,7 @@ import (
 var Spec = subgraphspec.Spec{
 	SystemHint:        prompt.SubgraphSystemReturnPolicy,
 	AllowedToolNames:  nil,
-	AllowedSkillNames: []string{"refund_return"},
+	AllowedSkillNames: []string{"return_policy_qa"},
 	MaxRounds:         8,
 	ToolMode:          agenttool.ToolExecutionSerial,
 	ReadOnly:          true,

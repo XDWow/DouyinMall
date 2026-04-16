@@ -128,5 +128,3 @@ func (p *kAgentServiceStreamClient) SendMessageStream(ctx context.Context, Req *
 	ctx = client.NewCtxWithCallOptions(ctx, streamcall.GetCallOptions(callOptions))
 	return p.kClient.SendMessageStream(ctx, Req)
 }
-
-

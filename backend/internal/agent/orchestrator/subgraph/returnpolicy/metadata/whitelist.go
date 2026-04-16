@@ -5,5 +5,5 @@ func AllowedToolNames() []string {
 }
 
 func AllowedSkillNames() []string {
-	return []string{"refund_return"}
+	return []string{"return_policy_qa"}
 }

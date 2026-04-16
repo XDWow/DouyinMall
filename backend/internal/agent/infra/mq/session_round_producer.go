@@ -11,7 +11,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
 
-// SessionRoundProducer 将单轮持久化请求发到 Kafka，由消费者批量写入 MySQL。
+// SessionRoundProducer 将单轮持久化请求发到 Kafka，由消费者批量写入 MySQL
 type SessionRoundProducer struct {
 	p     sarama.SyncProducer
 	topic string

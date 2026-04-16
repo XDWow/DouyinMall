@@ -140,8 +140,8 @@ services:
     container_name: douyinmall-kafka
     restart: unless-stopped
     ports:
-      - "${KAFKA_BIND_ADDRESS:-0.0.0.0}:${KAFKA_PUBLISH_PORT_PLAIN:-9092}:9092"
-      - "${KAFKA_BIND_ADDRESS:-0.0.0.0}:${KAFKA_PUBLISH_PORT_EXTERNAL:-29092}:29092"
+      - "${KAFKA_PLAIN_BIND_ADDRESS:-127.0.0.1}:${KAFKA_PUBLISH_PORT_PLAIN:-9092}:9092"
+      - "${KAFKA_EXTERNAL_BIND_ADDRESS:-0.0.0.0}:${KAFKA_PUBLISH_PORT_EXTERNAL:-29092}:29092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -151,12 +151,18 @@ services:
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://${KAFKA_HOST_ADVERTISE:?set KAFKA_HOST_ADVERTISE in env file}:${KAFKA_PUBLISH_PORT_EXTERNAL:-29092}
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_NUM_PARTITIONS: ${KAFKA_NUM_PARTITIONS:-3}
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: ${KAFKA_AUTO_CREATE_TOPICS_ENABLE:-true}
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    volumes:
+      - kafka-data:/tmp/kraft-combined-logs
     networks:
       - douyinmall-net
     security_opt:
@@ -185,6 +191,7 @@ volumes:
   mysql-data:
   redis-data:
   etcd-data:
+  kafka-data:
 
 networks:
   douyinmall-net:

@@ -8,11 +8,13 @@ import (
 )
 
 type chatRequest struct {
-	SessionID   string            `json:"session_id"`
-	UserID      int64             `json:"user_id"`
-	Message     string            `json:"message"`
-	ResumeToken string            `json:"resume_token,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
+	SessionID      string            `json:"session_id"`
+	UserID         int64             `json:"user_id"`
+	Message        string            `json:"message"`
+	ResumeToken    string            `json:"resume_token,omitempty"`
+	InterruptID    string            `json:"interrupt_id,omitempty"`
+	ResumeDataJSON string            `json:"resume_data_json,omitempty"`
+	Metadata       map[string]string `json:"metadata,omitempty"`
 }
 
 type createSessionRequest struct {
@@ -103,16 +105,19 @@ type traceStep struct {
 
 type interruptInfo struct {
 	CheckpointID string   `json:"checkpoint_id"`
+	InterruptID  string   `json:"interrupt_id,omitempty"`
 	RerunNodes   []string `json:"rerun_nodes,omitempty"`
 }
 
 func toChatInput(req chatRequest) agentusecase.ChatInput {
 	return agentusecase.ChatInput{
-		SessionID:   req.SessionID,
-		UserID:      req.UserID,
-		Message:     req.Message,
-		ResumeToken: req.ResumeToken,
-		Metadata:    req.Metadata,
+		SessionID:      req.SessionID,
+		UserID:         req.UserID,
+		Message:        req.Message,
+		ResumeToken:    req.ResumeToken,
+		InterruptID:    req.InterruptID,
+		ResumeDataJSON: req.ResumeDataJSON,
+		Metadata:       req.Metadata,
 	}
 }
 
@@ -175,6 +180,7 @@ func toChatResponse(out *agentusecase.ChatOutput) *chatResponse {
 	if out.Interrupt != nil {
 		resp.Interrupt = &interruptInfo{
 			CheckpointID: out.Interrupt.CheckpointID,
+			InterruptID:  out.Interrupt.InterruptID,
 			RerunNodes:   append([]string(nil), out.Interrupt.RerunNodes...),
 		}
 	}

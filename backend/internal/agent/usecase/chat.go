@@ -1,7 +1,8 @@
-﻿package usecase
+package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -48,11 +49,27 @@ func validateChatInput(input ChatInput) (*domain.ChatCommand, error) {
 	if input.UserID <= 0 {
 		return nil, fmt.Errorf("user_id is required")
 	}
+	resumeToken := strings.TrimSpace(input.ResumeToken)
+	interruptID := strings.TrimSpace(input.InterruptID)
+	if interruptID != "" && resumeToken == "" {
+		return nil, fmt.Errorf("interrupt_id requires resume_token (checkpoint id)")
+	}
+	var resumeData map[string]any
+	if j := strings.TrimSpace(input.ResumeDataJSON); j != "" {
+		if err := json.Unmarshal([]byte(j), &resumeData); err != nil {
+			return nil, fmt.Errorf("resume_data_json: %w", err)
+		}
+		if resumeData == nil {
+			resumeData = map[string]any{}
+		}
+	}
 	command := &domain.ChatCommand{
 		SessionID:   strings.TrimSpace(input.SessionID),
 		UserID:      input.UserID,
 		Message:     message,
-		ResumeToken: strings.TrimSpace(input.ResumeToken),
+		ResumeToken: resumeToken,
+		InterruptID: interruptID,
+		ResumeData:  resumeData,
 		Metadata:    copyStringMap(input.Metadata),
 	}
 	return command, nil
@@ -121,6 +138,7 @@ func toChatOutput(resp *domain.ChatResult) *ChatOutput {
 	if resp.Interrupt != nil {
 		out.Interrupt = &InterruptInfo{
 			CheckpointID: resp.Interrupt.CheckpointID,
+			InterruptID:  resp.Interrupt.InterruptID,
 			RerunNodes:   append([]string(nil), resp.Interrupt.RerunNodes...),
 		}
 	}

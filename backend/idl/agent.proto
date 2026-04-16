@@ -32,6 +32,10 @@ message ChatRequest {
   string message    = 3;
   string resume_token = 4;
   map<string,string> metadata = 5;
+  // 与 compose.ResumeWithData 对齐：上一轮 ChatResponse.interrupt_id，恢复时原样带回
+  string interrupt_id = 6;
+  // 可选 JSON 对象字符串，反序列化后作为 ResumeWithData 的 data（如 {"product_id":"123"}）
+  string resume_data_json = 7;
 }
 
 message ChatResponse {
@@ -43,6 +47,7 @@ message ChatResponse {
   string                trace_id           = 9;
   string                checkpoint_id      = 10;
   repeated string       rerun_nodes        = 11;
+  string                interrupt_id       = 12; // Eino InterruptCtx.ID，供下一轮 ResumeWithData
   repeated KnowledgeRef knowledge          = 4;  // 命中的知识条目（透明可解释）
   repeated ToolExec     tool_execs         = 5;  // 本次触发的工具调用链（Phase 2）
   repeated string       suggested_questions = 6; // 主动推荐的关联问题（2~3 个）

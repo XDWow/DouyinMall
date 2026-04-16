@@ -11,5 +11,5 @@ func ModelAgentToolNames() []string {
 }
 
 func AllowedSkillNames() []string {
-	return []string{"order_lookup", "logistics_exception"}
+	return []string{"order_lookup"}
 }

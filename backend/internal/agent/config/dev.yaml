@@ -19,11 +19,9 @@ redis:
   db: 0
 
 kafka:
-  enabled: false
-  brokers: []
-  topic_session_round: "agent-session-round-persist"
-  consumer_group: "agent-session-round-consumer"
-  session_round_batch_size: 32
+  enabled: true
+  brokers:
+    - "10.1.4.4:29092"
 
 etcd:
   endpoints:
@@ -98,6 +96,7 @@ workflow:
   confidence_threshold: 0.62
   max_answer_tokens: 512
   checkpoint_ttl_seconds: 604800
+  # 留空则使用 orchestrator.DefaultConfig（v1 仅缺参子图：库存/商详/加购/退换货入口）
   interrupt_before_nodes: []
 
 observability:

@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/compose"
-
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
 )
 
@@ -17,20 +15,18 @@ type AccessGuardInput struct {
 	ResumeToken string
 }
 
-// AccessGuardNode 入口：租户、限流、checkpoint 校验。
+// AccessGuardNode 入口：租户、限流。Checkpoint 存在性由 Runtime 在 Invoke 前校验。
 type AccessGuardNode struct {
 	DefaultTenantID    string
 	RateLimitPerMinute int64
 	RateLimiter        cache.RateLimiter
-	CheckpointStore    compose.CheckPointStore
 }
 
-func NewAccessGuardNode(defaultTenantID string, rateLimitPerMinute int64, rateLimiter cache.RateLimiter, checkpointStore compose.CheckPointStore) *AccessGuardNode {
+func NewAccessGuardNode(defaultTenantID string, rateLimitPerMinute int64, rateLimiter cache.RateLimiter) *AccessGuardNode {
 	return &AccessGuardNode{
 		DefaultTenantID:    defaultTenantID,
 		RateLimitPerMinute: rateLimitPerMinute,
 		RateLimiter:        rateLimiter,
-		CheckpointStore:    checkpointStore,
 	}
 }
 
@@ -67,16 +63,6 @@ func (n *AccessGuardNode) Invoke(ctx context.Context, input AccessGuardInput) (*
 	}
 
 	if strings.TrimSpace(input.ResumeToken) != "" {
-		if n.CheckpointStore == nil {
-			return nil, fmt.Errorf("checkpoint store unavailable")
-		}
-		_, ok, err := n.CheckpointStore.Get(ctx, input.ResumeToken)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return nil, fmt.Errorf("checkpoint not found")
-		}
 		result.ResumeFromCP = true
 	}
 

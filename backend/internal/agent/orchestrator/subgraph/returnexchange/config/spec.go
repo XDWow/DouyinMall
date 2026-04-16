@@ -8,7 +8,7 @@ import (
 var Spec = subgraphspec.Spec{
 	SystemHint:        "",
 	AllowedToolNames:  []string{"get_order", "list_user_orders", "query_order", "create_after_sale_request"},
-	AllowedSkillNames: []string{"refund_return"},
+	AllowedSkillNames: []string{"aftersale_apply"},
 	MaxRounds:         0,
 	ToolMode:          agenttool.ToolExecutionSerial,
 	ReadOnly:          false,

@@ -72,15 +72,12 @@ func DefaultConfig() Config {
 	return Config{
 		RateLimitPerMinute: 30,
 		ConversationWindow: 5,
-		// Resume/checkpoint: interrupt before each business subgraph so the next turn re-enters the subgraph after slot fill or client reply.
+		// v1 仅缺参追问：在「会走 MissingSlots / applySubgraphSlotWait」的子图入口打断并 checkpoint，补参后同 checkpoint_id + interrupt_id 恢复。
 		InterruptBeforeNodes: []string{
-			"OrderQueryGraph",
 			"InventoryGraph",
 			"ProductInfoGraph",
 			"AddToCartGraph",
-			"ReturnPolicyGraph",
 			"ReturnExchangeGraph",
-			"BaseQAGraph",
 		},
 		ExactCacheTTL:       10 * time.Minute,
 		SemanticCacheTTL:    30 * time.Minute,

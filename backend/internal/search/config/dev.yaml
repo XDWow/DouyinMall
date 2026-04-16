@@ -10,7 +10,7 @@ etcd:
 
 kafka:
   brokers:
-    - "localhost:9092"
+    - "127.0.0.1:29092"
 
 grpc:
   server:

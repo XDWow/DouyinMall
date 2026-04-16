@@ -158,6 +158,7 @@ func (b *Builder) addPipelineNodes(g *compose.Graph[map[string]any, *domain.Stat
 	); err != nil {
 		return err
 	}
+	// 缺参/确认等：Finalize 后带 Payload 则 compose.Interrupt，与 InterruptBeforeNodes + checkpoint 组成恢复闭环。
 	if err := g.AddLambdaNode("InterruptNode", compose.InvokableLambda(
 		func(ctx context.Context, state *domain.State) (*domain.State, error) {
 			if state == nil || state.Interrupt == nil || len(state.Interrupt.Payload) == 0 {
@@ -292,6 +293,7 @@ func (b *Builder) addBranches(g *compose.Graph[map[string]any, *domain.State]) e
 	return nil
 }
 
+// applySubgraphSlotWait v1 缺参：写追问回复 + InterruptState，经 Finalize → InterruptNode 触发 checkpoint 中断。
 func applySubgraphSlotWait(ctx context.Context, b *Builder, missing []string, slotQuestion string) (*domain.State, error) {
 	if b == nil || b.AskUser == nil {
 		return nil, fmt.Errorf("ask user node is required for slot wait")

@@ -23,11 +23,13 @@ func NewHandler(usecase agentusecase.Service) *Handler {
 
 func (h *Handler) SendMessage(ctx context.Context, req *agentv1.ChatRequest) (*agentv1.ChatResponse, error) {
 	resp, err := h.usecase.Chat(ctx, agentusecase.ChatInput{
-		SessionID:   req.GetSessionId(),
-		UserID:      req.GetUserId(),
-		Message:     req.GetMessage(),
-		ResumeToken: req.GetResumeToken(),
-		Metadata:    copyStringMap(req.GetMetadata()),
+		SessionID:      req.GetSessionId(),
+		UserID:         req.GetUserId(),
+		Message:        req.GetMessage(),
+		ResumeToken:    req.GetResumeToken(),
+		InterruptID:    req.GetInterruptId(),
+		ResumeDataJSON: req.GetResumeDataJson(),
+		Metadata:       copyStringMap(req.GetMetadata()),
 	})
 	if err != nil {
 		return nil, err
@@ -37,11 +39,13 @@ func (h *Handler) SendMessage(ctx context.Context, req *agentv1.ChatRequest) (*a
 
 func (h *Handler) SendMessageStream(req *agentv1.ChatRequest, stream agentv1.AgentService_SendMessageStreamServer) error {
 	resp, err := h.usecase.ChatStream(stream.Context(), agentusecase.ChatInput{
-		SessionID:   req.GetSessionId(),
-		UserID:      req.GetUserId(),
-		Message:     req.GetMessage(),
-		ResumeToken: req.GetResumeToken(),
-		Metadata:    copyStringMap(req.GetMetadata()),
+		SessionID:      req.GetSessionId(),
+		UserID:         req.GetUserId(),
+		Message:        req.GetMessage(),
+		ResumeToken:    req.GetResumeToken(),
+		InterruptID:    req.GetInterruptId(),
+		ResumeDataJSON: req.GetResumeDataJson(),
+		Metadata:       copyStringMap(req.GetMetadata()),
 	}, NewStreamWriter(stream))
 	if err != nil {
 		return err
@@ -149,6 +153,7 @@ func toProtoChatResponse(resp *agentusecase.ChatOutput, userMessage string) *age
 	}
 	if resp.Interrupt != nil {
 		result.CheckpointId = firstNonEmpty(resp.Interrupt.CheckpointID, result.CheckpointId)
+		result.InterruptId = resp.Interrupt.InterruptID
 		result.RerunNodes = append([]string(nil), resp.Interrupt.RerunNodes...)
 	}
 	return result

@@ -8,10 +8,9 @@ import (
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
 )
 
-// NewKafkaClient 创建共享 Sarama Client（consumer / producer 共用）。
 func NewKafkaClient(cfg agentconfig.KafkaConfig) (sarama.Client, error) {
 	if len(cfg.Brokers) == 0 {
-		return nil, fmt.Errorf("kafka brokers is empty")
+		return nil, fmt.Errorf("没有 kafka 实例")
 	}
 	saramaCfg := sarama.NewConfig()
 	saramaCfg.Version = sarama.V2_6_0_0
@@ -21,7 +20,6 @@ func NewKafkaClient(cfg agentconfig.KafkaConfig) (sarama.Client, error) {
 	return sarama.NewClient(cfg.Brokers, saramaCfg)
 }
 
-// NewKafkaSyncProducer 从 Client 创建同步生产者。
 func NewKafkaSyncProducer(client sarama.Client) (sarama.SyncProducer, error) {
 	return sarama.NewSyncProducerFromClient(client)
 }

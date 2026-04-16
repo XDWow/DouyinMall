@@ -46,7 +46,7 @@ type RedisConfig struct {
 	DB       int    `mapstructure:"db"`
 }
 
-// KafkaConfig 会话异步落库等 MQ；未启用时可留空。
+// KafkaConfig 会话异步落库等 MQ；未启用时可留空
 type KafkaConfig struct {
 	Enabled               bool     `mapstructure:"enabled"`
 	Brokers               []string `mapstructure:"brokers"`

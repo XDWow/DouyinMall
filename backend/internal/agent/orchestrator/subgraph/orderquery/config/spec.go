@@ -9,7 +9,7 @@ import (
 var Spec = subgraphspec.Spec{
 	SystemHint:        prompt.SubgraphSystemOrderQuery,
 	AllowedToolNames:  []string{"get_order", "list_user_orders", "query_order"},
-	AllowedSkillNames: []string{"order_lookup", "logistics_exception"},
+	AllowedSkillNames: []string{"order_lookup"},
 	MaxRounds:         8,
 	ToolMode:          agenttool.ToolExecutionSerial,
 	ReadOnly:          true,

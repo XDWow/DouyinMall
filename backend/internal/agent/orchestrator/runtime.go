@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -72,20 +73,20 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 		Config: orchestratorgraph.Config{
 			InterruptBeforeNodes: cfg.InterruptBeforeNodes,
 		},
-		CheckpointStore:   deps.CheckpointStore,
-		Registry:          deps.Registry,
-		ChatModel:         deps.Model,
-		Skills:            deps.Skills,
-		MaxAnswerTokens:   cfg.MaxAnswerTokens,
-		AccessGuard:       globalnode.NewAccessGuardNode(cfg.DefaultTenantID, cfg.RateLimitPerMinute, deps.RateLimiter, deps.CheckpointStore),
-		SessionLoad:       globalnode.NewSessionLoadNode(deps.SessionService),
-		CachePreCheck:     globalnode.NewCachePreCheckNode(),
-		L0ExactCache:      globalnode.NewL0ExactCacheNode(deps.ExactCache),
-		L1SemanticCache:   globalnode.NewL1SemanticCacheNode(deps.SemanticCache, deps.Embedder, cfg.SemanticCacheScore, cfg.SemanticCacheTopK),
-		IntentAndSlot:     globalnode.NewIntentAndSlotNode(deps.Model, prompts),
-		SlotMerge: globalnode.NewSlotMergeNode(),
-		AskUser:   globalnode.NewAskUserNode(),
-		Route:             globalnode.NewRouteNode(),
+		CheckpointStore: deps.CheckpointStore,
+		Registry:        deps.Registry,
+		ChatModel:       deps.Model,
+		Skills:          deps.Skills,
+		MaxAnswerTokens: cfg.MaxAnswerTokens,
+		AccessGuard:     globalnode.NewAccessGuardNode(cfg.DefaultTenantID, cfg.RateLimitPerMinute, deps.RateLimiter),
+		SessionLoad:     globalnode.NewSessionLoadNode(deps.SessionService),
+		CachePreCheck:   globalnode.NewCachePreCheckNode(),
+		L0ExactCache:    globalnode.NewL0ExactCacheNode(deps.ExactCache),
+		L1SemanticCache: globalnode.NewL1SemanticCacheNode(deps.SemanticCache, deps.Embedder, cfg.SemanticCacheScore, cfg.SemanticCacheTopK),
+		IntentAndSlot:   globalnode.NewIntentAndSlotNode(deps.Model, prompts),
+		SlotMerge:       globalnode.NewSlotMergeNode(),
+		AskUser:         globalnode.NewAskUserNode(),
+		Route:           globalnode.NewRouteNode(),
 		Finalize: globalnode.NewFinalizeNode(
 			deps.SessionService,
 			globalnode.NewCacheWritebackService(deps.ExactCache, deps.SemanticCache, deps.Embedder, cfg.ExactCacheTTL, cfg.SemanticCacheTTL, log),
@@ -180,6 +181,8 @@ func (s *Runtime) ClearSession(ctx context.Context, sessionID string) error {
 	return s.sessionService.Clear(ctx, sessionID)
 }
 
+// run 单轮编排。v1 缺参闭环：子图缺槽 → applySubgraphSlotWait → Finalize → InterruptNode → 客户端带
+// resume_token（=checkpoint_id）+ interrupt_id + 用户 message（补参文案）再调 Chat；compose 从 checkpoint 续跑。
 func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer StreamWriter) (*domain.ChatResult, error) {
 	start := time.Now()
 	state := domain.NewState(req, writer, agenttool.NewSafeExecutionRecorder())
@@ -191,6 +194,27 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 	state.Checkpoint = checkpointID
 	if strings.TrimSpace(state.Session.SessionID) == "" {
 		state.Session.SessionID = "sess_" + state.TraceID
+	}
+
+	if token := strings.TrimSpace(req.ResumeToken); token != "" {
+		if s.checkpointStore == nil {
+			return nil, fmt.Errorf("checkpoint store unavailable for resume")
+		}
+		_, ok, err := s.checkpointStore.Get(ctx, token)
+		if err != nil {
+			return nil, fmt.Errorf("checkpoint get: %w", err)
+		}
+		if !ok {
+			return nil, fmt.Errorf("checkpoint not found")
+		}
+	}
+
+	if id := strings.TrimSpace(req.InterruptID); id != "" {
+		if len(req.ResumeData) > 0 {
+			ctx = compose.ResumeWithData(ctx, id, req.ResumeData)
+		} else {
+			ctx = compose.Resume(ctx, id)
+		}
 	}
 
 	ctx = agenttool.WithExecutionRecorder(ctx, state.Recorder)
@@ -228,7 +252,10 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 
 	if info, ok := compose.ExtractInterruptInfo(err); ok {
 		resp.Status = domain.ReplyStatusFallback
-		resp.Interrupt = &domain.InterruptInfo{CheckpointID: checkpointID}
+		resp.Interrupt = &domain.InterruptInfo{
+			CheckpointID: checkpointID,
+			InterruptID:  interruptCtxIDFromCompose(info),
+		}
 		if info != nil {
 			resp.Interrupt.RerunNodes = append(resp.Interrupt.RerunNodes, info.RerunNodes...)
 		}
@@ -272,6 +299,23 @@ func (s *Runtime) recordRequestLatencyInsight(resp *domain.ChatResult, wall time
 	)
 }
 
+func interruptCtxIDFromCompose(info *compose.InterruptInfo) string {
+	if info == nil {
+		return ""
+	}
+	for _, ic := range info.InterruptContexts {
+		if ic != nil && ic.IsRootCause && ic.ID != "" {
+			return ic.ID
+		}
+	}
+	for _, ic := range info.InterruptContexts {
+		if ic != nil && ic.ID != "" {
+			return ic.ID
+		}
+	}
+	return ""
+}
+
 func (s *Runtime) registryHasTool(ctx context.Context, name string) bool {
 	if s.registry == nil {
 		return false
@@ -279,4 +323,3 @@ func (s *Runtime) registryHasTool(ctx context.Context, name string) bool {
 	_ = ctx
 	return s.registry.Has(name)
 }
-

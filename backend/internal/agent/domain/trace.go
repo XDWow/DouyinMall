@@ -20,5 +20,6 @@ type TraceStep struct {
 
 type InterruptInfo struct {
 	CheckpointID string
+	InterruptID  string
 	RerunNodes   []string
 }

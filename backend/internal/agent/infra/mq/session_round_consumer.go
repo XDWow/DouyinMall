@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	TopicSessionRoundPersist        = "agent-session-round-persist"
+	TopicSessionRoundPersist        = "agent-session-turn-persist"
 	GroupSessionRoundPersistDefault = "agent-session-round-consumer"
 )
 
