@@ -16,9 +16,8 @@ import (
 	agentdb "github.com/XDWow/DouyinMall/backend/internal/agent/infra/db"
 )
 
-// SessionRoundAsyncPublisher 可选依赖：实现后 SaveRoundPersistent 改为发 Kafka，由消费者批量落库。
 type SessionRoundAsyncPublisher interface {
-	PublishRound(ctx context.Context, session domain.Session, userMessage, assistantMessage domain.SessionMessage) error
+	PublishRound(ctx context.Context, in domain.RoundPersistInput, userMessage, assistantMessage domain.SessionMessage) error
 }
 
 type sessionRepository struct {
@@ -27,19 +26,17 @@ type sessionRepository struct {
 	roundAsyncQueue SessionRoundAsyncPublisher
 }
 
-// NewSessionRepository 会话仓储：直接持 *gorm.DB，表模型见 infra/db/model.go。
-// roundAsync 非 nil 时，SaveRoundPersistent 只入队 Kafka，不再同步写库（需启动对应消费者）。
 func NewSessionRepository(db *gorm.DB, cache agentcache.SessionCache, roundAsync SessionRoundAsyncPublisher) domainrepo.SessionRepository {
 	return &sessionRepository{db: db, cache: cache, roundAsyncQueue: roundAsync}
 }
 
-func (s *sessionRepository) Load(ctx context.Context, sessionID string) (*domain.Session, []domain.SessionMessage, error) {
+func (s *sessionRepository) Load(ctx context.Context, sessionID string) (*domain.LoadedSession, []domain.SessionMessage, error) {
 	if sessionID == "" {
 		return nil, nil, fmt.Errorf("session_id is required")
 	}
 
-	if meta, messages, err := s.loadFromCache(ctx, sessionID); err == nil && meta != nil {
-		return meta, messages, nil
+	if loaded, messages, err := s.loadFromCache(ctx, sessionID); err == nil && loaded != nil {
+		return loaded, messages, nil
 	}
 
 	var row agentdb.Session
@@ -54,16 +51,17 @@ func (s *sessionRepository) Load(ctx context.Context, sessionID string) (*domain
 	if err != nil {
 		return nil, nil, err
 	}
-	meta := sessionRowToDomain(&row)
-	_ = s.saveToCache(ctx, meta, messages)
-	return &meta, messages, nil
+	loaded := sessionRowToLoaded(&row)
+	_ = s.saveToCache(ctx, loaded, messages)
+	return loaded, messages, nil
 }
 
-func (s *sessionRepository) Create(ctx context.Context, session domain.Session) error {
-	if err := s.db.WithContext(ctx).Create(domainSessionToModel(session)).Error; err != nil {
+func (s *sessionRepository) Create(ctx context.Context, user domain.Session, meta domain.SessionTableMeta, slots map[string]any) error {
+	row := domainSessionToModel(user, meta, slots)
+	if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
 		return err
 	}
-	return s.saveToCache(ctx, session, nil)
+	return s.saveToCache(ctx, &domain.LoadedSession{User: user, Meta: meta, Slots: slots}, nil)
 }
 
 func (s *sessionRepository) Clear(ctx context.Context, sessionID string) error {
@@ -75,7 +73,7 @@ func (s *sessionRepository) Clear(ctx context.Context, sessionID string) error {
 	return s.db.WithContext(ctx).Where("session_id = ?", sessionID).Delete(&agentdb.Session{}).Error
 }
 
-func (s *sessionRepository) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
+func (s *sessionRepository) ListByUser(ctx context.Context, userID int64, limit, offset int) ([]domain.SessionListItem, int, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -91,25 +89,26 @@ func (s *sessionRepository) ListByUser(ctx context.Context, userID int64, limit,
 		return nil, 0, err
 	}
 
-	out := make([]domain.Session, 0, len(rows))
+	out := make([]domain.SessionListItem, 0, len(rows))
 	for i := range rows {
-		out = append(out, sessionRowToDomain(&rows[i]))
+		ld := sessionRowToLoaded(&rows[i])
+		out = append(out, domain.SessionListItem{Context: ld.User, Meta: ld.Meta})
 	}
 	return out, int(total), nil
 }
 
-func (s *sessionRepository) loadFromCache(ctx context.Context, sessionID string) (*domain.Session, []domain.SessionMessage, error) {
+func (s *sessionRepository) loadFromCache(ctx context.Context, sessionID string) (*domain.LoadedSession, []domain.SessionMessage, error) {
 	if s.cache == nil {
 		return nil, nil, nil
 	}
 	return s.cache.Load(ctx, sessionID)
 }
 
-func (s *sessionRepository) saveToCache(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error {
+func (s *sessionRepository) saveToCache(ctx context.Context, loaded *domain.LoadedSession, messages []domain.SessionMessage) error {
 	if s.cache == nil {
 		return nil
 	}
-	return s.cache.Save(ctx, session, messages)
+	return s.cache.Save(ctx, loaded, messages)
 }
 
 func (s *sessionRepository) deleteFromCache(ctx context.Context, sessionID string) error {
@@ -119,7 +118,7 @@ func (s *sessionRepository) deleteFromCache(ctx context.Context, sessionID strin
 	return s.cache.Delete(ctx, sessionID)
 }
 
-func (s *sessionRepository) SaveRound(ctx context.Context, session domain.Session, userMessage domain.SessionMessage, assistantMessage domain.SessionMessage) error {
+func (s *sessionRepository) SaveRound(ctx context.Context, in domain.RoundPersistInput, userMessage domain.SessionMessage, assistantMessage domain.SessionMessage) error {
 	messages := make([]domain.SessionMessage, 0, 2)
 	if userMessage.Content != "" {
 		messages = append(messages, userMessage)
@@ -127,12 +126,12 @@ func (s *sessionRepository) SaveRound(ctx context.Context, session domain.Sessio
 	if assistantMessage.Content != "" {
 		messages = append(messages, assistantMessage)
 	}
-	return s.saveMessages(ctx, session.SessionID, messages, &session)
+	return s.saveMessages(ctx, in.User.SessionID, messages, &in)
 }
 
-func (s *sessionRepository) SaveRoundPersistent(ctx context.Context, session domain.Session, userMessage domain.SessionMessage, assistantMessage domain.SessionMessage) error {
+func (s *sessionRepository) SaveRoundPersistent(ctx context.Context, in domain.RoundPersistInput, userMessage domain.SessionMessage, assistantMessage domain.SessionMessage) error {
 	if s.roundAsyncQueue != nil {
-		return s.roundAsyncQueue.PublishRound(ctx, session, userMessage, assistantMessage)
+		return s.roundAsyncQueue.PublishRound(ctx, in, userMessage, assistantMessage)
 	}
 	messages := make([]domain.SessionMessage, 0, 2)
 	if userMessage.Content != "" {
@@ -141,37 +140,37 @@ func (s *sessionRepository) SaveRoundPersistent(ctx context.Context, session dom
 	if assistantMessage.Content != "" {
 		messages = append(messages, assistantMessage)
 	}
-	return s.persistMessages(ctx, session.SessionID, messages, &session)
+	return s.persistMessages(ctx, in.User.SessionID, messages, &in)
 }
 
-func (s *sessionRepository) SaveCacheSnapshot(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error {
-	return s.saveToCache(ctx, session, messages)
+func (s *sessionRepository) SaveCacheSnapshot(ctx context.Context, in domain.RoundPersistInput, messages []domain.SessionMessage) error {
+	return s.saveToCache(ctx, &domain.LoadedSession{User: in.User, Meta: in.Meta, Slots: in.Slots}, messages)
 }
 
 func (s *sessionRepository) SaveMessages(ctx context.Context, sessionID string, messages []domain.SessionMessage) error {
 	return s.saveMessages(ctx, sessionID, messages, nil)
 }
 
-func (s *sessionRepository) saveMessages(ctx context.Context, sessionID string, messages []domain.SessionMessage, session *domain.Session) error {
-	if err := s.persistMessages(ctx, sessionID, messages, session); err != nil {
+func (s *sessionRepository) saveMessages(ctx context.Context, sessionID string, messages []domain.SessionMessage, in *domain.RoundPersistInput) error {
+	if err := s.persistMessages(ctx, sessionID, messages, in); err != nil {
 		return err
 	}
 	allMessages, err := s.LoadAllMessages(ctx, sessionID)
 	if err != nil {
 		return err
 	}
-	if session == nil {
+	if in == nil {
 		var row agentdb.Session
 		if err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).First(&row).Error; err != nil {
 			return err
 		}
-		domainSession := sessionRowToDomain(&row)
-		return s.saveToCache(ctx, domainSession, allMessages)
+		loaded := sessionRowToLoaded(&row)
+		return s.saveToCache(ctx, loaded, allMessages)
 	}
-	return s.saveToCache(ctx, *session, allMessages)
+	return s.saveToCache(ctx, &domain.LoadedSession{User: in.User, Meta: in.Meta, Slots: in.Slots}, allMessages)
 }
 
-func (s *sessionRepository) persistMessages(ctx context.Context, sessionID string, messages []domain.SessionMessage, session *domain.Session) error {
+func (s *sessionRepository) persistMessages(ctx context.Context, sessionID string, messages []domain.SessionMessage, in *domain.RoundPersistInput) error {
 	if strings.TrimSpace(sessionID) == "" {
 		return fmt.Errorf("session_id is required")
 	}
@@ -187,15 +186,16 @@ func (s *sessionRepository) persistMessages(ctx context.Context, sessionID strin
 			return err
 		}
 	}
-	if session != nil {
+	if in != nil {
 		now := time.Now()
+		slotsJSON := marshalSlots(domain.PackUserSessionIntoSlots(in.Slots, in.User))
 		if err := s.db.WithContext(ctx).Model(&agentdb.Session{}).
 			Where("session_id = ?", sessionID).
 			Updates(map[string]any{
-				"status":       string(session.Status),
-				"last_message": session.LastMessage,
-				"total_turns":  session.TotalTurns,
-				"slots_json":   marshalSlots(session.Slots),
+				"status":       string(in.Meta.Status),
+				"last_message": in.Meta.LastMessage,
+				"total_turns":  in.Meta.TotalTurns,
+				"slots_json":   slotsJSON,
 				"updated_at":   now,
 			}).Error; err != nil {
 			return err
@@ -227,28 +227,39 @@ func (s *sessionRepository) LoadAllMessages(ctx context.Context, sessionID strin
 	return out, nil
 }
 
-func domainSessionToModel(session domain.Session) *agentdb.Session {
+func domainSessionToModel(user domain.Session, meta domain.SessionTableMeta, slots map[string]any) *agentdb.Session {
+	status := string(meta.Status)
+	if status == "" {
+		status = string(domain.SessionStatusActive)
+	}
 	return &agentdb.Session{
-		SessionID:   session.SessionID,
-		UserID:      session.UserID,
-		Status:      string(session.Status),
-		LastMessage: session.LastMessage,
-		TotalTurns:  session.TotalTurns,
-		SlotsJSON:   marshalSlots(session.Slots),
+		SessionID:   user.SessionID,
+		UserID:      user.UserID,
+		Status:      status,
+		LastMessage: meta.LastMessage,
+		TotalTurns:  meta.TotalTurns,
+		SlotsJSON:   marshalSlots(domain.PackUserSessionIntoSlots(slots, user)),
+		CreatedAt:   meta.CreatedAt,
+		UpdatedAt:   meta.UpdatedAt,
 	}
 }
 
-func sessionRowToDomain(row *agentdb.Session) domain.Session {
-	return domain.Session{
-		SessionID:   row.SessionID,
-		UserID:      row.UserID,
+func sessionRowToLoaded(row *agentdb.Session) *domain.LoadedSession {
+	if row == nil {
+		return nil
+	}
+	full := unmarshalSlots(row.SlotsJSON)
+	user, toolSlots := domain.UnpackUserSessionFromSlots(full)
+	user.SessionID = row.SessionID
+	user.UserID = row.UserID
+	meta := domain.SessionTableMeta{
 		Status:      domain.SessionStatus(row.Status),
 		LastMessage: row.LastMessage,
 		TotalTurns:  row.TotalTurns,
-		Slots:       unmarshalSlots(row.SlotsJSON),
 		CreatedAt:   row.CreatedAt,
 		UpdatedAt:   row.UpdatedAt,
 	}
+	return &domain.LoadedSession{User: user, Meta: meta, Slots: toolSlots}
 }
 
 func domainMessageToModel(message domain.SessionMessage) agentdb.Message {
@@ -262,7 +273,6 @@ func domainMessageToModel(message domain.SessionMessage) agentdb.Message {
 	}
 }
 
-// marshalSlots 把会话槽位序列化到 session 表，便于跨轮次恢复。
 func marshalSlots(slots map[string]any) string {
 	if len(slots) == 0 {
 		return ""

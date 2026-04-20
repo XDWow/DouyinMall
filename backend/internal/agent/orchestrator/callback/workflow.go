@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
 )
 
@@ -30,36 +31,32 @@ type callbackState struct {
 }
 
 var nodeNameSet = map[string]struct{}{
-	"AccessGuardNode":                {},
-	"SessionLoadNode":                {},
-	"CachePreCheckNode":              {},
-	"L0ExactCacheNode":               {},
-	"ToolsNode":                      {},
-	"IntentAndSlotNode":              {},
-	"RouteNode":                      {},
-	"PrepareOrderQueryInputNode":     {},
-	"OrderQueryGraph":                {},
-	"ApplyOrderQueryResultNode":      {},
-	"PrepareInventoryInputNode":      {},
-	"InventoryGraph":                 {},
-	"ApplyInventoryResultNode":       {},
-	"PrepareProductInfoInputNode":    {},
-	"ProductInfoGraph":               {},
-	"ApplyProductInfoResultNode":     {},
-	"PrepareAddToCartInputNode":      {},
-	"AddToCartGraph":                 {},
-	"ApplyAddToCartResultNode":       {},
-	"PrepareReturnPolicyInputNode":   {},
-	"ReturnPolicyGraph":              {},
-	"ApplyReturnPolicyResultNode":    {},
-	"PrepareReturnExchangeInputNode": {},
-	"ReturnExchangeGraph":            {},
-	"ApplyReturnExchangeResultNode":  {},
-	"PrepareBaseQAInputNode":         {},
-	"BaseQAGraph":                    {},
-	"ApplyBaseQAResultNode":          {},
-	"FinalizeNode":                   {},
-	"InterruptNode":                  {},
+	"AccessGuardNode":               {},
+	"SessionLoadNode":               {},
+	"UnderstandingNode":             {},
+	"RouteNode":                     {},
+	"ProductServiceGraph":           {},
+	"ProductServiceAgentNode":       {},
+	"OrderServiceGraph":             {},
+	"OrderServiceAgentNode":         {},
+	"PromotionServiceGraph":         {},
+	"PromotionRAGNode":              {},
+	"PromotionServiceAgentNode":     {},
+	"AftersalesPolicyGraph":         {},
+	"AftersalesPolicyRAGNode":       {},
+	"AftersalesPolicyAgentNode":     {},
+	"AddToCartGraph":                {},
+	"AddToCartResolveNode":          {},
+	"AddToCartEnsureArgsNode":       {},
+	"AddToCartSubmitNode":           {},
+	"AftersalesApplyGraph":          {},
+	"AftersalesApplyResolveNode":    {},
+	"AftersalesApplyEnsureArgsNode": {},
+	"AftersalesApplyConfirmNode":    {},
+	"AftersalesApplySubmitNode":     {},
+	"UnknownGraph":                  {},
+	"UnknownNode":                   {},
+	"FinalizeNode":                  {},
 }
 
 func (b Builder) New() callbacks.Handler {
@@ -78,7 +75,7 @@ func (b Builder) onStart(ctx context.Context, info *callbacks.RunInfo, input cal
 	startedAt := time.Now()
 	ctx, span := orchestratorobserve.StartSpan(ctx, b.Tracer, info.Name)
 
-	orchestratorobserve.SendEvent(ctx, callbackStreamWriter(state), "node", map[string]any{"node": info.Name, "status": "start"})
+	orchestratorobserve.SendEvent(ctx, agenttool.StreamWriterFrom(ctx), "node", map[string]any{"node": info.Name, "status": "start"})
 	return context.WithValue(ctx, stateKey{}, callbackState{node: info.Name, startedAt: startedAt, state: state, span: span})
 }
 
@@ -132,7 +129,7 @@ func (b Builder) finish(ctx context.Context, info *callbacks.RunInfo, output cal
 	if b.Metrics != nil {
 		b.Metrics.ObserveNode(node, status, latency)
 	}
-	orchestratorobserve.SendEvent(ctx, callbackStreamWriter(state), "node", map[string]any{"node": node, "status": status, "latency_ms": latency.Milliseconds(), "detail": detail})
+	orchestratorobserve.SendEvent(ctx, agenttool.StreamWriterFrom(ctx), "node", map[string]any{"node": node, "status": status, "latency_ms": latency.Milliseconds(), "detail": detail})
 }
 
 func isWorkflowNode(info *callbacks.RunInfo) bool {
@@ -160,11 +157,4 @@ func callbackFlow(ctx context.Context, value any) *domain.State {
 		return nil
 	})
 	return state
-}
-
-func callbackStreamWriter(state *domain.State) domain.StreamWriter {
-	if state == nil {
-		return nil
-	}
-	return state.StreamWriter
 }

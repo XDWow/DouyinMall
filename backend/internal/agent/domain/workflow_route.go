@@ -3,12 +3,39 @@ package domain
 type WorkflowRoute string
 
 const (
-	RouteUnknown             WorkflowRoute = "unknown"
-	RouteOrderQuery          WorkflowRoute = "order_query"
-	RouteInventory           WorkflowRoute = "inventory"
-	RouteProductInfo         WorkflowRoute = "product_info"
-	RouteAddToCart           WorkflowRoute = "add_to_cart"
-	RouteReturnPolicy        WorkflowRoute = "return_policy"
-	RouteReturnExchangeApply WorkflowRoute = "return_exchange_apply"
-	RouteBaseQA              WorkflowRoute = "base_qa"
+	RouteProductService   WorkflowRoute = "product_service"
+	RouteOrderService     WorkflowRoute = "order_service"
+	RoutePromotionService WorkflowRoute = "promotion_service"
+	RouteAftersalesPolicy WorkflowRoute = "aftersales_policy"
+	RouteAftersalesApply  WorkflowRoute = "aftersales_apply"
+	RouteAddToCart        WorkflowRoute = "add_to_cart"
+	RouteUnknown          WorkflowRoute = "unknown"
 )
+
+func WorkflowRouteFromIntent(intent Intent) WorkflowRoute {
+	switch intent {
+	case IntentProductService:
+		return RouteProductService
+	case IntentOrderService:
+		return RouteOrderService
+	case IntentPromotionService:
+		return RoutePromotionService
+	case IntentAftersalesPolicy:
+		return RouteAftersalesPolicy
+	case IntentAftersalesApply:
+		return RouteAftersalesApply
+	case IntentAddToCart:
+		return RouteAddToCart
+	default:
+		return RouteUnknown
+	}
+}
+
+func DefaultReadOnlyForIntent(intent Intent) bool {
+	switch intent {
+	case IntentAddToCart, IntentAftersalesApply:
+		return false
+	default:
+		return true
+	}
+}

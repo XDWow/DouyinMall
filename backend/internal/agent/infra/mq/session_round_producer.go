@@ -26,12 +26,12 @@ func NewSessionRoundProducer(p sarama.SyncProducer, topic string) *SessionRoundP
 }
 
 // PublishRound 序列化并发送；使用 session_id 作为分区键保证同会话顺序。
-func (s *SessionRoundProducer) PublishRound(ctx context.Context, session domain.Session, userMessage, assistantMessage domain.SessionMessage) error {
+func (s *SessionRoundProducer) PublishRound(ctx context.Context, in domain.RoundPersistInput, userMessage, assistantMessage domain.SessionMessage) error {
 	_ = ctx
 	if s == nil || s.p == nil {
 		return fmt.Errorf("session round producer is not configured")
 	}
-	ev := NewSessionRoundPersistEvent(session, userMessage, assistantMessage)
+	ev := NewSessionRoundPersistEvent(in, userMessage, assistantMessage)
 	if len(ev.Messages) == 0 {
 		return nil
 	}
@@ -41,7 +41,7 @@ func (s *SessionRoundProducer) PublishRound(ctx context.Context, session domain.
 	}
 	msg := &sarama.ProducerMessage{
 		Topic: s.topic,
-		Key:   sarama.StringEncoder(session.SessionID),
+		Key:   sarama.StringEncoder(in.User.SessionID),
 		Value: sarama.ByteEncoder(payload),
 	}
 	_, _, err = s.p.SendMessage(msg)

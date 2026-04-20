@@ -6,9 +6,11 @@ import (
 
 	openaichat "github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
+	pkgai "github.com/XDWow/DouyinMall/backend/pkg/ai"
 )
 
 type ChatModelConfig struct {
+	Provider    string
 	BaseURL     string
 	APIKey      string
 	Model       string
@@ -19,7 +21,7 @@ type ChatModelConfig struct {
 
 func NewChatModel(ctx context.Context, cfg ChatModelConfig) (model.ToolCallingChatModel, error) {
 	return openaichat.NewChatModel(ctx, &openaichat.ChatModelConfig{
-		BaseURL:     cfg.BaseURL,
+		BaseURL:     pkgai.ResolveOpenAIBaseURL(pkgai.NormalizeProvider(cfg.Provider), cfg.BaseURL),
 		APIKey:      cfg.APIKey,
 		Model:       cfg.Model,
 		Timeout:     cfg.Timeout,

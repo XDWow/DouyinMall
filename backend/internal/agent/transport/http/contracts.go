@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
@@ -15,6 +16,14 @@ type chatRequest struct {
 	InterruptID    string            `json:"interrupt_id,omitempty"`
 	ResumeDataJSON string            `json:"resume_data_json,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
+}
+
+type workflowResumeRequest struct {
+	CheckpointID string          `json:"checkpoint_id"`
+	InterruptID  string          `json:"interrupt_id"`
+	ResumeData   json.RawMessage `json:"resume_data,omitempty"`
+	UserID       int64           `json:"user_id,omitempty"`
+	SessionID    string          `json:"session_id,omitempty"`
 }
 
 type createSessionRequest struct {
@@ -35,6 +44,7 @@ type chatResponse struct {
 	ToolExecutions []toolExecution    `json:"tool_executions,omitempty"`
 	Trace          traceResponse      `json:"trace"`
 	Interrupt      *interruptInfo     `json:"interrupt,omitempty"`
+	Interrupted    bool               `json:"interrupted,omitempty"`
 }
 
 type sessionResponse struct {
@@ -104,9 +114,10 @@ type traceStep struct {
 }
 
 type interruptInfo struct {
-	CheckpointID string   `json:"checkpoint_id"`
-	InterruptID  string   `json:"interrupt_id,omitempty"`
-	RerunNodes   []string `json:"rerun_nodes,omitempty"`
+	CheckpointID  string         `json:"checkpoint_id"`
+	InterruptID   string         `json:"interrupt_id,omitempty"`
+	RerunNodes    []string       `json:"rerun_nodes,omitempty"`
+	InterruptInfo map[string]any `json:"interrupt_info,omitempty"`
 }
 
 func toChatInput(req chatRequest) agentusecase.ChatInput {
@@ -179,11 +190,13 @@ func toChatResponse(out *agentusecase.ChatOutput) *chatResponse {
 	}
 	if out.Interrupt != nil {
 		resp.Interrupt = &interruptInfo{
-			CheckpointID: out.Interrupt.CheckpointID,
-			InterruptID:  out.Interrupt.InterruptID,
-			RerunNodes:   append([]string(nil), out.Interrupt.RerunNodes...),
+			CheckpointID:  out.Interrupt.CheckpointID,
+			InterruptID:   out.Interrupt.InterruptID,
+			RerunNodes:    append([]string(nil), out.Interrupt.RerunNodes...),
+			InterruptInfo: out.Interrupt.Detail,
 		}
 	}
+	resp.Interrupted = out.Interrupted
 	return resp
 }
 

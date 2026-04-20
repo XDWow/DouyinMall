@@ -6,82 +6,62 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 
+	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	cartnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/cart"
 	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
 )
 
-func Build(
-	_ context.Context,
-	registry *agenttool.Registry,
-	node *cartnode.AddToCartNode,
-	chatModel model.ToolCallingChatModel,
-	skills *agentskill.Registry,
-	maxAnswerTokens int,
-) (compose.AnyGraph, error) {
-	if node == nil {
-		return nil, nil
-	}
+func Build(_ context.Context, chatModel model.ToolCallingChatModel, registry *agenttool.Registry, skills *agentskill.Registry) (compose.AnyGraph, error) {
+	wf := compose.NewWorkflow[struct{}, *domain.ChatResult](compose.WithGenLocalState(domain.SharedGraphState))
+	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, 384)
 
-	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, maxAnswerTokens)
-	toolExecNode := sharednode.NewToolExecNode(registry)
+	wf.AddLambdaNode("AddToCartAssistNode",
+		compose.InvokableLambda(func(ctx context.Context, in assistInput) (*domain.ChatResult, error) {
+			return runAgentAssist(ctx, agent, in)
+		}),
+		compose.WithStatePreHandler(func(_ context.Context, in assistInput, st *domain.State) (assistInput, error) {
+			return assistInputFromState(st)
+		}),
+	).AddDependency(compose.START)
 
-	g := compose.NewGraph[GraphInput, Output]()
-	if err := g.AddLambdaNode("AddToCartCheckSlotsNode", compose.InvokableLambda(addToCartCheckSlots()),
-		compose.WithNodeName("AddToCartCheckSlotsNode")); err != nil {
-		return nil, err
-	}
-	if err := g.AddLambdaNode("AddToCartMissingSlotsNode", compose.InvokableLambda(buildCartMissingOutput),
-		compose.WithNodeName("AddToCartMissingSlotsNode")); err != nil {
-		return nil, err
-	}
-	if err := g.AddLambdaNode("AddToCartModelAgentNode", compose.InvokableLambda(runAddToCartModelAgent(agent, skills)),
-		compose.WithNodeName("AddToCartModelAgentNode")); err != nil {
-		return nil, err
-	}
-	if err := g.AddLambdaNode("AddToCartAgentAnswerNode", compose.InvokableLambda(buildCartOutputFromAgent),
-		compose.WithNodeName("AddToCartAgentAnswerNode")); err != nil {
-		return nil, err
-	}
-	if err := g.AddLambdaNode("AddToCartRulePlanNode", compose.InvokableLambda(runCartRulePlanAndTools(node, toolExecNode)),
-		compose.WithNodeName("AddToCartRulePlanNode")); err != nil {
-		return nil, err
-	}
+	wf.AddLambdaNode("AddToCartResolveNode",
+		compose.InvokableLambda(resolveInvoke),
+		compose.WithStatePreHandler(func(_ context.Context, in AddToCartResolveInput, st *domain.State) (AddToCartResolveInput, error) {
+			return InputFromState(st)
+		}),
+	).AddDependency("AddToCartAssistNode")
 
-	if err := g.AddEdge(compose.START, "AddToCartCheckSlotsNode"); err != nil {
-		return nil, err
-	}
-	if err := g.AddBranch("AddToCartCheckSlotsNode", compose.NewGraphBranch(
-		branchAfterCartSlotCheck,
-		map[string]bool{
-			"AddToCartMissingSlotsNode": true,
-			"AddToCartModelAgentNode":   true,
+	wf.AddLambdaNode("AddToCartAssistResultNode", compose.InvokableLambda(
+		func(_ context.Context, in *domain.ChatResult) (*domain.ChatResult, error) {
+			return in, nil
 		},
-	)); err != nil {
-		return nil, err
-	}
-	if err := g.AddEdge("AddToCartMissingSlotsNode", compose.END); err != nil {
-		return nil, err
-	}
-	if err := g.AddBranch("AddToCartModelAgentNode", compose.NewGraphBranch(
-		branchAfterCartAgent,
-		map[string]bool{
-			"AddToCartAgentAnswerNode": true,
-			"AddToCartRulePlanNode":    true,
-		},
-	)); err != nil {
-		return nil, err
-	}
-	if err := g.AddEdge("AddToCartAgentAnswerNode", compose.END); err != nil {
-		return nil, err
-	}
-	if err := g.AddEdge("AddToCartRulePlanNode", compose.END); err != nil {
-		return nil, err
-	}
-	return g, nil
-}
+	)).AddInput("AddToCartAssistNode")
 
-func cloneSlots(input map[string]any) map[string]any {
-	return cloneSlotsCart(input)
+	wf.AddLambdaNode("AddToCartEnsureArgsNode", compose.InvokableLambda(ensureAddToCartArgs)).
+		AddInput("AddToCartResolveNode")
+
+	wf.AddLambdaNode("AddToCartSubmitNode", compose.InvokableLambda(
+		func(ctx context.Context, resolved ResolvedAddToCart) (*domain.ChatResult, error) {
+			return submitAddToCart(ctx, resolved, registry)
+		},
+	)).AddInput("AddToCartEnsureArgsNode")
+
+	wf.AddBranch("AddToCartAssistNode", compose.NewGraphBranch(
+		func(_ context.Context, in *domain.ChatResult) (string, error) {
+			if in != nil {
+				return "AddToCartAssistResultNode", nil
+			}
+			return "AddToCartResolveNode", nil
+		},
+		map[string]bool{
+			"AddToCartResolveNode":      true,
+			"AddToCartAssistResultNode": true,
+		},
+	))
+
+	wf.End().
+		AddInput("AddToCartSubmitNode").
+		AddInput("AddToCartAssistResultNode")
+	return wf, nil
 }

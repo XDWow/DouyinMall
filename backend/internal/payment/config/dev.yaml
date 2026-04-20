@@ -37,7 +37,7 @@ wechat:
 
 kafka:
   brokers:
-    - "127.0.0.1:29092"
+    - "10.1.4.4:29092"
 
 canal:
   mysql:

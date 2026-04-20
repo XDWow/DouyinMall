@@ -34,4 +34,4 @@ mcp:
 
 kafka:
   brokers:
-    - "douyinmall-kafka:9092"
+    - "10.1.4.4:29092"

@@ -36,15 +36,16 @@ type SessionRoundPersistEvent struct {
 }
 
 // NewSessionRoundPersistEvent 从领域对象组装 MQ 事件；空内容消息不会加入列表。
-func NewSessionRoundPersistEvent(session domain.Session, userMessage, assistantMessage domain.SessionMessage) SessionRoundPersistEvent {
+func NewSessionRoundPersistEvent(in domain.RoundPersistInput, userMessage, assistantMessage domain.SessionMessage) SessionRoundPersistEvent {
+	slots := domain.PackUserSessionIntoSlots(in.Slots, in.User)
 	ev := SessionRoundPersistEvent{
 		Session: SessionRoundSessionPayload{
-			SessionID:   session.SessionID,
-			UserID:      session.UserID,
-			Status:      string(session.Status),
-			LastMessage: session.LastMessage,
-			TotalTurns:  session.TotalTurns,
-			Slots:       session.Slots,
+			SessionID:   in.User.SessionID,
+			UserID:      in.User.UserID,
+			Status:      string(in.Meta.Status),
+			LastMessage: in.Meta.LastMessage,
+			TotalTurns:  in.Meta.TotalTurns,
+			Slots:       slots,
 		},
 	}
 	if strings.TrimSpace(userMessage.Content) != "" {

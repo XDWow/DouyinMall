@@ -19,8 +19,8 @@ func TestWorkflowCallbackHandlerAppendsTraceStep(t *testing.T) {
 		Metrics: metrics,
 	}.New()
 
-	state := domain.NewState(domain.ChatCommand{Message: "hello"}, nil, nil)
-	info := &callbacks.RunInfo{Name: "IntentAndSlotNode"}
+	state := domain.NewState(&domain.ChatInput{Message: "hello"})
+	info := &callbacks.RunInfo{Name: "UnderstandingNode"}
 
 	ctx := handler.OnStart(context.Background(), info, state)
 	handler.OnEnd(ctx, info, state)
@@ -29,8 +29,8 @@ func TestWorkflowCallbackHandlerAppendsTraceStep(t *testing.T) {
 		t.Fatalf("expected 1 trace step, got %d", got)
 	}
 	step := state.EnsureResponse().Trace.Steps[0]
-	if step.Node != "IntentAndSlotNode" {
-		t.Fatalf("expected node IntentAndSlotNode, got %s", step.Node)
+	if step.Node != "UnderstandingNode" {
+		t.Fatalf("expected node UnderstandingNode, got %s", step.Node)
 	}
 	if step.Status != "ok" {
 		t.Fatalf("expected status ok, got %s", step.Status)
@@ -44,8 +44,8 @@ func TestWorkflowCallbackHandlerRecordsError(t *testing.T) {
 		Metrics: metrics,
 	}.New()
 
-	state := domain.NewState(domain.ChatCommand{Message: "hello"}, nil, nil)
-	info := &callbacks.RunInfo{Name: "ToolsNode"}
+	state := domain.NewState(&domain.ChatInput{Message: "hello"})
+	info := &callbacks.RunInfo{Name: "AddToCartSubmitNode"}
 	runErr := errors.New("tool failed")
 
 	ctx := handler.OnStart(context.Background(), info, state)

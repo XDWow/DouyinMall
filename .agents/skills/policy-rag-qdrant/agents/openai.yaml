@@ -1,0 +1,7 @@
+interface:
+  display_name: "Policy RAG Qdrant"
+  short_description: "Offline policy ingestion and Qdrant RAG"
+  default_prompt: "Use $policy-rag-qdrant to ingest policy pages, chunk them structurally, store them in Qdrant, or explain the implementation clearly."
+
+policy:
+  allow_implicit_invocation: true

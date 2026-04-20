@@ -4,18 +4,15 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
 
-func sessionOutputFromDomain(session *domain.Session) *SessionOutput {
-	if session == nil {
-		return &SessionOutput{}
-	}
+func sessionOutputFromListItem(item domain.SessionListItem) *SessionOutput {
 	return &SessionOutput{
-		SessionID:   session.SessionID,
-		UserID:      session.UserID,
-		Status:      session.Status,
-		LastMessage: session.LastMessage,
-		TotalTurns:  session.TotalTurns,
-		CreatedAt:   session.CreatedAt,
-		UpdatedAt:   session.UpdatedAt,
+		SessionID:   item.Context.SessionID,
+		UserID:      item.Context.UserID,
+		Status:      item.Meta.Status,
+		LastMessage: item.Meta.LastMessage,
+		TotalTurns:  item.Meta.TotalTurns,
+		CreatedAt:   item.Meta.CreatedAt,
+		UpdatedAt:   item.Meta.UpdatedAt,
 	}
 }
 

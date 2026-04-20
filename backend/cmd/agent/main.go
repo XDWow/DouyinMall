@@ -10,11 +10,15 @@ import (
 	"time"
 
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
+	"github.com/joho/godotenv"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 func main() {
+	// Load optional .env from current working directory (e.g. backend/.env); ignore if missing.
+	_ = godotenv.Load()
+
 	cfg := initConfig()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -51,8 +55,7 @@ func initConfig() agentconfig.Config {
 
 	viper.SetConfigFile(*configPath)
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.AutomaticEnv()
-	bindEnv()
+	bindSecretsFromEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("read config file failed: %w", err))
@@ -65,38 +68,18 @@ func initConfig() agentconfig.Config {
 	return cfg
 }
 
-func bindEnv() {
-	mustBindEnv("http.addr", "HTTP_ADDR")
-	mustBindEnv("grpc.server.port", "GRPC_PORT")
-	mustBindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
+// bindSecretsFromEnv 仅从环境变量注入密钥类配置；其余依赖配置文件。
+func bindSecretsFromEnv() {
 	mustBindEnv("db.dsn", "DB_DSN")
-	mustBindEnv("redis.addr", "REDIS_ADDR")
+	mustBindEnv("llm.weak.api_key", "LLM_WEAK_API_KEY", "LLM_API_KEY")
+	mustBindEnv("llm.strong.api_key", "LLM_STRONG_API_KEY", "LLM_API_KEY")
 	mustBindEnv("redis.password", "REDIS_PASSWORD")
-	mustBindEnv("redis.db", "REDIS_DB")
-	mustBindEnv("kafka.enabled", "AGENT_KAFKA_ENABLED")
-	mustBindEnv("kafka.topic_session_round", "AGENT_KAFKA_TOPIC_SESSION_ROUND")
-	mustBindEnv("kafka.consumer_group", "AGENT_KAFKA_CONSUMER_GROUP")
-	mustBindEnv("kafka.session_round_batch_size", "AGENT_KAFKA_SESSION_ROUND_BATCH_SIZE")
-	mustBindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
-	mustBindEnv("llm.base_url", "LLM_BASE_URL")
-	mustBindEnv("llm.api_key", "LLM_API_KEY")
-	mustBindEnv("llm.model", "LLM_MODEL")
-	mustBindEnv("embedding.base_url", "EMBEDDING_BASE_URL")
-	mustBindEnv("embedding.api_key", "EMBEDDING_API_KEY")
-	mustBindEnv("embedding.model", "EMBEDDING_MODEL")
-	mustBindEnv("workflow.exact_cache_ttl_seconds", "EXACT_CACHE_TTL_SECONDS")
-	mustBindEnv("workflow.semantic_cache_ttl_seconds", "SEMANTIC_CACHE_TTL_SECONDS")
-	mustBindEnv("workflow.semantic_cache_score", "SEMANTIC_CACHE_SCORE")
-	mustBindEnv("workflow.semantic_cache_top_k", "SEMANTIC_CACHE_TOP_K")
-	mustBindEnv("knowledge_base.scheme", "KNOWLEDGE_BASE_SCHEME")
-	mustBindEnv("knowledge_base.domain", "KNOWLEDGE_BASE_DOMAIN")
-	mustBindEnv("knowledge_base.service_chat_path", "KNOWLEDGE_BASE_SERVICE_CHAT_PATH")
-	mustBindEnv("knowledge_base.service_resource_id", "KNOWLEDGE_BASE_SERVICE_RESOURCE_ID")
-	mustBindEnv("knowledge_base.api_key", "KNOWLEDGE_BASE_API_KEY")
-	mustBindEnv("knowledge_base.timeout_seconds", "KNOWLEDGE_BASE_TIMEOUT_SECONDS")
-	mustBindEnv("observability.trace.enabled", "OTEL_TRACE_ENABLED")
-	mustBindEnv("observability.trace.endpoint", "OTEL_EXPORTER_OTLP_ENDPOINT")
-	mustBindEnv("observability.trace.service_name", "OTEL_SERVICE_NAME")
+	mustBindEnv("embedding.api_key", "EMBEDDING_API_KEY", "LLM_API_KEY")
+	mustBindEnv("knowledge_base.qdrant.host", "QDRANT_HOST")
+	mustBindEnv("knowledge_base.qdrant.port", "QDRANT_PORT")
+	mustBindEnv("knowledge_base.qdrant.api_key", "QDRANT_API_KEY")
+	mustBindEnv("knowledge_base.qdrant.collection", "QDRANT_COLLECTION")
+	mustBindEnv("knowledge_base.qdrant.use_tls", "QDRANT_USE_TLS")
 }
 
 func mustBindEnv(key string, envs ...string) {

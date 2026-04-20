@@ -14,11 +14,11 @@ import (
 )
 
 type cacheSnapshotWriter interface {
-	SaveCacheSnapshot(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error
+	SaveCacheSnapshot(ctx context.Context, in domain.RoundPersistInput, messages []domain.SessionMessage) error
 }
 
 type persistentRoundWriter interface {
-	SaveRoundPersistent(ctx context.Context, session domain.Session, userMessage domain.SessionMessage, assistantMessage domain.SessionMessage) error
+	SaveRoundPersistent(ctx context.Context, in domain.RoundPersistInput, userMessage domain.SessionMessage, assistantMessage domain.SessionMessage) error
 }
 
 // Service 负责会话读写的应用层编排：
@@ -35,7 +35,6 @@ func NewService(repo domainrepo.SessionRepository, maxTurns int) *Service {
 }
 
 // LoadSnapshot 读取会话的持久化快照。
-// 返回值会复制引用类型字段，避免调用方无意间改脏仓储层拿到的数据。
 func (s *Service) LoadSnapshot(ctx context.Context, sessionID string) (*Snapshot, error) {
 	if s == nil || s.repo == nil {
 		return nil, nil
@@ -44,25 +43,44 @@ func (s *Service) LoadSnapshot(ctx context.Context, sessionID string) (*Snapshot
 		return nil, fmt.Errorf("session_id is required")
 	}
 
-	persistedSession, messages, err := s.repo.Load(ctx, sessionID)
+	loaded, messages, err := s.repo.Load(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	if persistedSession == nil {
+	if loaded == nil {
 		return nil, nil
 	}
 
 	return &Snapshot{
-		PersistedSession: cloneSession(*persistedSession),
-		Messages:         cloneSessionMessages(messages),
+		Loaded:   cloneLoaded(*loaded),
+		Messages: cloneSessionMessages(messages),
 	}, nil
 }
 
-func (s *Service) CreateSession(ctx context.Context, session domain.Session) error {
+func cloneLoaded(in domain.LoadedSession) domain.LoadedSession {
+	out := in
+	out.User = in.User
+	out.Meta = in.Meta
+	out.Slots = cloneSlotsRepo(in.Slots)
+	return out
+}
+
+func cloneSlotsRepo(input map[string]any) map[string]any {
+	if len(input) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(input))
+	for key, value := range input {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func (s *Service) CreateSession(ctx context.Context, user domain.Session, meta domain.SessionTableMeta) error {
 	if s == nil || s.repo == nil {
 		return nil
 	}
-	return s.repo.Create(ctx, session)
+	return s.repo.Create(ctx, user, meta, nil)
 }
 
 // BuildRecentHistory 把完整持久化历史裁剪成模型需要的最近窗口。
@@ -72,17 +90,17 @@ func (s *Service) BuildRecentHistory(messages []domain.SessionMessage) []*schema
 
 func (s *Service) SaveTurn(
 	ctx context.Context,
-	session domain.Session,
+	in domain.RoundPersistInput,
 	userMsg domain.SessionMessage,
 	assistantMsg domain.SessionMessage,
 ) error {
 	if s == nil || s.repo == nil {
 		return nil
 	}
-	return s.repo.SaveRound(ctx, session, userMsg, assistantMsg)
+	return s.repo.SaveRound(ctx, in, userMsg, assistantMsg)
 }
 
-func (s *Service) SaveTurnCache(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error {
+func (s *Service) SaveTurnCache(ctx context.Context, in domain.RoundPersistInput, messages []domain.SessionMessage) error {
 	if s == nil || s.repo == nil {
 		return nil
 	}
@@ -90,12 +108,12 @@ func (s *Service) SaveTurnCache(ctx context.Context, session domain.Session, mes
 	if !ok {
 		return nil
 	}
-	return writer.SaveCacheSnapshot(ctx, session, WindowMessages(messages, s.maxTurns))
+	return writer.SaveCacheSnapshot(ctx, in, WindowMessages(messages, s.maxTurns))
 }
 
 func (s *Service) SaveTurnPersistent(
 	ctx context.Context,
-	session domain.Session,
+	in domain.RoundPersistInput,
 	userMsg domain.SessionMessage,
 	assistantMsg domain.SessionMessage,
 ) error {
@@ -103,9 +121,9 @@ func (s *Service) SaveTurnPersistent(
 		return nil
 	}
 	if writer, ok := s.repo.(persistentRoundWriter); ok {
-		return writer.SaveRoundPersistent(ctx, session, userMsg, assistantMsg)
+		return writer.SaveRoundPersistent(ctx, in, userMsg, assistantMsg)
 	}
-	return s.repo.SaveRound(ctx, session, userMsg, assistantMsg)
+	return s.repo.SaveRound(ctx, in, userMsg, assistantMsg)
 }
 
 func (s *Service) AllMessages(ctx context.Context, sessionID string) ([]domain.SessionMessage, error) {
@@ -118,7 +136,7 @@ func (s *Service) AllMessages(ctx context.Context, sessionID string) ([]domain.S
 	return s.repo.LoadAllMessages(ctx, sessionID)
 }
 
-func (s *Service) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
+func (s *Service) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.SessionListItem, int, error) {
 	if s == nil || s.repo == nil {
 		return nil, 0, nil
 	}
@@ -165,8 +183,6 @@ func Truncate(value string, limit int) string {
 	return string(runes[:limit]) + "..."
 }
 
-// WindowMessages 按“轮次”裁剪历史。
-// 一轮默认按用户消息 + 助手消息两条估算。
 func WindowMessages(messages []domain.SessionMessage, maxTurns int) []domain.SessionMessage {
 	if maxTurns <= 0 || len(messages) == 0 {
 		return messages
@@ -178,7 +194,6 @@ func WindowMessages(messages []domain.SessionMessage, maxTurns int) []domain.Ses
 	return append([]domain.SessionMessage(nil), messages...)
 }
 
-// MessagesToSchema 把业务消息转换成模型消息。
 func MessagesToSchema(messages []domain.SessionMessage) []*schema.Message {
 	if len(messages) == 0 {
 		return nil
@@ -216,7 +231,6 @@ func ToSchemaRole(role domain.Role) schema.RoleType {
 	}
 }
 
-// FromSchemaMessages 把运行时的模型消息转换成可持久化的业务消息。
 func FromSchemaMessages(sessionID string, messages []*schema.Message) []domain.SessionMessage {
 	if len(messages) == 0 {
 		return nil
@@ -251,26 +265,9 @@ func FromSchemaRole(role schema.RoleType) domain.Role {
 	}
 }
 
-func cloneSession(session domain.Session) domain.Session {
-	cloned := session
-	cloned.Slots = cloneSlots(session.Slots)
-	return cloned
-}
-
 func cloneSessionMessages(messages []domain.SessionMessage) []domain.SessionMessage {
 	if len(messages) == 0 {
 		return nil
 	}
 	return append([]domain.SessionMessage(nil), messages...)
-}
-
-func cloneSlots(input map[string]any) map[string]any {
-	if len(input) == 0 {
-		return nil
-	}
-	cloned := make(map[string]any, len(input))
-	for key, value := range input {
-		cloned[key] = value
-	}
-	return cloned
 }

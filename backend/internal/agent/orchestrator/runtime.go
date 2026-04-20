@@ -14,20 +14,13 @@ import (
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	orchestratorcallback "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/callback"
 	orchestratorgraph "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/graph"
-	aftersalenode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/aftersale"
-	cartnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/cart"
-	baseqanode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/fallback"
-	inventorynode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/inventory"
-	ordernode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/order"
-	productnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/domain/product"
 	globalnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global"
-	sharednode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared"
-	orchestratorragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
+	understandingnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/global/understanding"
+	ragnode "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/node/shared/rag"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// NewRuntime 编译主图 Runnable；每轮新 State + Recorder。
 func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, error) {
 	cfg = applyConfigDefaults(cfg)
 
@@ -39,10 +32,6 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 	if metrics == nil {
 		metrics = NewMetrics("agent")
 	}
-	prompts := deps.Prompts
-	if prompts == nil {
-		prompts = NewDefaultPrompts()
-	}
 	tracer := deps.Tracer
 	if tracer == nil {
 		tracer = otel.Tracer("douyinmall/agent")
@@ -50,7 +39,7 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 
 	svc := &Runtime{
 		cfg:             cfg,
-		model:           deps.Model,
+		llms:            deps.LLMs,
 		embedder:        deps.Embedder,
 		knowledgeBase:   deps.KnowledgeBase,
 		skills:          deps.Skills,
@@ -60,13 +49,11 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 		semanticCache:   deps.SemanticCache,
 		rateLimiter:     deps.RateLimiter,
 		checkpointStore: deps.CheckpointStore,
-		prompts:         prompts,
 		logger:          log,
 		metrics:         metrics,
 		tracer:          tracer,
 	}
 
-	toolCheck := sharednode.ToolRegistryCheck(svc.registryHasTool)
 	svc.callbackHandler = orchestratorcallback.Builder{Tracer: tracer, Metrics: metrics}.New()
 
 	runner, err := (&orchestratorgraph.Builder{
@@ -75,17 +62,11 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 		},
 		CheckpointStore: deps.CheckpointStore,
 		Registry:        deps.Registry,
-		ChatModel:       deps.Model,
 		Skills:          deps.Skills,
-		MaxAnswerTokens: cfg.MaxAnswerTokens,
+		AgentModel:      deps.LLMs.Strong(),
 		AccessGuard:     globalnode.NewAccessGuardNode(cfg.DefaultTenantID, cfg.RateLimitPerMinute, deps.RateLimiter),
 		SessionLoad:     globalnode.NewSessionLoadNode(deps.SessionService),
-		CachePreCheck:   globalnode.NewCachePreCheckNode(),
-		L0ExactCache:    globalnode.NewL0ExactCacheNode(deps.ExactCache),
-		L1SemanticCache: globalnode.NewL1SemanticCacheNode(deps.SemanticCache, deps.Embedder, cfg.SemanticCacheScore, cfg.SemanticCacheTopK),
-		IntentAndSlot:   globalnode.NewIntentAndSlotNode(deps.Model, prompts),
-		SlotMerge:       globalnode.NewSlotMergeNode(),
-		AskUser:         globalnode.NewAskUserNode(),
+		Understanding:   understandingnode.NewUnderstandingNode(deps.LLMs.Weak()),
 		Route:           globalnode.NewRouteNode(),
 		Finalize: globalnode.NewFinalizeNode(
 			deps.SessionService,
@@ -93,16 +74,7 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 			log,
 			metrics,
 		),
-		OrderRead:           ordernode.NewOrderReadNode(toolCheck),
-		InventoryRead:       inventorynode.NewInventoryReadNode(toolCheck),
-		ProductInfo:         productnode.NewProductInfoNode(toolCheck),
-		AddToCart:           cartnode.NewAddToCartNode(toolCheck),
-		ReturnExchangeQuery: aftersalenode.NewReturnExchangeQueryNode(toolCheck),
-		EligibilityCheck:    aftersalenode.NewEligibilityCheckNode(),
-		ConfirmSummary:      aftersalenode.NewConfirmSummaryNode(),
-		SubmitAfterSale:     aftersalenode.NewSubmitAfterSaleNode(),
-		RAG:                 orchestratorragnode.NewRAGNode(deps.KnowledgeBase, cfg.RetrieveTopK, cfg.RetrieveMinScore),
-		BaseQA:              baseqanode.NewBaseQANode(),
+		RAG: ragnode.NewRAGNode(deps.KnowledgeBase, cfg.RetrieveTopK, cfg.RetrieveMinScore),
 	}).Build(ctx)
 	if err != nil {
 		return nil, err
@@ -112,31 +84,49 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 	return svc, nil
 }
 
-func (s *Runtime) Chat(ctx context.Context, req domain.ChatCommand) (*domain.ChatResult, error) {
+func (s *Runtime) Chat(ctx context.Context, req *domain.ChatInput) (*domain.ChatResult, error) {
 	return s.run(ctx, req, nil)
 }
 
-func (s *Runtime) ChatStream(ctx context.Context, req domain.ChatCommand, writer StreamWriter) (*domain.ChatResult, error) {
+func (s *Runtime) ChatStream(ctx context.Context, req *domain.ChatInput, writer StreamWriter) (*domain.ChatResult, error) {
 	return s.run(ctx, req, writer)
 }
 
-func (s *Runtime) CreateSession(ctx context.Context, userID int64) (*domain.Session, error) {
+func (s *Runtime) Resume(ctx context.Context, in domain.WorkflowResumeInput) (*domain.ChatResult, error) {
+	if strings.TrimSpace(in.CheckpointID) == "" || strings.TrimSpace(in.InterruptID) == "" {
+		return nil, fmt.Errorf("checkpoint_id and interrupt_id are required")
+	}
+	if in.UserID <= 0 {
+		return nil, fmt.Errorf("user_id is required")
+	}
+	return s.run(ctx, &domain.ChatInput{
+		SessionID:   strings.TrimSpace(in.SessionID),
+		UserID:      in.UserID,
+		ResumeToken: strings.TrimSpace(in.CheckpointID),
+		InterruptID: strings.TrimSpace(in.InterruptID),
+		ResumeData:  domain.CloneAnyMap(in.ResumeData),
+	}, nil)
+}
+
+func (s *Runtime) CreateSession(ctx context.Context, userID int64) (*domain.SessionListItem, error) {
 	sessionID := "sess_" + uuid.NewString()
 	now := time.Now()
-	session := domain.Session{
-		SessionID:  sessionID,
-		UserID:     userID,
+	user := domain.Session{
+		SessionID: sessionID,
+		UserID:    userID,
+	}
+	meta := domain.SessionTableMeta{
 		Status:     domain.SessionStatusActive,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		TotalTurns: 0,
 	}
 	if s.sessionService != nil {
-		if err := s.sessionService.CreateSession(ctx, session); err != nil {
+		if err := s.sessionService.CreateSession(ctx, user, meta); err != nil {
 			return nil, err
 		}
 	}
-	return &session, nil
+	return &domain.SessionListItem{Context: user, Meta: meta}, nil
 }
 
 func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]domain.SessionMessage, int, error) {
@@ -148,9 +138,6 @@ func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offse
 		return nil, 0, err
 	}
 	total := len(messages)
-	if total == 0 {
-		return nil, 0, nil
-	}
 	if limit <= 0 {
 		limit = 20
 	}
@@ -167,7 +154,7 @@ func (s *Runtime) GetHistory(ctx context.Context, sessionID string, limit, offse
 	return append([]domain.SessionMessage(nil), messages[offset:end]...), total, nil
 }
 
-func (s *Runtime) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error) {
+func (s *Runtime) ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.SessionListItem, int, error) {
 	if s.sessionService == nil {
 		return nil, 0, nil
 	}
@@ -181,26 +168,25 @@ func (s *Runtime) ClearSession(ctx context.Context, sessionID string) error {
 	return s.sessionService.Clear(ctx, sessionID)
 }
 
-// run 单轮编排。v1 缺参闭环：子图缺槽 → applySubgraphSlotWait → Finalize → InterruptNode → 客户端带
-// resume_token（=checkpoint_id）+ interrupt_id + 用户 message（补参文案）再调 Chat；compose 从 checkpoint 续跑。
-func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer StreamWriter) (*domain.ChatResult, error) {
+func (s *Runtime) run(ctx context.Context, req *domain.ChatInput, writer StreamWriter) (*domain.ChatResult, error) {
 	start := time.Now()
-	state := domain.NewState(req, writer, agenttool.NewSafeExecutionRecorder())
+	if req == nil {
+		req = &domain.ChatInput{}
+	}
+	state := domain.NewState(req)
+	rec := agenttool.NewSafeExecutionRecorder()
 
-	checkpointID := req.ResumeToken
+	checkpointID := strings.TrimSpace(req.ResumeToken)
 	if checkpointID == "" {
 		checkpointID = state.TraceID
 	}
-	state.Checkpoint = checkpointID
+	state.EnsureResponse().Trace.CheckpointID = checkpointID
 	if strings.TrimSpace(state.Session.SessionID) == "" {
 		state.Session.SessionID = "sess_" + state.TraceID
 	}
 
-	if token := strings.TrimSpace(req.ResumeToken); token != "" {
-		if s.checkpointStore == nil {
-			return nil, fmt.Errorf("checkpoint store unavailable for resume")
-		}
-		_, ok, err := s.checkpointStore.Get(ctx, token)
+	if checkpointID != "" && req.ResumeToken != "" && s.checkpointStore != nil {
+		_, ok, err := s.checkpointStore.Get(ctx, checkpointID)
 		if err != nil {
 			return nil, fmt.Errorf("checkpoint get: %w", err)
 		}
@@ -208,7 +194,6 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 			return nil, fmt.Errorf("checkpoint not found")
 		}
 	}
-
 	if id := strings.TrimSpace(req.InterruptID); id != "" {
 		if len(req.ResumeData) > 0 {
 			ctx = compose.ResumeWithData(ctx, id, req.ResumeData)
@@ -217,14 +202,17 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 		}
 	}
 
-	ctx = agenttool.WithExecutionRecorder(ctx, state.Recorder)
+	ctx = domain.WithInitialState(ctx, state)
+	ctx = agenttool.WithExecutionRecorder(ctx, rec)
+	ctx = agenttool.WithStreamWriter(ctx, writer)
 	ctx = agenttool.WithRuntime(ctx, agenttool.Runtime{
-		UserID:    state.Input.UserID,
+		UserID:    req.UserID,
 		SessionID: state.Session.SessionID,
 		TraceID:   state.TraceID,
 	})
 
-	orchestratorobserve.SendEvent(ctx, writer, "start", map[string]any{
+	sw := agenttool.StreamWriterFrom(ctx)
+	orchestratorobserve.SendEvent(ctx, sw, "start", map[string]any{
 		"trace_id":      state.TraceID,
 		"checkpoint_id": checkpointID,
 		"session_id":    state.Session.SessionID,
@@ -241,7 +229,7 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 		invokeOpts = append(invokeOpts, compose.WithCallbacks(s.callbackHandler))
 	}
 
-	out, err := s.runnable.Invoke(ctx, map[string]any{"flow": state}, invokeOpts...)
+	out, err := s.runnable.Invoke(ctx, struct{}{}, invokeOpts...)
 	if out == nil {
 		out = state
 	}
@@ -252,35 +240,40 @@ func (s *Runtime) run(ctx context.Context, req domain.ChatCommand, writer Stream
 
 	if info, ok := compose.ExtractInterruptInfo(err); ok {
 		resp.Status = domain.ReplyStatusFallback
+		detail := extractInterruptDetailMap(info)
 		resp.Interrupt = &domain.InterruptInfo{
 			CheckpointID: checkpointID,
 			InterruptID:  interruptCtxIDFromCompose(info),
+			Detail:       detail,
 		}
+		resp.Interrupted = true
 		if info != nil {
 			resp.Interrupt.RerunNodes = append(resp.Interrupt.RerunNodes, info.RerunNodes...)
 		}
 		if strings.TrimSpace(resp.Reply) == "" {
-			resp.Reply = "请补充缺失信息。"
+			if question, ok := detail["question"].(string); ok && strings.TrimSpace(question) != "" {
+				resp.Reply = strings.TrimSpace(question)
+			} else {
+				resp.Reply = "请补充缺失信息。"
+			}
 		}
 		s.recordRequestLatencyInsight(resp, time.Since(start))
 		s.metrics.ObserveRequest(string(resp.Status), time.Since(start))
-		orchestratorobserve.SendEvent(ctx, writer, "done", resp)
+		orchestratorobserve.SendEvent(ctx, sw, "done", resp)
 		return resp, nil
 	}
-
 	if err != nil {
-		orchestratorobserve.SendEvent(ctx, writer, "error", map[string]any{"message": err.Error()})
+		orchestratorobserve.SendEvent(ctx, sw, "error", map[string]any{"message": err.Error()})
 		s.metrics.ObserveRequest("error", time.Since(start))
 		return nil, err
 	}
 
 	s.recordRequestLatencyInsight(resp, time.Since(start))
 	s.metrics.ObserveRequest(string(resp.Status), time.Since(start))
-	orchestratorobserve.SendEvent(ctx, writer, "done", resp)
+	orchestratorobserve.SendEvent(ctx, sw, "done", resp)
 	return resp, nil
 }
 
-// recordRequestLatencyInsight 汇总本轮最慢节点（便于日志/Prometheus 回答「一次请求最长耗时在哪」）。
 func (s *Runtime) recordRequestLatencyInsight(resp *domain.ChatResult, wall time.Duration) {
 	if resp == nil {
 		return
@@ -297,6 +290,27 @@ func (s *Runtime) recordRequestLatencyInsight(resp *domain.ChatResult, wall time
 		logger.Int64("wall_total_ms", wall.Milliseconds()),
 		logger.Int("workflow_step_count", len(resp.Trace.Steps)),
 	)
+}
+
+func extractInterruptDetailMap(info *compose.InterruptInfo) map[string]any {
+	if info == nil {
+		return nil
+	}
+	for _, ic := range info.InterruptContexts {
+		if ic != nil && ic.IsRootCause {
+			if detail, ok := ic.Info.(map[string]any); ok {
+				return detail
+			}
+		}
+	}
+	for _, ic := range info.InterruptContexts {
+		if ic != nil {
+			if detail, ok := ic.Info.(map[string]any); ok {
+				return detail
+			}
+		}
+	}
+	return nil
 }
 
 func interruptCtxIDFromCompose(info *compose.InterruptInfo) string {

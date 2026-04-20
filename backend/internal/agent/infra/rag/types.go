@@ -23,6 +23,10 @@ type Store interface {
 	UpsertChunks(ctx context.Context, chunks []Chunk) error
 }
 
+type Searcher interface {
+	Search(ctx context.Context, input SearchInput) (*SearchResult, error)
+}
+
 type Chunker interface {
 	Split(content string) []string
 }

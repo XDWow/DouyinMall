@@ -61,7 +61,7 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://10.1.4.4:29092
       KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -399,11 +399,13 @@ services:
       dockerfile: cmd/agent/Dockerfile
     container_name: douyinmall-agent
     restart: unless-stopped
+    command: ["./agent", "--config", "internal/agent/config/dev.yaml"]
     ports:
       - "8087:8087"
       - "18087:18087"
     environment:
       TZ: Asia/Shanghai
+      DB_DSN: ${DB_DSN:-root:root@tcp(douyinmall-mysql:3306)/douyinmall_agent?charset=utf8mb4&parseTime=True&loc=Local}
       LLM_API_KEY: ${LLM_API_KEY}
       SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY}
     extra_hosts:

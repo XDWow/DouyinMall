@@ -1,7 +1,6 @@
 package tool
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
@@ -26,35 +25,4 @@ type ProductSummary struct {
 
 type ExecutionRecorder interface {
 	Record(exec domain.ToolExecution)
-}
-
-type ToolExecutionMode string
-
-const (
-	ToolExecutionSerial           ToolExecutionMode = "serial"
-	ToolExecutionParallelReadOnly ToolExecutionMode = "parallel_readonly"
-)
-
-type ToolPolicy struct {
-	ReadOnly         bool
-	RequiresOrdering bool
-}
-
-type ToolSummary struct {
-	Name             string
-	Description      string
-	InputSchema      string
-	ReadOnly         bool
-	RequiresOrdering bool
-}
-
-func toolArgumentsJSON(plan domain.ToolCallPlan) (string, error) {
-	if plan.RawJSON != "" {
-		return plan.RawJSON, nil
-	}
-	payload, err := json.Marshal(plan.Arguments)
-	if err != nil {
-		return "", err
-	}
-	return string(payload), nil
 }

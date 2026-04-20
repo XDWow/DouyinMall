@@ -6,18 +6,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/schema"
-
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
+	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 	agentsession "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-const lowConfidenceThreshold = 0.65
+const recentTurnsWindow = 10
 
-// FinalizeNode 主图出口：生产路径由 graph 包注册的 StatePostHandler 调用 FinalizeSession（框架已持 state 锁）。
+type FinalizeInput struct {
+	AccessGuard      *domain.ChatResult
+	ProductService   *domain.ChatResult
+	OrderService     *domain.ChatResult
+	PromotionService *domain.ChatResult
+	AftersalesPolicy *domain.ChatResult
+	AftersalesApply  *domain.ChatResult
+	AddToCart        *domain.ChatResult
+	Unknown          *domain.ChatResult
+}
+
 type FinalizeNode struct {
 	SessionService *agentsession.Service
 	CacheWriteback *CacheWritebackService
@@ -39,238 +48,209 @@ func NewFinalizeNode(
 	}
 }
 
-// FinalizeSession 汇总回复、流式输出、落库与缓存；与图编排解耦，可直接单测。
-func (n *FinalizeNode) FinalizeSession(ctx context.Context, st *domain.State) error {
-	if st == nil {
-		return fmt.Errorf("state is required")
-	}
-
-	in := st.Input
-	resp := domain.EnsureChatResult(in, st)
-	resp.SessionID = support.FirstNonEmpty(resp.SessionID, st.Session.SessionID, in.SessionID)
-
-	reply, source := n.resolveReply(st, resp)
-	reply = support.NormalizeReply(reply)
-
-	confidence := resp.Confidence
-	if confidence <= 0 {
-		confidence = support.EstimateConfidence(st)
-	}
-	reply = n.decorateLowConfidenceReply(reply, confidence, st)
-
-	usedToolNames := support.CollectUsedToolNames(st)
-	st.Answer = domain.AnswerResult{
-		Reply:         reply,
-		Confidence:    confidence,
-		Source:        source,
-		CacheableHint: st.Answer.CacheableHint,
-		Streamed:      st.Answer.Streamed,
-		UsedToolNames: append([]string(nil), usedToolNames...),
-	}
-
-	resp.Reply = reply
-	if resp.Intent == domain.IntentUnknown {
-		resp.Intent = st.Intent.Intent
-	}
-	if resp.Intent == domain.IntentUnknown {
-		resp.Intent = st.Session.Intent
-	}
-	resp.Confidence = confidence
-	if len(resp.References) == 0 {
-		resp.References = support.DocumentsToReferences(st.Retrieval.Documents)
-	}
-	resp.ToolExecutions = nil
-	resp.UsedToolNames = append([]string(nil), usedToolNames...)
-	if !resp.NeedHandoff {
-		resp.NeedHandoff = st.Intent.NeedHandoff
-	}
-	if !resp.NeedHandoff {
-		resp.NeedHandoff = st.Answer.NeedHandoff
-	}
-	if strings.TrimSpace(resp.HandoffReason) == "" {
-		resp.HandoffReason = st.Answer.HandoffReason
-	}
-	resp.Trace.TraceID = st.TraceID
-	resp.Trace.CheckpointID = st.Checkpoint
-	resp.Trace.CacheHit = st.Session.CacheHitLevel != ""
-	resp.Trace.RewrittenQuery = st.Rewrite.Query
-
-	if resp.NeedHandoff {
-		resp.Status = domain.ReplyStatusHandoff
-		if n.Metrics != nil {
-			n.Metrics.ObserveHandoff(resp.HandoffReason)
+func (n *FinalizeNode) Invoke(ctx context.Context, in FinalizeInput) (*domain.State, error) {
+	var out *domain.State
+	if err := domain.ProcessState(ctx, func(st *domain.State) error {
+		if st == nil {
+			return fmt.Errorf("state is required")
 		}
-	} else {
-		resp.Status = domain.ReplyStatusAnswered
-	}
+		out = st
 
-	if err := n.emitReply(ctx, st, reply); err != nil {
-		return err
-	}
-	support.ResetToolState(st)
-	n.persistTurn(ctx, st, resp)
-	return nil
-}
-
-func (n *FinalizeNode) resolveReply(st *domain.State, resp *domain.ChatResult) (string, string) {
-	if resp != nil && strings.TrimSpace(resp.Reply) != "" {
-		if st.Session.CacheHitLevel != "" {
-			return resp.Reply, "cache"
+		finalResp := st.EnsureResponse()
+		if resp := selectFinalizeResponse(in); resp != nil {
+			*finalResp = *resp
 		}
-		return resp.Reply, "response"
-	}
-	if strings.TrimSpace(st.Session.FinalAnswer) != "" {
-		return st.Session.FinalAnswer, "subgraph"
-	}
-	return support.TemplateAnswer(st), "template"
-}
 
-func (n *FinalizeNode) decorateLowConfidenceReply(reply string, confidence float64, st *domain.State) string {
-	if strings.TrimSpace(reply) == "" || confidence >= lowConfidenceThreshold {
-		return reply
-	}
-	if st != nil && st.Answer.Streamed {
-		return reply
-	}
-	if st != nil && (st.Session.NeedHandoff || st.Session.AwaitingUser || st.Session.AwaitingConfirm) {
-		return reply
-	}
-	notice := "置信度偏低，请补充关键信息。"
-	if strings.Contains(reply, notice) {
-		return reply
-	}
-	return strings.TrimSpace(reply + "\n\n" + notice)
-}
+		finalResp.SessionID = support.FirstNonEmpty(finalResp.SessionID, st.Session.SessionID)
+		finalResp.Trace.TraceID = st.TraceID
+		finalResp.Trace.RewrittenQuery = domain.EffectiveRewrittenQuery(st)
+		finalResp.ToolExecutions = append([]domain.ToolExecution(nil), agenttool.ToolExecutionsFromContext(ctx)...)
+		finalResp.UsedToolNames = collectToolNames(finalResp.ToolExecutions)
+		if finalResp.Intent == "" {
+			finalResp.Intent = st.Intent
+		}
+		if finalResp.Status == "" {
+			if finalResp.NeedHandoff {
+				finalResp.Status = domain.ReplyStatusHandoff
+			} else {
+				finalResp.Status = domain.ReplyStatusAnswered
+			}
+		}
+		finalResp.Reply = support.NormalizeReply(support.FirstNonEmpty(finalResp.Reply, support.TemplateAnswer(st)))
+		if finalResp.Confidence <= 0 {
+			finalResp.Confidence = support.EstimateConfidence(ctx, st)
+		}
 
-func (n *FinalizeNode) emitReply(ctx context.Context, st *domain.State, reply string) error {
-	if st == nil || st.StreamWriter == nil || st.Answer.Streamed || strings.TrimSpace(reply) == "" {
+		ensureRecentMessages(st, finalResp.Reply)
 		return nil
+	}); err != nil {
+		return nil, err
 	}
-	orchestratorobserve.SendEvent(ctx, st.StreamWriter, "token", map[string]any{
-		"trace_id": st.TraceID,
-		"text":     reply,
-	})
-	st.Answer.Streamed = true
+
+	if out == nil {
+		return nil, fmt.Errorf("state is required")
+	}
+
+	n.emitReply(ctx, out)
+	n.persistTurn(ctx, out)
+	return out, nil
+}
+
+func selectFinalizeResponse(in FinalizeInput) *domain.ChatResult {
+	for _, resp := range []*domain.ChatResult{
+		in.AccessGuard,
+		in.ProductService,
+		in.OrderService,
+		in.PromotionService,
+		in.AftersalesPolicy,
+		in.AftersalesApply,
+		in.AddToCart,
+		in.Unknown,
+	} {
+		if resp != nil {
+			return resp
+		}
+	}
 	return nil
 }
 
-func (n *FinalizeNode) persistTurn(ctx context.Context, state *domain.State, resp *domain.ChatResult) {
-	if state == nil || resp == nil || state.PersistedSession == nil {
+func (n *FinalizeNode) emitReply(ctx context.Context, st *domain.State) {
+	if st == nil || st.Response == nil || strings.TrimSpace(st.Response.Reply) == "" {
+		return
+	}
+	writer := agenttool.StreamWriterFrom(ctx)
+	if writer == nil {
+		return
+	}
+	orchestratorobserve.SendEvent(ctx, writer, "token", map[string]any{
+		"trace_id": st.TraceID,
+		"text":     st.Response.Reply,
+	})
+	st.Response.Streamed = true
+}
+
+func (n *FinalizeNode) persistTurn(ctx context.Context, st *domain.State) {
+	if n == nil || n.SessionService == nil || st == nil || st.Session == nil || st.Response == nil {
+		return
+	}
+	sid := strings.TrimSpace(st.Session.SessionID)
+	if sid == "" {
 		return
 	}
 
-	userMsg := agentsession.NewUserMessage(state.PersistedSession.SessionID, state.Session.RawQuery)
-	assistantMsg := agentsession.NewAssistantMessage(state.PersistedSession.SessionID, resp.Reply, resp.Intent, resp.Confidence)
-	if strings.TrimSpace(userMsg.Content) == "" && strings.TrimSpace(assistantMsg.Content) == "" {
-		return
+	snapshot, err := n.SessionService.LoadSnapshot(ctx, sid)
+	if err != nil && n.Logger != nil {
+		n.Logger.Warn("load session snapshot failed", logger.Error(err))
 	}
 
-	persistedSnapshot := *state.PersistedSession
-	persistedSnapshot.Slots = mergePersistedSessionState(state.Session.Slots, state.Session.CurrentRefs, state.Session.PendingSelections)
-	persistedSnapshot.TotalTurns++
-	persistedSnapshot.UpdatedAt = assistantMsg.CreatedAt
-	if persistedSnapshot.UpdatedAt.IsZero() {
-		persistedSnapshot.UpdatedAt = time.Now()
+	meta := domain.SessionTableMeta{
+		Status:     domain.SessionStatusActive,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+		TotalTurns: 0,
 	}
-	if strings.TrimSpace(assistantMsg.Content) != "" {
-		persistedSnapshot.LastMessage = agentsession.Truncate(assistantMsg.Content, 64)
-	} else {
-		persistedSnapshot.LastMessage = agentsession.Truncate(userMsg.Content, 64)
+	if snapshot != nil {
+		meta = snapshot.Loaded.Meta
 	}
-	if persistedSnapshot.Status == "" {
-		persistedSnapshot.Status = domain.SessionStatusActive
-	}
-	state.PersistedSession = &persistedSnapshot
-	state.Session.ApplyPersistedFields(persistedSnapshot)
+	meta.TotalTurns++
+	meta.UpdatedAt = time.Now()
+	meta.LastMessage = agentsession.Truncate(support.FirstNonEmpty(st.Response.Reply, st.Input.Message), 64)
 
-	if n.SessionService != nil {
-		history := agentsession.FromSchemaMessages(persistedSnapshot.SessionID, append([]*schema.Message(nil), state.Session.Messages...))
+	userMsg := agentsession.NewUserMessage(sid, strings.TrimSpace(st.Input.Message))
+	assistantMsg := agentsession.NewAssistantMessage(sid, strings.TrimSpace(st.Response.Reply), st.Response.Intent, st.Response.Confidence)
+	input := domain.RoundPersistInput{
+		User:  *st.Session,
+		Meta:  meta,
+		Slots: domain.CloneAnyMap(st.Session.Slots),
+	}
+
+	if snapshot != nil {
+		messages := append([]domain.SessionMessage(nil), snapshot.Messages...)
 		if strings.TrimSpace(userMsg.Content) != "" {
-			history = append(history, userMsg)
+			messages = append(messages, userMsg)
 		}
 		if strings.TrimSpace(assistantMsg.Content) != "" {
-			history = append(history, assistantMsg)
+			messages = append(messages, assistantMsg)
 		}
-		if err := n.SessionService.SaveTurnCache(ctx, persistedSnapshot, history); err != nil && n.Logger != nil {
-			n.Logger.Warn("会话缓存失败", logger.Error(err))
+		if err := n.SessionService.SaveTurnCache(ctx, input, messages); err != nil && n.Logger != nil {
+			n.Logger.Warn("save session cache failed", logger.Error(err))
 		}
 	}
 
-	if n.SessionService == nil && n.CacheWriteback == nil {
+	go func(cloned *domain.State) {
+		bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+
+		if err := n.SessionService.SaveTurnPersistent(bgCtx, input, userMsg, assistantMsg); err != nil && n.Logger != nil {
+			n.Logger.Warn("save session persistent failed", logger.Error(err))
+		}
+		if n.CacheWriteback != nil {
+			if err := n.CacheWriteback.Write(bgCtx, cloned); err != nil && n.Logger != nil {
+				n.Logger.Warn("cache writeback failed", logger.Error(err))
+			}
+		}
+	}(cloneState(st))
+}
+
+func cloneState(st *domain.State) *domain.State {
+	if st == nil {
+		return nil
+	}
+	out := *st
+	if st.Session != nil {
+		sess := *st.Session
+		sess.RecentMessages = append([]domain.MessageTurn(nil), st.Session.RecentMessages...)
+		sess.ProductList = append([]string(nil), st.Session.ProductList...)
+		sess.OrderList = append([]string(nil), st.Session.OrderList...)
+		sess.PromotionList = append([]string(nil), st.Session.PromotionList...)
+		sess.Slots = domain.CloneAnyMap(st.Session.Slots)
+		out.Session = &sess
+	}
+	if st.Response != nil {
+		resp := *st.Response
+		resp.References = append([]domain.KnowledgeRef(nil), st.Response.References...)
+		resp.ToolExecutions = append([]domain.ToolExecution(nil), st.Response.ToolExecutions...)
+		resp.UsedToolNames = append([]string(nil), st.Response.UsedToolNames...)
+		resp.Trace.Steps = append([]domain.TraceStep(nil), st.Response.Trace.Steps...)
+		out.Response = &resp
+	}
+	return &out
+}
+
+func ensureRecentMessages(st *domain.State, reply string) {
+	if st == nil || st.Session == nil || st.Input == nil {
 		return
 	}
-
-	go n.persistInBackground(context.WithoutCancel(ctx), persistedSnapshot, userMsg, assistantMsg, cloneStateForAsyncPersist(state))
+	turns := append([]domain.MessageTurn(nil), st.Session.RecentMessages...)
+	if msg := strings.TrimSpace(st.Input.Message); msg != "" {
+		turns = append(turns, domain.MessageTurn{Role: domain.RoleUser, Content: msg})
+	}
+	if reply = strings.TrimSpace(reply); reply != "" {
+		turns = append(turns, domain.MessageTurn{Role: domain.RoleAssistant, Content: reply})
+	}
+	maxMessages := recentTurnsWindow * 2
+	if maxMessages > 0 && len(turns) > maxMessages {
+		turns = append([]domain.MessageTurn(nil), turns[len(turns)-maxMessages:]...)
+	}
+	st.Session.RecentMessages = turns
 }
 
-func (n *FinalizeNode) persistInBackground(
-	ctx context.Context,
-	session domain.Session,
-	userMsg domain.SessionMessage,
-	assistantMsg domain.SessionMessage,
-	state *domain.State,
-) {
-	bgCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	if n.SessionService != nil {
-		if err := n.SessionService.SaveTurnPersistent(bgCtx, session, userMsg, assistantMsg); err != nil && n.Logger != nil {
-			n.Logger.Warn("会话落库失败", logger.Error(err))
-		}
-	}
-	if n.CacheWriteback != nil {
-		if err := n.CacheWriteback.Write(bgCtx, state); err != nil && n.Logger != nil {
-			n.Logger.Warn("答案缓存失败", logger.Error(err))
-		}
-	}
-}
-
-func cloneStateForAsyncPersist(state *domain.State) *domain.State {
-	if state == nil {
+func collectToolNames(execs []domain.ToolExecution) []string {
+	if len(execs) == 0 {
 		return nil
 	}
-
-	cloned := *state
-	cloned.StreamWriter = nil
-	cloned.Recorder = nil
-	cloned.Session = state.Session
-	cloned.Session.Slots = cloneSessionSlots(state.Session.Slots)
-	cloned.Session.Messages = append([]*schema.Message(nil), state.Session.Messages...)
-	cloned.Session.PendingSelections = clonePendingSelections(state.Session.PendingSelections)
-	cloned.Rewrite = state.Rewrite
-	cloned.Retrieval = domain.RetrievalResult{
-		Documents: append([]*schema.Document(nil), state.Retrieval.Documents...),
-	}
-	cloned.Tool = domain.ToolState{}
-	cloned.Answer = state.Answer
-	if state.Interrupt != nil {
-		cloned.Interrupt = &domain.InterruptState{
-			Payload: cloneSessionSlots(state.Interrupt.Payload),
+	seen := make(map[string]struct{}, len(execs))
+	out := make([]string, 0, len(execs))
+	for _, exec := range execs {
+		name := strings.TrimSpace(exec.Name)
+		if name == "" {
+			continue
 		}
-	}
-	if state.Response != nil {
-		resp := *state.Response
-		resp.References = append([]domain.KnowledgeRef(nil), state.Response.References...)
-		resp.ToolExecutions = nil
-		resp.UsedToolNames = append([]string(nil), state.Response.UsedToolNames...)
-		resp.Trace.Steps = append([]domain.TraceStep(nil), state.Response.Trace.Steps...)
-		cloned.Response = &resp
-	}
-	if state.PersistedSession != nil {
-		persistedSession := *state.PersistedSession
-		persistedSession.Slots = cloneSessionSlots(state.PersistedSession.Slots)
-		cloned.PersistedSession = &persistedSession
-	}
-	return &cloned
-}
-
-func cloneSessionSlots(input map[string]any) map[string]any {
-	if len(input) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(input))
-	for key, value := range input {
-		out[key] = value
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
 	}
 	return out
 }

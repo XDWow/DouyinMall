@@ -22,7 +22,7 @@ func (uc *ChatUseCase) Execute(ctx context.Context, input ChatInput) (*ChatOutpu
 	if err != nil {
 		return nil, err
 	}
-	resp, err := uc.runtime.Chat(ctx, *command)
+	resp, err := uc.runtime.Chat(ctx, command)
 	if err != nil {
 		return nil, err
 	}
@@ -34,14 +34,22 @@ func (uc *ChatUseCase) Stream(ctx context.Context, input ChatInput, writer domai
 	if err != nil {
 		return nil, err
 	}
-	resp, err := uc.runtime.ChatStream(ctx, *command, writer)
+	resp, err := uc.runtime.ChatStream(ctx, command, writer)
 	if err != nil {
 		return nil, err
 	}
 	return toChatOutput(resp), nil
 }
 
-func validateChatInput(input ChatInput) (*domain.ChatCommand, error) {
+func (uc *ChatUseCase) Resume(ctx context.Context, in domain.WorkflowResumeInput) (*ChatOutput, error) {
+	resp, err := uc.runtime.Resume(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return toChatOutput(resp), nil
+}
+
+func validateChatInput(input ChatInput) (*domain.ChatInput, error) {
 	message := strings.TrimSpace(input.Message)
 	if message == "" {
 		return nil, fmt.Errorf("message is required")
@@ -63,7 +71,7 @@ func validateChatInput(input ChatInput) (*domain.ChatCommand, error) {
 			resumeData = map[string]any{}
 		}
 	}
-	command := &domain.ChatCommand{
+	return &domain.ChatInput{
 		SessionID:   strings.TrimSpace(input.SessionID),
 		UserID:      input.UserID,
 		Message:     message,
@@ -71,8 +79,7 @@ func validateChatInput(input ChatInput) (*domain.ChatCommand, error) {
 		InterruptID: interruptID,
 		ResumeData:  resumeData,
 		Metadata:    copyStringMap(input.Metadata),
-	}
-	return command, nil
+	}, nil
 }
 
 func toChatOutput(resp *domain.ChatResult) *ChatOutput {
@@ -125,6 +132,7 @@ func toChatOutput(resp *domain.ChatResult) *ChatOutput {
 		References:     references,
 		UsedToolNames:  append([]string(nil), resp.UsedToolNames...),
 		ToolExecutions: toolExecutions,
+		Interrupted:    resp.Interrupted,
 		Trace: Trace{
 			TraceID:              resp.Trace.TraceID,
 			CheckpointID:         resp.Trace.CheckpointID,
@@ -140,6 +148,7 @@ func toChatOutput(resp *domain.ChatResult) *ChatOutput {
 			CheckpointID: resp.Interrupt.CheckpointID,
 			InterruptID:  resp.Interrupt.InterruptID,
 			RerunNodes:   append([]string(nil), resp.Interrupt.RerunNodes...),
+			Detail:       copyAnyMap(resp.Interrupt.Detail),
 		}
 	}
 	return out

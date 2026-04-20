@@ -8,17 +8,19 @@ import (
 )
 
 type runtime interface {
-	Chat(ctx context.Context, command domain.ChatCommand) (*domain.ChatResult, error)
-	ChatStream(ctx context.Context, command domain.ChatCommand, writer domain.StreamWriter) (*domain.ChatResult, error)
-	CreateSession(ctx context.Context, userID int64) (*domain.Session, error)
+	Chat(ctx context.Context, command *domain.ChatInput) (*domain.ChatResult, error)
+	ChatStream(ctx context.Context, command *domain.ChatInput, writer domain.StreamWriter) (*domain.ChatResult, error)
+	Resume(ctx context.Context, in domain.WorkflowResumeInput) (*domain.ChatResult, error)
+	CreateSession(ctx context.Context, userID int64) (*domain.SessionListItem, error)
 	GetHistory(ctx context.Context, sessionID string, limit, offset int) ([]domain.SessionMessage, int, error)
-	ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.Session, int, error)
+	ListSessions(ctx context.Context, userID int64, limit, offset int) ([]domain.SessionListItem, int, error)
 	ClearSession(ctx context.Context, sessionID string) error
 }
 
 type Service interface {
 	Chat(ctx context.Context, input ChatInput) (*ChatOutput, error)
 	ChatStream(ctx context.Context, input ChatInput, writer domain.StreamWriter) (*ChatOutput, error)
+	Resume(ctx context.Context, in domain.WorkflowResumeInput) (*ChatOutput, error)
 	CreateSession(ctx context.Context, input CreateSessionInput) (*SessionOutput, error)
 	GetHistory(ctx context.Context, input HistoryInput) (*HistoryOutput, error)
 	ListSessions(ctx context.Context, input ListSessionsInput) (*SessionListOutput, error)
@@ -43,6 +45,10 @@ func (f *Facade) Chat(ctx context.Context, input ChatInput) (*ChatOutput, error)
 
 func (f *Facade) ChatStream(ctx context.Context, input ChatInput, writer domain.StreamWriter) (*ChatOutput, error) {
 	return f.chat.Stream(ctx, input, writer)
+}
+
+func (f *Facade) Resume(ctx context.Context, in domain.WorkflowResumeInput) (*ChatOutput, error) {
+	return f.chat.Resume(ctx, in)
 }
 
 func (f *Facade) CreateSession(ctx context.Context, input CreateSessionInput) (*SessionOutput, error) {
@@ -85,6 +91,7 @@ type ChatOutput struct {
 	ToolExecutions []ToolExecution
 	Trace          Trace
 	Interrupt      *InterruptInfo
+	Interrupted    bool `json:"interrupted"`
 }
 
 type CreateSessionInput struct {
@@ -179,6 +186,7 @@ type InterruptInfo struct {
 	CheckpointID string
 	InterruptID  string
 	RerunNodes   []string
+	Detail       map[string]any `json:"interrupt_info,omitempty"`
 }
 
 type StreamEvent = domain.StreamEvent

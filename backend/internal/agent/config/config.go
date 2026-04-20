@@ -80,6 +80,14 @@ type TenantConfig struct {
 }
 
 type LLMConfig struct {
+	Weak         ChatModelConfig `mapstructure:"weak"`
+	Strong       ChatModelConfig `mapstructure:"strong"`
+	DowngradeOne bool            `mapstructure:"downgrade_one"`
+	RetryTimes   int             `mapstructure:"retry_times"`
+}
+
+type ChatModelConfig struct {
+	Provider       string  `mapstructure:"provider"`
 	BaseURL        string  `mapstructure:"base_url"`
 	APIKey         string  `mapstructure:"api_key"`
 	Model          string  `mapstructure:"model"`
@@ -89,6 +97,7 @@ type LLMConfig struct {
 }
 
 type EmbeddingConfig struct {
+	Provider       string `mapstructure:"provider"`
 	BaseURL        string `mapstructure:"base_url"`
 	APIKey         string `mapstructure:"api_key"`
 	Model          string `mapstructure:"model"`
@@ -96,12 +105,16 @@ type EmbeddingConfig struct {
 }
 
 type KnowledgeBaseConfig struct {
-	Scheme            string `mapstructure:"scheme"`
-	Domain            string `mapstructure:"domain"`
-	ServiceChatPath   string `mapstructure:"service_chat_path"`
-	ServiceResourceID string `mapstructure:"service_resource_id"`
-	APIKey            string `mapstructure:"api_key"`
-	TimeoutSeconds    int    `mapstructure:"timeout_seconds"`
+	Qdrant QdrantKnowledgeConfig `mapstructure:"qdrant"`
+}
+
+type QdrantKnowledgeConfig struct {
+	Host           string  `mapstructure:"host"`
+	Port           int     `mapstructure:"port"`
+	APIKey         string  `mapstructure:"api_key"`
+	Collection     string  `mapstructure:"collection"`
+	UseTLS         bool    `mapstructure:"use_tls"`
+	ScoreThreshold float64 `mapstructure:"score_threshold"`
 }
 
 type WorkflowConfig struct {

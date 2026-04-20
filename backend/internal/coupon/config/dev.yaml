@@ -15,4 +15,4 @@ grpc:
 
 kafka:
   brokers:
-    - "localhost:19092"
+    - "10.1.4.4:29092"

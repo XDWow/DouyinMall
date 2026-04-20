@@ -1,23 +1,10 @@
 package shared
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 )
-
-type ToolRegistryCheck func(ctx context.Context, name string) bool
-
-type ToolPlanResult struct {
-	Plans         []domain.ToolCallPlan
-	FinalAnswer   string
-	NeedHandoff   bool
-	HandoffReason string
-	ReadOnly      bool
-}
 
 func SlotString(slots map[string]any, keys ...string) string {
 	if len(slots) == 0 {

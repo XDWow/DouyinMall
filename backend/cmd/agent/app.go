@@ -69,7 +69,7 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 	}
 
 	workflowCfg := customergraph.DefaultConfig()
-	overrideWorkflowConfig(&workflowCfg, cfg.Workflow, cfg.LLM.MaxTokens)
+	overrideWorkflowConfig(&workflowCfg, cfg.Workflow, preferredLLMMaxTokens(cfg.LLM))
 	workflowCfg.DefaultTenantID = defaultString(cfg.Tenant.DefaultID, workflowCfg.DefaultTenantID)
 
 	components, err := agentioc.InitComponents(ctx, cfg, db, rdb)
@@ -78,7 +78,7 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 	}
 
 	graphRuntime, err := customergraph.NewRuntime(ctx, workflowCfg, customergraph.Dependencies{
-		Model:           components.Model,
+		LLMs:            components.LLMs,
 		Embedder:        components.Embedder,
 		KnowledgeBase:   components.KnowledgeBase,
 		Skills:          components.Skills,
@@ -88,7 +88,6 @@ func NewApp(ctx context.Context, cfg agentconfig.Config) (*App, error) {
 		SemanticCache:   components.SemanticCache,
 		RateLimiter:     components.RateLimiter,
 		CheckpointStore: components.CheckpointStore,
-		Prompts:         components.Prompts,
 		Logger:          log,
 		Metrics:         components.Metrics,
 		Tracer:          tracer,
@@ -421,4 +420,11 @@ func defaultString(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func preferredLLMMaxTokens(cfg agentconfig.LLMConfig) int {
+	if cfg.Strong.MaxTokens > 0 {
+		return cfg.Strong.MaxTokens
+	}
+	return cfg.Weak.MaxTokens
 }

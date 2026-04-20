@@ -15,9 +15,15 @@ const (
 	sessionMsgKeySuffix  = ":msgs"
 )
 
+type sessionCacheEnvelope struct {
+	User  domain.Session           `json:"user"`
+	Meta  domain.SessionTableMeta `json:"meta"`
+	Slots map[string]any          `json:"slots,omitempty"`
+}
+
 type SessionCache interface {
-	Load(ctx context.Context, sessionID string) (*domain.Session, []domain.SessionMessage, error)
-	Save(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error
+	Load(ctx context.Context, sessionID string) (*domain.LoadedSession, []domain.SessionMessage, error)
+	Save(ctx context.Context, loaded *domain.LoadedSession, messages []domain.SessionMessage) error
 	Delete(ctx context.Context, sessionID string) error
 }
 
@@ -41,7 +47,7 @@ func NewRedisSessionCache(store Store, ttl time.Duration, messageWindow int) *Re
 	}
 }
 
-func (c *RedisSessionCache) Load(ctx context.Context, sessionID string) (*domain.Session, []domain.SessionMessage, error) {
+func (c *RedisSessionCache) Load(ctx context.Context, sessionID string) (*domain.LoadedSession, []domain.SessionMessage, error) {
 	if c == nil || c.store == nil {
 		return nil, nil, nil
 	}
@@ -54,14 +60,19 @@ func (c *RedisSessionCache) Load(ctx context.Context, sessionID string) (*domain
 		return nil, nil, err
 	}
 
-	var session domain.Session
-	if err := json.Unmarshal(raw, &session); err != nil {
+	var env sessionCacheEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
 		return nil, nil, err
+	}
+	loaded := &domain.LoadedSession{
+		User:  env.User,
+		Meta:  env.Meta,
+		Slots: env.Slots,
 	}
 
 	rawMessages, err := c.store.ListRange(ctx, sessionMetaKeyPrefix+sessionID+sessionMsgKeySuffix, 0, -1)
 	if err != nil {
-		return &session, nil, err
+		return loaded, nil, err
 	}
 
 	messages := make([]domain.SessionMessage, 0, len(rawMessages))
@@ -71,22 +82,23 @@ func (c *RedisSessionCache) Load(ctx context.Context, sessionID string) (*domain
 			messages = append(messages, message)
 		}
 	}
-	return &session, messages, nil
+	return loaded, messages, nil
 }
 
-func (c *RedisSessionCache) Save(ctx context.Context, session domain.Session, messages []domain.SessionMessage) error {
+func (c *RedisSessionCache) Save(ctx context.Context, loaded *domain.LoadedSession, messages []domain.SessionMessage) error {
 	if c == nil || c.store == nil {
 		return nil
 	}
-	if strings.TrimSpace(session.SessionID) == "" {
+	if loaded == nil || strings.TrimSpace(loaded.User.SessionID) == "" {
 		return fmt.Errorf("session_id is required")
 	}
 
-	meta, err := json.Marshal(session)
+	env := sessionCacheEnvelope{User: loaded.User, Meta: loaded.Meta, Slots: loaded.Slots}
+	meta, err := json.Marshal(env)
 	if err != nil {
 		return err
 	}
-	if err := c.store.Set(ctx, sessionMetaKeyPrefix+session.SessionID, meta, c.ttl); err != nil {
+	if err := c.store.Set(ctx, sessionMetaKeyPrefix+loaded.User.SessionID, meta, c.ttl); err != nil {
 		return err
 	}
 
@@ -111,7 +123,7 @@ func (c *RedisSessionCache) Save(ctx context.Context, session domain.Session, me
 		return nil
 	}
 
-	return c.store.ReplaceList(ctx, sessionMetaKeyPrefix+session.SessionID+sessionMsgKeySuffix, items, c.ttl)
+	return c.store.ReplaceList(ctx, sessionMetaKeyPrefix+loaded.User.SessionID+sessionMsgKeySuffix, items, c.ttl)
 }
 
 func (c *RedisSessionCache) Delete(ctx context.Context, sessionID string) error {

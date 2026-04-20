@@ -33,7 +33,7 @@ const (
 	mockWechatURL   = "http://127.0.0.1:8888"
 	mysqlDSN        = "root:root@tcp(127.0.0.1:13306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
 	redisAddr       = "127.0.0.1:16379"
-	kafkaAddr       = "127.0.0.1:29092"
+	kafkaAddr       = "10.1.4.4:29092"
 )
 
 func TestSeckillComposeEndToEnd(t *testing.T) {

@@ -16,42 +16,22 @@ import (
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
-	orchestratorprompt "github.com/XDWow/DouyinMall/backend/internal/agent/prompt"
 	agentsession "github.com/XDWow/DouyinMall/backend/internal/agent/session"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
 func init() {
-	schema.RegisterName[*domain.State]("agent_state_v2")
-	schema.RegisterName[*domain.Session]("agent_domain_session_v1")
+	schema.RegisterName[*domain.State]("agent_state_v3")
+	schema.RegisterName[*domain.Session]("agent_domain_session_v2")
 	schema.RegisterName[*domain.ChatResult]("agent_chat_result_v1")
 	schema.RegisterName[*cache.ExactCacheItem]("agent_exact_cache_item_v1")
 	schema.RegisterName[*cache.SemanticCacheItem]("agent_semantic_cache_item_v1")
 }
 
-type WorkflowRoute = domain.WorkflowRoute
-
-const (
-	RouteUnknown             = domain.RouteUnknown
-	RouteOrderQuery          = domain.RouteOrderQuery
-	RouteReturnPolicy        = domain.RouteReturnPolicy
-	RouteInventory           = domain.RouteInventory
-	RouteProductInfo         = domain.RouteProductInfo
-	RouteAddToCart           = domain.RouteAddToCart
-	RouteReturnExchangeApply = domain.RouteReturnExchangeApply
-	RouteBaseQA              = domain.RouteBaseQA
-)
-
 type StreamWriter = domain.StreamWriter
-type PromptSet = orchestratorprompt.Set
 type Metrics = orchestratorobserve.Metrics
 type State = domain.State
 type Session = domain.Session
-type IntentResult = domain.IntentResult
-type RewriteResult = domain.RewriteResult
-type RetrievalResult = domain.RetrievalResult
-type ToolState = domain.ToolState
-type AnswerResult = domain.AnswerResult
 
 type Config struct {
 	RateLimitPerMinute   int64
@@ -70,15 +50,8 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		RateLimitPerMinute: 30,
-		ConversationWindow: 5,
-		// v1 仅缺参追问：在「会走 MissingSlots / applySubgraphSlotWait」的子图入口打断并 checkpoint，补参后同 checkpoint_id + interrupt_id 恢复。
-		InterruptBeforeNodes: []string{
-			"InventoryGraph",
-			"ProductInfoGraph",
-			"AddToCartGraph",
-			"ReturnExchangeGraph",
-		},
+		RateLimitPerMinute:  30,
+		ConversationWindow:  5,
 		ExactCacheTTL:       10 * time.Minute,
 		SemanticCacheTTL:    30 * time.Minute,
 		SemanticCacheScore:  0.9,
@@ -92,9 +65,9 @@ func DefaultConfig() Config {
 }
 
 type Dependencies struct {
-	Model           model.ToolCallingChatModel
+	LLMs            LLMRouter
 	Embedder        embedding.Embedder
-	KnowledgeBase   *rag.ManagedKnowledgeService
+	KnowledgeBase   rag.Searcher
 	Skills          *agentskill.Registry
 	Registry        *agenttool.Registry
 	SessionService  *agentsession.Service
@@ -102,7 +75,6 @@ type Dependencies struct {
 	SemanticCache   cache.SemanticCache
 	RateLimiter     cache.RateLimiter
 	CheckpointStore compose.CheckPointStore
-	Prompts         *PromptSet
 	Logger          logger.LoggerV1
 	Metrics         *Metrics
 	Tracer          trace.Tracer
@@ -110,9 +82,9 @@ type Dependencies struct {
 
 type Runtime struct {
 	cfg             Config
-	model           model.ToolCallingChatModel
+	llms            LLMRouter
 	embedder        embedding.Embedder
-	knowledgeBase   *rag.ManagedKnowledgeService
+	knowledgeBase   rag.Searcher
 	skills          *agentskill.Registry
 	registry        *agenttool.Registry
 	sessionService  *agentsession.Service
@@ -120,18 +92,18 @@ type Runtime struct {
 	semanticCache   cache.SemanticCache
 	rateLimiter     cache.RateLimiter
 	checkpointStore compose.CheckPointStore
-	prompts         *PromptSet
 	logger          logger.LoggerV1
 	metrics         *Metrics
 	tracer          trace.Tracer
 	callbackHandler callbacks.Handler
-	runnable        compose.Runnable[map[string]any, *State]
+	runnable        compose.Runnable[struct{}, *State]
 }
 
 func NewMetrics(namespace string) *Metrics {
 	return orchestratorobserve.NewMetrics(namespace)
 }
 
-func NewDefaultPrompts() *PromptSet {
-	return orchestratorprompt.NewDefault()
+type LLMRouter interface {
+	Weak() model.ToolCallingChatModel
+	Strong() model.ToolCallingChatModel
 }

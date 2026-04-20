@@ -26,7 +26,6 @@ type discoveredMCPTool struct {
 	Tool       *mcpWrappedTool
 }
 
-// NewMCPRegistry 负责把远端 MCP server 暴露的 tool 发现出来，并注册成本地 Registry；若配置了技能库则追加 fetch_skill。
 func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig, skills *agentskill.Registry) (*Registry, error) {
 	discovered, err := discoverMCPTools(ctx, servers)
 	if err != nil {
@@ -36,10 +35,8 @@ func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig, 
 	registered := make([]registeredTool, 0, len(discovered)+1)
 	for _, item := range discovered {
 		registered = append(registered, registeredTool{
-			baseTool:  item.Tool,
-			invokable: item.Tool,
-			info:      item.Tool.info,
-			policy:    defaultToolPolicy(item.Tool.info.Name),
+			baseTool: item.Tool,
+			info:     item.Tool.info,
 		})
 	}
 	if skills != nil {
@@ -53,10 +50,8 @@ func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig, 
 				return nil, fmt.Errorf("fetch_skill info: %w", ierr)
 			}
 			registered = append(registered, registeredTool{
-				baseTool:  ft,
-				invokable: ft,
-				info:      info,
-				policy:    ToolPolicy{ReadOnly: true},
+				baseTool: ft,
+				info:     info,
 			})
 		}
 	}
@@ -244,30 +239,6 @@ func secondsOrDefault(raw int, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return time.Duration(raw) * time.Second
-}
-
-func defaultToolPolicy(name string) ToolPolicy {
-	name = strings.ToLower(strings.TrimSpace(name))
-	switch {
-	case strings.HasPrefix(name, "get_"),
-		strings.HasPrefix(name, "query_"),
-		strings.HasPrefix(name, "search_"),
-		strings.HasPrefix(name, "list_"),
-		strings.HasPrefix(name, "fetch_"),
-		strings.HasPrefix(name, "describe_"):
-		return ToolPolicy{ReadOnly: true}
-	case strings.HasPrefix(name, "add_"),
-		strings.HasPrefix(name, "create_"),
-		strings.HasPrefix(name, "submit_"),
-		strings.HasPrefix(name, "clear_"),
-		strings.HasPrefix(name, "update_"),
-		strings.HasPrefix(name, "delete_"),
-		strings.HasPrefix(name, "cancel_"),
-		strings.HasPrefix(name, "remove_"):
-		return ToolPolicy{ReadOnly: false, RequiresOrdering: true}
-	default:
-		return ToolPolicy{ReadOnly: false, RequiresOrdering: true}
-	}
 }
 
 func parseToolArguments(argumentsInJSON string) map[string]any {

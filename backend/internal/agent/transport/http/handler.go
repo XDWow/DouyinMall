@@ -1,6 +1,7 @@
 package http
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -20,11 +21,47 @@ func NewHandler(usecase agentusecase.Service) *Handler {
 
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/chat", h.Chat)
+	rg.POST("/workflow/resume", h.WorkflowResume)
 	rg.POST("/chat/stream", h.ChatStream)
 	rg.POST("/sessions", h.CreateSession)
 	rg.GET("/sessions", h.ListSessions)
 	rg.GET("/history", h.GetHistory)
 	rg.DELETE("/sessions/:session_id", h.ClearSession)
+}
+
+func (h *Handler) WorkflowResume(c *gin.Context) {
+	var req workflowResumeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	var resumeData map[string]any
+	if len(req.ResumeData) > 0 {
+		if err := json.Unmarshal(req.ResumeData, &resumeData); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "resume_data: " + err.Error()})
+			return
+		}
+	}
+	if resumeData == nil {
+		resumeData = map[string]any{}
+	}
+	userID := firstPositive(req.UserID, headerInt64(c, "X-User-ID"))
+	if userID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
+		return
+	}
+	out, err := h.usecase.Resume(c.Request.Context(), domain.WorkflowResumeInput{
+		CheckpointID: req.CheckpointID,
+		InterruptID:  req.InterruptID,
+		ResumeData:   resumeData,
+		UserID:       userID,
+		SessionID:    req.SessionID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, toChatResponse(out))
 }
 
 func (h *Handler) Chat(c *gin.Context) {

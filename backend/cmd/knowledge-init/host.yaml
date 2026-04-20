@@ -1,22 +1,21 @@
-# knowledge-init 在宿主机运行时使用的配置。
-# 所有端口均为 docker-compose 映射到宿主机的端口。
-
-db:
-  dsn: "root:root@tcp(localhost:13306)/douyinmall_agent?charset=utf8mb4&parseTime=True&loc=Local"
-
-redis:
-  addr: "localhost:16379"
-
 embedding:
-  base_url: "http://localhost:11434/api/embed"
+  provider: "ollama"
+  base_url: "http://localhost:11434"
   model: "qwen3-embedding:0.6b"
   timeout_seconds: 10
 
-reranker:
-  base_url: "https://api.siliconflow.cn/v1/rerank"
-  api_key: "${SILICONFLOW_API_KEY}"
-  model: "BAAI/bge-reranker-v2-m3"
-  timeout_seconds: 10
+ingest:
+  chunk_size: 800
+  overlap_size: 120
+  http_timeout_seconds: 30
+  default_category: "policy"
+  jinritemai_graph_id: 312
 
-milvus:
-  addr: "localhost:19530"
+qdrant:
+  host: "your-qdrant-host"
+  port: 6334
+  api_key: ""
+  collection: "agent_knowledge"
+  use_tls: false
+  batch_size: 16
+  distance: "cosine"

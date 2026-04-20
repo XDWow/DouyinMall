@@ -13,7 +13,7 @@ import (
 func TestToProtoChatResponse(t *testing.T) {
 	resp := toProtoChatResponse(&agentusecase.ChatOutput{
 		Reply:         "Order found successfully",
-		Intent:        domain.IntentOrderQuery,
+		Intent:        domain.IntentOrderService,
 		NeedHandoff:   true,
 		HandoffReason: "low_confidence",
 		References:    []agentusecase.KnowledgeRef{{ID: "k1", Title: "Order status", Snippet: "Order is being processed", Category: "faq", Score: 0.91}},

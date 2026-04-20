@@ -48,15 +48,18 @@ func (w *StreamWriter) Send(ctx context.Context, event domain.StreamEvent) error
 
 func normalizeStage(node string) string {
 	switch node {
-	case "CachePreCheckNode", "L0ExactCacheNode":
-		return "cache"
-	case "IntentAndSlotNode", "RouteNode":
+	case "UnderstandingNode", "RouteNode":
 		return "intent"
-	case "PrepareReturnPolicyInputNode", "ReturnPolicyGraph", "ApplyReturnPolicyResultNode", "PrepareBaseQAInputNode", "BaseQAGraph", "ApplyBaseQAResultNode":
+	case "PromotionRAGNode", "AftersalesPolicyRAGNode":
 		return "retrieval"
-	case "PrepareOrderQueryInputNode", "OrderQueryGraph", "ApplyOrderQueryResultNode", "PrepareInventoryInputNode", "InventoryGraph", "ApplyInventoryResultNode", "PrepareProductInfoInputNode", "ProductInfoGraph", "ApplyProductInfoResultNode", "PrepareAddToCartInputNode", "AddToCartGraph", "ApplyAddToCartResultNode", "PrepareReturnExchangeInputNode", "ReturnExchangeGraph", "ApplyReturnExchangeResultNode":
+	case "ProductServiceGraph", "ProductServiceAgentNode",
+		"OrderServiceGraph", "OrderServiceAgentNode",
+		"PromotionServiceGraph", "PromotionServiceAgentNode",
+		"AftersalesPolicyGraph", "AftersalesPolicyAgentNode",
+		"AddToCartGraph", "AddToCartResolveNode", "AddToCartEnsureArgsNode", "AddToCartSubmitNode",
+		"AftersalesApplyGraph", "AftersalesApplyResolveNode", "AftersalesApplyEnsureArgsNode", "AftersalesApplyConfirmNode", "AftersalesApplySubmitNode":
 		return "tool"
-	case "FinalizeNode":
+	case "UnknownGraph", "UnknownNode", "FinalizeNode":
 		return "generating"
 	default:
 		return ""

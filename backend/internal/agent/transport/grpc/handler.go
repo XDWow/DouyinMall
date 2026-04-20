@@ -203,16 +203,15 @@ func toProtoMessage(message agentusecase.MessageOutput) *agentv1.Message {
 func toProtoIntent(intent domain.Intent, message string) agentv1.IntentType {
 	msg := strings.ToLower(strings.TrimSpace(message))
 	switch intent {
-	case domain.IntentReturnPolicy, domain.IntentReturnExchangeApply:
+	case domain.IntentAftersalesPolicy, domain.IntentAftersalesApply:
 		return agentv1.IntentType_INTENT_RETURN
-	case domain.IntentInventoryQuery, domain.IntentProductInfo, domain.IntentAddToCart:
-		if containsAny(msg, "promotion", "discount", "coupon", "deal") {
-			return agentv1.IntentType_INTENT_PROMOTION
-		}
+	case domain.IntentPromotionService:
+		return agentv1.IntentType_INTENT_PROMOTION
+	case domain.IntentProductService, domain.IntentAddToCart:
 		return agentv1.IntentType_INTENT_PRODUCT_INQUIRY
-	case domain.IntentOrderQuery:
+	case domain.IntentOrderService:
 		return agentv1.IntentType_INTENT_ORDER_INQUIRY
-	case domain.IntentFallback, domain.IntentUnknown:
+	case domain.IntentUnknown:
 		if containsAny(msg, "payment", "paid", "charge", "billing") {
 			return agentv1.IntentType_INTENT_PAYMENT
 		}
@@ -317,19 +316,22 @@ func buildSuggestedQuestions(resp *agentusecase.ChatOutput, userMessage string) 
 	}
 
 	switch resp.Intent {
-	case domain.IntentOrderQuery:
+	case domain.IntentOrderService:
 		add("Do you want me to check the latest status of this order?")
 		add("Should I look up any related after-sale options?")
-	case domain.IntentInventoryQuery, domain.IntentProductInfo:
+	case domain.IntentProductService:
 		add("Do you want similar product recommendations?")
 		add("Should I narrow the results by price or category?")
+	case domain.IntentPromotionService:
+		add("Do you want me to explain the promotion rules in more detail?")
+		add("Should I summarize the coupon or activity conditions?")
 	case domain.IntentAddToCart:
 		add("Do you want me to confirm the available specifications first?")
 		add("Should I recommend matching products too?")
-	case domain.IntentReturnPolicy:
+	case domain.IntentAftersalesPolicy:
 		add("Do you want me to explain the refund conditions in more detail?")
 		add("Should I walk through the exchange process as well?")
-	case domain.IntentReturnExchangeApply:
+	case domain.IntentAftersalesApply:
 		add("Do you want me to check the eligibility for return or exchange?")
 		add("Should I prepare a handoff summary for human support?")
 	default:

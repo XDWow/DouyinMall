@@ -21,11 +21,11 @@ func (uc *SessionUseCase) Create(ctx context.Context, input CreateSessionInput) 
 	if err != nil {
 		return nil, err
 	}
-	session, err := uc.runtime.CreateSession(ctx, command.UserID)
+	item, err := uc.runtime.CreateSession(ctx, command.UserID)
 	if err != nil {
 		return nil, err
 	}
-	return sessionOutputFromDomain(session), nil
+	return sessionOutputFromListItem(*item), nil
 }
 
 func (uc *SessionUseCase) GetHistory(ctx context.Context, input HistoryInput) (*HistoryOutput, error) {
@@ -55,7 +55,7 @@ func (uc *SessionUseCase) List(ctx context.Context, input ListSessionsInput) (*S
 	}
 	items := make([]SessionOutput, 0, len(sessions))
 	for _, item := range sessions {
-		items = append(items, *sessionOutputFromDomain(&item))
+		items = append(items, *sessionOutputFromListItem(item))
 	}
 	return &SessionListOutput{Sessions: items, Total: total}, nil
 }

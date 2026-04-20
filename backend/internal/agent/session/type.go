@@ -9,15 +9,14 @@ import (
 )
 
 // Snapshot 表示一次会话加载得到的持久化快照。
-// 它把“会话元信息”和“完整消息历史”明确放在一起，避免调用方自己拼语义。
 type Snapshot struct {
-	PersistedSession domain.Session
-	Messages         []domain.SessionMessage
+	Loaded   domain.LoadedSession
+	Messages []domain.SessionMessage
 }
 
 // SessionService 暴露编排层访问会话存储所需的最小能力。
 type SessionService interface {
 	LoadSnapshot(ctx context.Context, sessionID string) (*Snapshot, error)
-	CreateSession(ctx context.Context, session domain.Session) error
+	CreateSession(ctx context.Context, user domain.Session, meta domain.SessionTableMeta) error
 	BuildRecentHistory(messages []domain.SessionMessage) []*schema.Message
 }

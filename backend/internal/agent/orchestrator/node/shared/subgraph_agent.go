@@ -15,7 +15,6 @@ import (
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
 	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/prompt"
 )
 
 const defaultSubgraphAgentRounds = 8
@@ -63,12 +62,12 @@ type SubgraphAgentInput struct {
 	SystemHint    string
 }
 
+// subgraphGenerate 先收齐本轮 Stream，再 Concat；仅当合并后无 ToolCalls 时才向前端推 token（工具轮不泄漏中间文本）。
 func subgraphGenerate(ctx context.Context, m model.ToolCallingChatModel, messages []*schema.Message, opts []model.Option) (*schema.Message, error) {
-	var writer domain.StreamWriter
+	writer := agenttool.StreamWriterFrom(ctx)
 	var traceID string
 	_ = domain.ProcessState(ctx, func(s *domain.State) error {
 		if s != nil {
-			writer = s.StreamWriter
 			traceID = s.TraceID
 		}
 		return nil
@@ -84,7 +83,6 @@ func subgraphGenerate(ctx context.Context, m model.ToolCallingChatModel, message
 	defer reader.Close()
 
 	var chunks []*schema.Message
-	emittedText := false
 	for {
 		chunk, re := reader.Recv()
 		if errors.Is(re, io.EOF) {
@@ -96,13 +94,6 @@ func subgraphGenerate(ctx context.Context, m model.ToolCallingChatModel, message
 		if chunk == nil {
 			continue
 		}
-		if txt := strings.TrimSpace(chunk.Content); txt != "" {
-			emittedText = true
-			orchestratorobserve.SendEvent(ctx, writer, "token", map[string]any{
-				"trace_id": traceID,
-				"text":     chunk.Content,
-			})
-		}
 		chunks = append(chunks, chunk)
 	}
 	if len(chunks) == 0 {
@@ -112,10 +103,14 @@ func subgraphGenerate(ctx context.Context, m model.ToolCallingChatModel, message
 	if cErr != nil {
 		return nil, cErr
 	}
-	if emittedText {
+	if len(out.ToolCalls) == 0 && strings.TrimSpace(out.Content) != "" {
+		orchestratorobserve.SendEvent(ctx, writer, "token", map[string]any{
+			"trace_id": traceID,
+			"text":     out.Content,
+		})
 		_ = domain.ProcessState(ctx, func(s *domain.State) error {
 			if s != nil {
-				s.Answer.Streamed = true
+				s.EnsureResponse().Streamed = true
 			}
 			return nil
 		})
@@ -154,37 +149,40 @@ func (a *SubgraphAgent) Run(ctx context.Context, in SubgraphAgentInput) (final s
 		sys.WriteString("\n\n")
 	}
 	if strings.TrimSpace(in.SlotsContext) != "" {
-		sys.WriteString("已知槽位（供工具参数参考）：\n")
+		sys.WriteString("<known_slots>\n")
 		sys.WriteString(strings.TrimSpace(in.SlotsContext))
-		sys.WriteString("\n\n")
+		sys.WriteString("\n</known_slots>\n\n")
 	}
 	if strings.TrimSpace(in.DocumentsText) != "" {
-		sys.WriteString("参考资料：\n")
+		sys.WriteString("<retrieved_documents>\n")
 		sys.WriteString(strings.TrimSpace(in.DocumentsText))
-		sys.WriteString("\n\n")
+		sys.WriteString("\n</retrieved_documents>\n\n")
 	}
 	if len(in.SkillNames) > 0 && a.Skills != nil {
 		sums := a.Skills.SummariesByNames(in.SkillNames)
 		if cat := agentskill.RenderSkillSummaryText(sums); cat != "" && cat != "none" {
+			sys.WriteString("<available_skills>\n")
 			sys.WriteString("以下为当前场景可用的技能条目（名称与摘要）。需要完整条文时，仅可从下列名称中选取并按规定方式获取全文；参数须与名称一致：\n")
 			sys.WriteString(cat)
-			sys.WriteString("\n\n")
+			sys.WriteString("\n</available_skills>\n\n")
 		}
 	}
 	if strings.TrimSpace(in.SkillText) != "" && strings.TrimSpace(in.SkillText) != "none" {
-		sys.WriteString("业务技能说明（已预加载正文）：\n")
+		sys.WriteString("<preloaded_skill_text>\n")
 		sys.WriteString(strings.TrimSpace(in.SkillText))
-		sys.WriteString("\n\n")
+		sys.WriteString("\n</preloaded_skill_text>\n\n")
 	}
 	system := strings.TrimSpace(sys.String())
 	if system == "" {
-		system = prompt.SubgraphSystemDefault
+		system = strings.TrimSpace(defaultSubgraphSystemPrompt)
 	}
 
+	// 最终发给模型的不是单个大字符串，
+	// 而是 system + history + 当前 query 组成的一组 chat messages。
 	messages := []*schema.Message{schema.SystemMessage(system)}
 	messages = append(messages, append([]*schema.Message(nil), in.History...)...)
 	if q := strings.TrimSpace(in.UserQuery); q != "" {
-		messages = append(messages, schema.UserMessage(q))
+		messages = append(messages, schema.UserMessage("<user_query>\n"+q+"\n</user_query>"))
 	}
 
 	var toolInfos []*schema.ToolInfo
@@ -203,7 +201,7 @@ func (a *SubgraphAgent) Run(ctx context.Context, in SubgraphAgentInput) (final s
 	var toolsNode *compose.ToolsNode
 	if len(toolInfos) > 0 {
 		var terr error
-		toolsNode, terr = a.Registry.ToolsNode(agenttool.ToolExecutionSerial)
+		toolsNode, terr = a.Registry.ToolsNode()
 		if terr != nil {
 			return "", nil, terr
 		}
@@ -236,6 +234,8 @@ func (a *SubgraphAgent) Run(ctx context.Context, in SubgraphAgentInput) (final s
 		if toolsNode == nil {
 			return "", allTool, fmt.Errorf("model requested tools but tools node is nil")
 		}
+		// 读型 Agent 子图允许模型多轮决定是否继续调工具；
+		// 每次工具结果都会回填到消息历史，再继续下一轮推理。
 		tOut, invErr := toolsNode.Invoke(ctx, out)
 		if invErr != nil {
 			return "", allTool, invErr

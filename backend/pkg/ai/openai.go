@@ -14,15 +14,19 @@ import (
 )
 
 type llmClient struct {
+	provider   Provider
 	baseURL    string
 	apiKey     string
+	model      string
 	httpClient *http.Client
 }
 
 type ChatConfig struct {
-	BaseURL string
-	APIKey  string
-	Timeout time.Duration
+	Provider Provider
+	BaseURL  string
+	APIKey   string
+	Model    string
+	Timeout  time.Duration
 }
 
 func NewOpenAIClient(cfg ChatConfig) LLMClient {
@@ -30,8 +34,10 @@ func NewOpenAIClient(cfg ChatConfig) LLMClient {
 		cfg.Timeout = 30 * time.Second
 	}
 	return &llmClient{
-		baseURL:    cfg.BaseURL,
+		provider:   NormalizeProvider(string(cfg.Provider)),
+		baseURL:    ResolveOpenAIBaseURL(cfg.Provider, cfg.BaseURL),
 		apiKey:     cfg.APIKey,
+		model:      cfg.Model,
 		httpClient: &http.Client{Timeout: cfg.Timeout},
 	}
 }
@@ -39,23 +45,22 @@ func NewOpenAIClient(cfg ChatConfig) LLMClient {
 func (c *llmClient) ChatCompletion(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	req = c.buildRequestBody(req)
 
-	respBody, err := doHTTPRequest(ctx, c.httpClient, c.baseURL+"/chat/completions", c.apiKey, req)
+	respBody, err := doHTTPRequest(ctx, c.httpClient, ResolveChatEndpoint(c.provider, c.baseURL), c.apiKey, req)
 	if err != nil {
-		return nil, fmt.Errorf("chat completion 澶辫触: %w", err)
+		return nil, fmt.Errorf("chat completion failed: %w", err)
 	}
 
 	var result ChatResponse
 	if err = json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("瑙ｆ瀽鍝嶅簲澶辫触: %w", err)
+		return nil, fmt.Errorf("decode chat response failed: %w", err)
 	}
 	if len(result.Choices) == 0 {
-		err = errors.New("妯″瀷鍥炲鍐呭涓虹┖")
+		err = errors.New("empty chat choices")
 	}
 
 	return &result, err
 }
 
-// 娴佸紡瀵硅瘽锛圫SE锛?
 func (c *llmClient) ChatCompletionStream(ctx context.Context, req ChatRequest) (<-chan ChatStreamResponse, error) {
 	req = c.buildRequestBody(req)
 
@@ -64,12 +69,12 @@ func (c *llmClient) ChatCompletionStream(ctx context.Context, req ChatRequest) (
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(bodyJSON))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, ResolveChatEndpoint(c.provider, c.baseURL), bytes.NewReader(bodyJSON))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "text/event-stream") // 閫夋嫨 sse 鍗忚
+	httpReq.Header.Set("Accept", "text/event-stream")
 	if c.apiKey != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
@@ -119,8 +124,10 @@ func (c *llmClient) ChatCompletionStream(ctx context.Context, req ChatRequest) (
 	return ch, nil
 }
 
-// 璇锋眰鏋勫缓锛岀粰榛樿鍊?
 func (c *llmClient) buildRequestBody(req ChatRequest) ChatRequest {
+	if strings.TrimSpace(req.Model) == "" {
+		req.Model = c.model
+	}
 	if req.FrequencyPenalty == nil {
 		f := float32(0.5)
 		req.FrequencyPenalty = &f
@@ -145,12 +152,11 @@ func (c *llmClient) buildRequestBody(req ChatRequest) ChatRequest {
 		p := float32(0.7)
 		req.TopP = &p
 	}
-
 	return req
 }
 
-// 鏈湴 ollama 瀹炵幇
 type EmbeddingClient struct {
+	provider   Provider
 	baseURL    string
 	apiKey     string
 	model      string
@@ -158,10 +164,11 @@ type EmbeddingClient struct {
 }
 
 type EmbeddingConfig struct {
-	BaseURL string
-	APIKey  string
-	Model   string
-	Timeout time.Duration
+	Provider Provider
+	BaseURL  string
+	APIKey   string
+	Model    string
+	Timeout  time.Duration
 }
 
 func NewEmbeddingClient(cfg EmbeddingConfig) *EmbeddingClient {
@@ -169,7 +176,8 @@ func NewEmbeddingClient(cfg EmbeddingConfig) *EmbeddingClient {
 		cfg.Timeout = 30 * time.Second
 	}
 	return &EmbeddingClient{
-		baseURL:    cfg.BaseURL,
+		provider:   NormalizeProvider(string(cfg.Provider)),
+		baseURL:    ResolveOpenAIBaseURL(cfg.Provider, cfg.BaseURL),
 		apiKey:     cfg.APIKey,
 		model:      cfg.Model,
 		httpClient: &http.Client{Timeout: cfg.Timeout},
@@ -177,29 +185,29 @@ func NewEmbeddingClient(cfg EmbeddingConfig) *EmbeddingClient {
 }
 
 func (c *EmbeddingClient) Embed(ctx context.Context, texts []string) ([][]float32, error) {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"model": c.model,
 		"input": texts,
 	}
-
-	respBody, err := doHTTPRequest(ctx, c.httpClient, c.baseURL, c.apiKey, body)
+	respBody, err := doHTTPRequest(ctx, c.httpClient, ResolveEmbeddingEndpoint(c.provider, c.baseURL), c.apiKey, body)
 	if err != nil {
-		return nil, fmt.Errorf("embedding 澶辫触: %w", err)
+		return nil, fmt.Errorf("embedding failed: %w", err)
 	}
-
-	var result struct {
-		Embeddings [][]float32 `json:"embeddings"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("瑙ｆ瀽鍝嶅簲澶辫触: %w", err)
-	}
-	return result.Embeddings, nil
+	return parseEmbeddingResponse(respBody)
 }
 
-// RerankClient OpenAI 鍏煎鐨?Rerank 瀹㈡埛绔?
-// 鍏煎 SiliconFlow / Jina / Cohere 鐨?/rerank API
-// 璇锋眰鏍煎紡锛歅OST /rerank {"model":"...","query":"...","documents":["doc1","doc2",...]}
-// 鍝嶅簲鏍煎紡锛歿"results":[{"index":0,"relevance_score":0.95},...]}`
+func (c *EmbeddingClient) EmbedMultimodal(ctx context.Context, inputs []EmbeddingInput) ([][]float32, error) {
+	body := map[string]any{
+		"model": c.model,
+		"input": inputs,
+	}
+	respBody, err := doHTTPRequest(ctx, c.httpClient, ResolveMultimodalEmbeddingEndpoint(c.provider, c.baseURL), c.apiKey, body)
+	if err != nil {
+		return nil, fmt.Errorf("multimodal embedding failed: %w", err)
+	}
+	return parseEmbeddingResponse(respBody)
+}
+
 type RerankClient struct {
 	baseURL    string
 	apiKey     string
@@ -235,7 +243,7 @@ func (c *RerankClient) Rerank(ctx context.Context, query string, docs []string) 
 
 	respBytes, err := doHTTPRequest(ctx, c.httpClient, c.baseURL+"/rerank", c.apiKey, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("rerank 璇锋眰澶辫触: %w", err)
+		return nil, fmt.Errorf("rerank request failed: %w", err)
 	}
 
 	var result struct {
@@ -245,7 +253,7 @@ func (c *RerankClient) Rerank(ctx context.Context, query string, docs []string) 
 		} `json:"results"`
 	}
 	if err := json.Unmarshal(respBytes, &result); err != nil {
-		return nil, fmt.Errorf("瑙ｆ瀽 rerank 鍝嶅簲澶辫触: %w", err)
+		return nil, fmt.Errorf("decode rerank response failed: %w", err)
 	}
 
 	scores := make([]float32, len(docs))
@@ -257,7 +265,7 @@ func (c *RerankClient) Rerank(ctx context.Context, query string, docs []string) 
 	return scores, nil
 }
 
-func doHTTPRequest(ctx context.Context, client *http.Client, url, apiKey string, body interface{}) ([]byte, error) {
+func doHTTPRequest(ctx context.Context, client *http.Client, url, apiKey string, body any) ([]byte, error) {
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
@@ -288,4 +296,26 @@ func doHTTPRequest(ctx context.Context, client *http.Client, url, apiKey string,
 	return data, nil
 }
 
+func parseEmbeddingResponse(respBody []byte) ([][]float32, error) {
+	var openAIResp struct {
+		Data []struct {
+			Index     int       `json:"index"`
+			Embedding []float32 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(respBody, &openAIResp); err == nil && len(openAIResp.Data) > 0 {
+		vectors := make([][]float32, len(openAIResp.Data))
+		for i, item := range openAIResp.Data {
+			vectors[i] = item.Embedding
+		}
+		return vectors, nil
+	}
 
+	var legacyResp struct {
+		Embeddings [][]float32 `json:"embeddings"`
+	}
+	if err := json.Unmarshal(respBody, &legacyResp); err != nil {
+		return nil, err
+	}
+	return legacyResp.Embeddings, nil
+}

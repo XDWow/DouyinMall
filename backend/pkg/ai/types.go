@@ -21,6 +21,11 @@ type Embedder interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 }
 
+type MultimodalEmbedder interface {
+	Embed(ctx context.Context, texts []string) ([][]float32, error)
+	EmbedMultimodal(ctx context.Context, inputs []EmbeddingInput) ([][]float32, error)
+}
+
 type Reranker interface {
 	Rerank(ctx context.Context, query string, docs []string) ([]float32, error)
 }
@@ -124,6 +129,12 @@ type ToolCall struct {
 		Name      string `json:"name,omitempty"`
 		Arguments string `json:"arguments,omitempty"` // JSON string
 	} `json:"function"`
+}
+
+type EmbeddingInput struct {
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	ImageURL string `json:"image_url,omitempty"`
 }
 
 

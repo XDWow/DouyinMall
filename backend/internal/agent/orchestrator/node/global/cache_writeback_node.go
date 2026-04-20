@@ -2,7 +2,6 @@ package global
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/infra/cache"
-	"github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/support"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
@@ -42,142 +40,72 @@ func NewCacheWritebackService(
 }
 
 func (n *CacheWritebackService) Write(ctx context.Context, state *domain.State) error {
-	if state == nil {
-		return fmt.Errorf("state is required")
+	if n == nil || state == nil || state.Input == nil || state.Response == nil {
+		return nil
 	}
-
-	resp := state.EnsureResponse()
-	resp.Trace.TraceID = state.TraceID
-	resp.Trace.CheckpointID = state.Checkpoint
-	resp.Trace.CacheHit = state.Session.CacheHitLevel != ""
-	resp.Trace.RewrittenQuery = state.Rewrite.Query
-
-	if !n.shouldWriteCache(state, resp) {
+	if !exactCacheableIntent(state.Intent) {
 		return nil
 	}
 
-	cacheIntent := n.cacheIntent(state, resp)
-	if n.ExactCache != nil && n.ExactCacheTTL > 0 && n.shouldWriteExactCache(state, cacheIntent) {
-		_ = n.ExactCache.Store(ctx, &cache.ExactCacheItem{
-			TenantID: state.Session.TenantID,
-			UserID:   state.Input.UserID,
-			Query:    state.Session.RawQuery,
-			Response: *resp,
-		}, n.ExactCacheTTL)
+	query := strings.TrimSpace(state.Input.Message)
+	if query == "" {
+		return nil
 	}
 
-	policy := ResolveSemanticCachePolicy(state.Session.Route, state.Session.RawQuery)
-	if n.SemanticCache != nil && n.Embedder != nil && n.SemanticCacheTTL > 0 && n.shouldWriteSemanticCache(state, policy) {
-		query := strings.TrimSpace(support.FirstNonEmpty(state.Rewrite.Query, state.Session.RawQuery))
-		if query != "" {
-			if vector, err := n.embedQuery(ctx, query); err == nil && len(vector) > 0 {
-				userID := int64(0)
-				if policy.Scope == cache.CacheScopeTenantUser {
-					userID = state.Input.UserID
-				}
-				_ = n.SemanticCache.Store(ctx, &cache.SemanticCacheItem{
-					TenantID:     state.Session.TenantID,
-					UserID:       userID,
-					IntentBucket: policy.IntentBucket,
-					Scope:        policy.Scope,
-					Query:        query,
-					Response:     *resp,
-					Vector:       vector,
-				}, n.SemanticCacheTTL)
-			}
+	resp := cloneCacheableResponse(state.Response)
+	if n.ExactCache != nil {
+		if err := n.ExactCache.Store(ctx, &cache.ExactCacheItem{
+			TenantID:  TenantIDOf(state, "default"),
+			UserID:    state.Input.UserID,
+			Query:     query,
+			Response:  resp,
+			CreatedAt: time.Now(),
+		}, n.ExactCacheTTL); err != nil {
+			return err
 		}
 	}
 
-	return nil
+	semanticQuery := strings.TrimSpace(state.RewrittenQuery)
+	if semanticQuery == "" {
+		semanticQuery = query
+	}
+	if !semanticCacheableIntent(state.Intent) || n.SemanticCache == nil || n.Embedder == nil || semanticQuery == "" {
+		return nil
+	}
+
+	vectors, err := n.Embedder.EmbedStrings(ctx, []string{semanticQuery})
+	if err != nil {
+		return err
+	}
+	if len(vectors) == 0 {
+		return nil
+	}
+
+	return n.SemanticCache.Store(ctx, &cache.SemanticCacheItem{
+		TenantID:     TenantIDOf(state, "default"),
+		UserID:       state.Input.UserID,
+		IntentBucket: semanticIntentBucket(state.Intent),
+		Scope:        semanticScopeForIntent(state.Intent),
+		Query:        semanticQuery,
+		Response:     resp,
+		Vector:       vectors[0],
+		CreatedAt:    time.Now(),
+	}, n.SemanticCacheTTL)
 }
 
-func (n *CacheWritebackService) cacheIntent(state *domain.State, resp *domain.ChatResult) domain.Intent {
-	if resp != nil && resp.Intent != domain.IntentUnknown {
-		return resp.Intent
+func cloneCacheableResponse(resp *domain.ChatResult) domain.ChatResult {
+	if resp == nil {
+		return domain.ChatResult{}
 	}
-	if state.Session.Intent != domain.IntentUnknown {
-		return state.Session.Intent
-	}
-	return detectCacheIntent(state.Session.RawQuery)
-}
-
-func (n *CacheWritebackService) shouldWriteExactCache(state *domain.State, intent domain.Intent) bool {
-	if state != nil && state.Answer.CacheableHint != nil && !*state.Answer.CacheableHint {
-		return false
-	}
-
-	switch intent {
-	case domain.IntentReturnPolicy:
-		return true
-	case domain.IntentProductInfo:
-		msg := normalizeCacheQuery(state.Session.RawQuery)
-		return msg != "" && isStableProductKnowledgeQuery(msg) && !hasDynamicCacheTool(state)
-	default:
-		return false
-	}
-}
-
-func (n *CacheWritebackService) shouldWriteSemanticCache(state *domain.State, policy SemanticCachePolicy) bool {
-	if !policy.AllowRead {
-		return false
-	}
-	if state != nil && state.Answer.CacheableHint != nil && !*state.Answer.CacheableHint {
-		return false
-	}
-
-	switch state.Session.Route {
-	case domain.RouteProductInfo:
-		return !hasDynamicCacheTool(state)
-	case domain.RouteBaseQA:
-		return len(state.Retrieval.Documents) > 0
-	default:
-		return true
-	}
-}
-
-func (n *CacheWritebackService) shouldWriteCache(state *domain.State, resp *domain.ChatResult) bool {
-	return resp != nil &&
-		state.Session.ReadOnly &&
-		state.Session.CacheHitLevel == "" &&
-		resp.Confidence >= lowConfidenceThreshold &&
-		!resp.NeedHandoff &&
-		!state.Session.AwaitingUser &&
-		!state.Session.AwaitingConfirm &&
-		strings.TrimSpace(resp.Reply) != ""
-}
-
-func (n *CacheWritebackService) embedQuery(ctx context.Context, query string) ([]float64, error) {
-	vectors, err := n.Embedder.EmbedStrings(ctx, []string{query})
-	if err != nil || len(vectors) == 0 {
-		return nil, err
-	}
-	return vectors[0], nil
-}
-
-func hasDynamicCacheTool(state *domain.State) bool {
-	for _, plan := range state.Tool.Plans {
-		if isDynamicCacheTool(plan.Name) {
-			return true
-		}
-	}
-	for _, name := range state.EnsureResponse().UsedToolNames {
-		if isDynamicCacheTool(name) {
-			return true
-		}
-	}
-	for _, exec := range state.EnsureResponse().ToolExecutions {
-		if isDynamicCacheTool(exec.Name) {
-			return true
-		}
-	}
-	return false
-}
-
-func isDynamicCacheTool(name string) bool {
-	switch strings.TrimSpace(name) {
-	case "query_order", "list_user_orders", "get_order", "get_inventory", "add_to_cart", "create_after_sale_request":
-		return true
-	default:
-		return false
-	}
+	out := *resp
+	out.SessionID = ""
+	out.TraceID = ""
+	out.Interrupt = nil
+	out.Interrupted = false
+	out.Streamed = false
+	out.Trace = domain.Trace{}
+	out.ToolExecutions = append([]domain.ToolExecution(nil), resp.ToolExecutions...)
+	out.UsedToolNames = append([]string(nil), resp.UsedToolNames...)
+	out.References = append([]domain.KnowledgeRef(nil), resp.References...)
+	return out
 }

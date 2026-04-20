@@ -9,6 +9,7 @@ import (
 
 type recorderKey struct{}
 type runtimeKey struct{}
+type streamWriterKey struct{}
 
 // Runtime 保存一次工具执行链路需要透传的运行时信息。
 // 这里不关心有哪些 tool，只关心这一次调用是谁、属于哪个 session、trace 是什么。
@@ -24,6 +25,26 @@ func WithExecutionRecorder(ctx context.Context, recorder ExecutionRecorder) cont
 
 func WithRuntime(ctx context.Context, runtime Runtime) context.Context {
 	return context.WithValue(ctx, runtimeKey{}, runtime)
+}
+
+func WithStreamWriter(ctx context.Context, w domain.StreamWriter) context.Context {
+	return context.WithValue(ctx, streamWriterKey{}, w)
+}
+
+func StreamWriterFrom(ctx context.Context) domain.StreamWriter {
+	w, _ := ctx.Value(streamWriterKey{}).(domain.StreamWriter)
+	return w
+}
+
+func ToolExecutionsFromContext(ctx context.Context) []domain.ToolExecution {
+	r := executionRecorderFromContext(ctx)
+	if r == nil {
+		return nil
+	}
+	if typed, ok := r.(*SafeExecutionRecorder); ok {
+		return typed.Snapshot()
+	}
+	return nil
 }
 
 func executionRecorderFromContext(ctx context.Context) ExecutionRecorder {
