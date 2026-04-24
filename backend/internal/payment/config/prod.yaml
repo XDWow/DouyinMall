@@ -1,0 +1,50 @@
+db:
+  host: "134.175.67.79"
+  port: 3306
+  user: "app"
+  password: ""
+  database: "douyin_mall"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "114.132.75.56:16379"
+  password: ""
+  db: 0
+
+etcd:
+  endpoints:
+    - "42.193.160.221:2379"
+
+grpc:
+  server:
+    name: payment.service
+    port: 8092
+    etcdTTL: 60
+
+http:
+  server:
+    port: 8093
+
+payment:
+  mode: "mock"
+  provider: "mock_wechat"
+
+wechat:
+  api_base_url: "http://127.0.0.1:8888"
+  app_id: "wx_mock_app_id"
+  mch_id: "1234567890"
+  cert_serial_no: "MOCK_CERT_SERIAL_NO"
+  private_key_path: ""
+  api_v3_key: "mock_api_v3_key_32_characters!!"
+  notify_url: "http://127.0.0.1:8093/payment/wechat/callback"
+
+alipay:
+  app_id: ""
+  private_key: ""
+  public_key: ""
+  sandbox: true
+  notify_url: "http://127.0.0.1:8093/payment/alipay/callback"
+
+kafka:
+  brokers:
+    - "43.136.121.171:29092"

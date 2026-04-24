@@ -19,6 +19,9 @@ func submitAddToCart(
 	if strings.TrimSpace(resolved.ProductID) == "" {
 		return nil, fmt.Errorf("product_id is required")
 	}
+	if strings.TrimSpace(resolved.SKUID) == "" {
+		return nil, fmt.Errorf("sku_id is required")
+	}
 
 	result := &domain.ChatResult{Intent: domain.IntentAddToCart}
 	if registry == nil || !registry.Has("add_to_cart") {
@@ -30,6 +33,7 @@ func submitAddToCart(
 
 	callMessage, err := support.BuildToolCallMessage("add_to_cart", map[string]any{
 		"product_id": resolved.ProductID,
+		"sku_id":     resolved.SKUID,
 		"quantity":   resolved.Quantity,
 	})
 	if err != nil {
@@ -51,6 +55,10 @@ func submitAddToCart(
 				return nil
 			}
 			st.Session.CurrentProduct = strings.TrimSpace(resolved.ProductID)
+			if st.Session.Slots == nil {
+				st.Session.Slots = map[string]any{}
+			}
+			st.Session.Slots["sku_id"] = strings.TrimSpace(resolved.SKUID)
 			st.Session.CurrentSpec = strings.TrimSpace(resolved.Spec)
 			return nil
 		})

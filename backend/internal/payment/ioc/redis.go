@@ -10,10 +10,12 @@ func InitRedis() redis.Cmdable {
 	c := config.RedisConfig{
 		Addr: "localhost:6379",
 	}
-	viper.UnmarshalKey("redis", &c)
+	_ = viper.UnmarshalKey("redis", &c)
+	c.Password = viper.GetString("redis.password")
+
 	return redis.NewClient(&redis.Options{
-		Addr: c.Addr,
+		Addr:     c.Addr,
+		Password: c.Password,
+		DB:       c.DB,
 	})
 }
-
-

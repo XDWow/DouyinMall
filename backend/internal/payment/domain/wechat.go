@@ -2,16 +2,16 @@ package domain
 
 import "context"
 
-// WechatNativeService 寰俊Native鏀粯鏈嶅姟鎺ュ彛
-// 鐢ㄤ簬瑙ｈ€seCase涓庡叿浣撶殑SDK瀹炵幇锛屾柟渚挎祴璇?
-type WechatNativeService interface {
-	// Prepay 棰勬敮浠橈紝杩斿洖浜岀淮鐮乁RL
+// NativePayService abstracts the payment channel used by the payment service.
+// It is implemented by mock wechat, real wechat, and alipay sandbox adapters.
+type NativePayService interface {
 	Prepay(ctx context.Context, req PrepayRequest) (codeURL string, err error)
-	// QueryOrderByOutTradeNo 閫氳繃鍟嗘埛璁㈠崟鍙锋煡璇㈣鍗?
-	QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*WechatOrder, error)
+	QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*PayOrder, error)
 }
 
-// PrepayRequest 棰勬敮浠樿姹?
+// Keep backward compatibility with existing code and tests.
+type WechatNativeService = NativePayService
+
 type PrepayRequest struct {
 	AppID       string
 	MchID       string
@@ -22,8 +22,7 @@ type PrepayRequest struct {
 	TimeExpire  int64
 }
 
-// WechatOrder 寰俊璁㈠崟淇℃伅
-type WechatOrder struct {
+type PayOrder struct {
 	OutTradeNo     string
 	TransactionID  string
 	TradeState     string
@@ -31,4 +30,5 @@ type WechatOrder struct {
 	Amount         Amount
 }
 
-
+// Keep backward compatibility with existing adapters.
+type WechatOrder = PayOrder

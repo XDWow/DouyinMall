@@ -20,7 +20,7 @@ func main() {
 		if err := consumer.Start(); err != nil {
 			log.Fatalf("Consumer %d 鍚姩澶辫触: %v", i+1, err)
 		}
-		log.Printf("Consumer %d 宸插惎鍔?, i+1)
+		log.Printf("Consumer %d started", i+1)
 	}
 
 	// 鍚姩 gRPC Server锛堥樆濉烇級
@@ -43,11 +43,10 @@ func initViperWatch() {
 	viper.AutomaticEnv()
 
 	// 鎵嬪姩缁戝畾鐜鍙橀噺鍒伴厤缃敭
+	viper.BindEnv("db.password", "DB_PASSWORD")
 	viper.BindEnv("elasticsearch.addresses", "ES_ADDRESSES")
 	viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
 	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	viper.BindEnv("grpc.server.port", "GRPC_PORT")
 	viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 }
-
-

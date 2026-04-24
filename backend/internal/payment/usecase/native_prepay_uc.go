@@ -13,7 +13,7 @@ type NativePrePaymentUC struct {
 	repo domain.PaymentRepository
 	l    logger.LoggerV1
 
-	svc       domain.WechatNativeService
+	svc       domain.NativePayService
 	appID     string
 	mchID     string
 	notifyURL string
@@ -22,7 +22,7 @@ type NativePrePaymentUC struct {
 func NewNativePrePaymentUC(
 	repo domain.PaymentRepository,
 	l logger.LoggerV1,
-	svc domain.WechatNativeService,
+	svc domain.NativePayService,
 	appID, mchID, notifyURL string,
 ) *NativePrePaymentUC {
 	return &NativePrePaymentUC{
@@ -74,15 +74,15 @@ func (uc *NativePrePaymentUC) Execute(ctx context.Context, cmd PrePaymentCmd) (s
 		Amount:      pmt.Amt,
 	})
 	if err != nil {
-		uc.l.Error("wechat prepay failed", logger.Error(err))
+		uc.l.Error("native prepay failed", logger.Error(err))
 		return "", err
 	}
-	uc.l.Debug("wechat prepay success", logger.Field{Key: "codeURL", Value: codeURL})
+	uc.l.Debug("native prepay success", logger.Field{Key: "codeURL", Value: codeURL})
 	return codeURL, nil
 }
 
 type PrePaymentCmd struct {
 	Amt         domain.Amount
-	BizTradeNo  string // 业务方传，比如 orderID
+	BizTradeNo  string
 	Description string
 }

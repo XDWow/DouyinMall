@@ -68,18 +68,14 @@ func initConfig() agentconfig.Config {
 	return cfg
 }
 
-// bindSecretsFromEnv 仅从环境变量注入密钥类配置；其余依赖配置文件。
+// bindSecretsFromEnv 仅从环境变量注入密钥类配置；地址、端口、库名等拓扑信息放配置文件。
 func bindSecretsFromEnv() {
-	mustBindEnv("db.dsn", "DB_DSN")
+	mustBindEnv("db.password", "DB_PASSWORD")
 	mustBindEnv("llm.weak.api_key", "LLM_WEAK_API_KEY", "LLM_API_KEY")
 	mustBindEnv("llm.strong.api_key", "LLM_STRONG_API_KEY", "LLM_API_KEY")
 	mustBindEnv("redis.password", "REDIS_PASSWORD")
 	mustBindEnv("embedding.api_key", "EMBEDDING_API_KEY", "LLM_API_KEY")
-	mustBindEnv("knowledge_base.qdrant.host", "QDRANT_HOST")
-	mustBindEnv("knowledge_base.qdrant.port", "QDRANT_PORT")
 	mustBindEnv("knowledge_base.qdrant.api_key", "QDRANT_API_KEY")
-	mustBindEnv("knowledge_base.qdrant.collection", "QDRANT_COLLECTION")
-	mustBindEnv("knowledge_base.qdrant.use_tls", "QDRANT_USE_TLS")
 }
 
 func mustBindEnv(key string, envs ...string) {

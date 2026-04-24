@@ -90,4 +90,3 @@ func (p *kCouponServiceClient) IssueCoupon(ctx context.Context, Req *v1.IssueCou
 	return p.kClient.IssueCoupon(ctx, Req)
 }
 
-

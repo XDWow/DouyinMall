@@ -62,6 +62,7 @@ func NewServer(cfg Config, client cartservice.Client) (http.Handler, error) {
 				tool.Name,
 				mcpproto.WithDescription(tool.Description),
 				mcpproto.WithNumber("product_id", mcpproto.Description("Product ID"), mcpproto.Required()),
+				mcpproto.WithNumber("sku_id", mcpproto.Description("SKU ID"), mcpproto.Required()),
 				mcpproto.WithNumber("quantity", mcpproto.Description("Quantity to add"), mcpproto.DefaultNumber(1)),
 			), adapter.AddToCart)
 		}
@@ -81,6 +82,7 @@ func (a *Adapter) AddToCart(ctx context.Context, req mcpproto.CallToolRequest) (
 
 	var args struct {
 		ProductID int64 `json:"product_id"`
+		SKUID     int64 `json:"sku_id"`
 		Quantity  int64 `json:"quantity"`
 	}
 	if err := req.BindArguments(&args); err != nil {
@@ -89,17 +91,20 @@ func (a *Adapter) AddToCart(ctx context.Context, req mcpproto.CallToolRequest) (
 	if args.ProductID <= 0 {
 		return mcpproto.NewToolResultError("product_id is required"), nil
 	}
+	if args.SKUID <= 0 {
+		return mcpproto.NewToolResultError("sku_id is required"), nil
+	}
 	if args.Quantity <= 0 {
 		args.Quantity = 1
 	}
 
-	productIDs := make([]int64, 0, args.Quantity)
-	for i := int64(0); i < args.Quantity; i++ {
-		productIDs = append(productIDs, args.ProductID)
-	}
 	if _, err := a.client.AddItem(ctx, &cartv1.AddItemReq{
-		UserId:     runtime.UserID,
-		ProductIds: productIDs,
+		UserId: runtime.UserID,
+		Items: []*cartv1.CartItem{{
+			ProductId: args.ProductID,
+			SkuId:     args.SKUID,
+			Quantity:  args.Quantity,
+		}},
 	}); err != nil {
 		return mcpproto.NewToolResultError("add to cart failed: " + err.Error()), nil
 	}
@@ -107,6 +112,7 @@ func (a *Adapter) AddToCart(ctx context.Context, req mcpproto.CallToolRequest) (
 	return mcpproto.NewToolResultText(toJSON(map[string]any{
 		"success":    true,
 		"product_id": args.ProductID,
+		"sku_id":     args.SKUID,
 		"quantity":   args.Quantity,
 	})), nil
 }
@@ -133,5 +139,3 @@ func toJSON(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
-
-

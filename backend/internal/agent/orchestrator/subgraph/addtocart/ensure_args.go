@@ -16,6 +16,7 @@ func ensureAddToCartArgs(ctx context.Context, resolved ResolvedAddToCart) (Resol
 
 	state := domain.AddToCartInterruptState{
 		ProductID: strings.TrimSpace(resolved.ProductID),
+		SKUID:     strings.TrimSpace(resolved.SKUID),
 		Spec:      strings.TrimSpace(resolved.Spec),
 		Quantity:  resolved.Quantity,
 	}
@@ -35,6 +36,7 @@ func ensureAddToCartArgs(ctx context.Context, resolved ResolvedAddToCart) (Resol
 	if len(missing) == 0 {
 		return ResolvedAddToCart{
 			ProductID: strings.TrimSpace(state.ProductID),
+			SKUID:     strings.TrimSpace(state.SKUID),
 			Spec:      strings.TrimSpace(state.Spec),
 			Quantity:  state.Quantity,
 		}, nil
@@ -49,6 +51,8 @@ func mergeResumeInto(st domain.AddToCartInterruptState, rd domain.ResumeData) do
 		switch strings.ToLower(strings.TrimSpace(key)) {
 		case "product", "product_id":
 			st.ProductID = strings.TrimSpace(value)
+		case "sku", "sku_id":
+			st.SKUID = strings.TrimSpace(value)
 		case "product_name":
 			st.ProductName = strings.TrimSpace(value)
 		case "spec":
@@ -67,6 +71,9 @@ func computeMissingFields(st domain.AddToCartInterruptState) []string {
 	if strings.TrimSpace(st.ProductID) == "" {
 		missing = append(missing, "product")
 	}
+	if strings.TrimSpace(st.SKUID) == "" {
+		missing = append(missing, "sku")
+	}
 	if strings.TrimSpace(st.Spec) == "" {
 		missing = append(missing, "spec")
 	}
@@ -82,6 +89,8 @@ func clarificationInfo(missing []string) map[string]any {
 		switch missing[0] {
 		case "product":
 			question = "Which product do you want to add to cart?"
+		case "sku":
+			question = "Which SKU do you want?"
 		case "spec":
 			question = "Which spec do you want?"
 		case "quantity":

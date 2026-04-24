@@ -81,6 +81,7 @@ type payOrderRequest struct {
 
 type tradeItem struct {
 	ProductID int64 `json:"product_id" binding:"required"`
+	SKUID     int64 `json:"sku_id" binding:"required"`
 	Quantity  int64 `json:"quantity" binding:"required,min=1"`
 }
 
@@ -126,6 +127,15 @@ func (h *TradeHandler) PlaceOrder(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "invalid place order request: " + err.Error()})
 		return
 	}
+	switch strings.ToUpper(strings.TrimSpace(req.OrderKind)) {
+	case "", "DIRECT_BUY", "CART":
+	case "SECKILL":
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "seckill orders must use /api/trade/seckill/submit"})
+		return
+	default:
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "unsupported order_kind"})
+		return
+	}
 
 	resp, err := h.checkoutClient.PlaceOrder(c.Request.Context(), &checkoutv1.PlaceOrderReq{
 		UserId:         requestUserID(c, req.UserID),
@@ -134,7 +144,7 @@ func (h *TradeHandler) PlaceOrder(c *gin.Context) {
 		Address:        toCheckoutAddress(req.Address),
 		PaymentMethod:  req.PaymentMethod,
 		Currency:       req.Currency,
-		OrderKind:      req.OrderKind,
+		OrderKind:      strings.ToUpper(strings.TrimSpace(req.OrderKind)),
 		Remark:         req.Remark,
 		ExpectedAmount: req.ExpectedAmount,
 	})
@@ -421,6 +431,7 @@ func toCheckoutItems(items []tradeItem) []*checkoutv1.CheckoutItem {
 	for _, item := range items {
 		result = append(result, &checkoutv1.CheckoutItem{
 			ProductId: item.ProductID,
+			SkuId:     item.SKUID,
 			Quantity:  item.Quantity,
 		})
 	}
@@ -438,5 +449,3 @@ func toCheckoutAddress(addr tradeAddress) *checkoutv1.Address {
 		ZipCode:      addr.ZipCode,
 	}
 }
-
-

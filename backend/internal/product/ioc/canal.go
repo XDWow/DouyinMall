@@ -26,9 +26,6 @@ func InitCanalProducer(kafkaProducer sarama.SyncProducer, logger logger.LoggerV1
 		user = "root"
 	}
 	password := viper.GetString("canal.mysql.password")
-	if password == "" {
-		password = "root"
-	}
 
 	cfg := canal.NewDefaultConfig()
 	cfg.Addr = fmt.Sprintf("%s:%d", host, port)
@@ -51,5 +48,3 @@ func InitCanalProducer(kafkaProducer sarama.SyncProducer, logger logger.LoggerV1
 
 	return canalProducer
 }
-
-

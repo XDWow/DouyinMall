@@ -87,6 +87,7 @@ func toCheckoutItems(items []*checkoutv1.CheckoutItem) []domain.CheckoutItem {
 	for _, it := range items {
 		result = append(result, domain.CheckoutItem{
 			ProductID: it.GetProductId(),
+			SKUID:     it.GetSkuId(),
 			Quantity:  it.GetQuantity(),
 		})
 	}
@@ -113,6 +114,7 @@ func toProductDetails(lines []domain.OrderLine) []*checkoutv1.ProductDetail {
 	for _, l := range lines {
 		result = append(result, &checkoutv1.ProductDetail{
 			ProductId:         l.ProductID,
+			SkuId:             l.SKUID,
 			Name:              l.Name,
 			Picture:           l.Picture,
 			Price:             l.Price,
@@ -141,5 +143,3 @@ func toCouponItems(options []domain.CouponOption) []*checkoutv1.CouponItem {
 	}
 	return result
 }
-
-

@@ -2,42 +2,34 @@ syntax = "proto3";
 
 package cart;
 
-option go_package="cart/v1;cartv1";
+option go_package = "cart/v1;cartv1";
 
 service CartService {
     rpc AddItem(AddItemReq) returns (AddItemResp) {}
     rpc DeleteItem(DeleteItemReq) returns (DeleteItemResp) {}
     rpc GetCart(GetCartReq) returns (GetCartResp) {}
     rpc EmptyCart(EmptyCartReq) returns (EmptyCartResp) {}
-    rpc ChangeQty(ChangeQtyReq) returns (ChangeQtyResp){}
-    // 原子性增减数量，避免并发问题
+    rpc ChangeQty(ChangeQtyReq) returns (ChangeQtyResp) {}
     rpc IncrementQty(IncrementQtyReq) returns (IncrementQtyResp) {}
     rpc DecrementQty(DecrementQtyReq) returns (DecrementQtyResp) {}
 }
 
 message CartItem {
-    // 跟购物车相关的字段
     int64 product_id = 1;
     int64 quantity = 2;
-
-//    // 商品详情，购物车这里不管了，Bff 去查 product 吧
-//    string  name = 3;
-//    string picture = 4;
-//    int64 price = 5;
-//    bool inStock = 6;
-//    string merchantName = 7;
+    int64 sku_id = 3;
 }
 
 message AddItemReq {
     int64 user_id = 1;
-    repeated int64 product_ids = 2;
+    repeated CartItem items = 2;
 }
 
 message AddItemResp {}
 
 message DeleteItemReq {
     int64 user_id = 1;
-    repeated int64 product_ids = 2;
+    repeated int64 sku_ids = 2;
 }
 
 message DeleteItemResp {}
@@ -61,16 +53,16 @@ message EmptyCartReq {
 
 message EmptyCartResp {}
 
-message ChangeQtyReq{
+message ChangeQtyReq {
     int64 user_id = 1;
     CartItem item = 2;
 }
 
-message ChangeQtyResp{}
+message ChangeQtyResp {}
 
 message IncrementQtyReq {
     int64 user_id = 1;
-    int64 product_id = 2;
+    int64 sku_id = 2;
 }
 
 message IncrementQtyResp {
@@ -79,7 +71,7 @@ message IncrementQtyResp {
 
 message DecrementQtyReq {
     int64 user_id = 1;
-    int64 product_id = 2;
+    int64 sku_id = 2;
 }
 
 message DecrementQtyResp {

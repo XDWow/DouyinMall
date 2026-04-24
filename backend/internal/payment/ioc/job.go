@@ -6,25 +6,21 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// InitJobs 初始化支付服务相关的定时任务。
 func InitJobs(
-	syncWechatOrderJob *job.SyncWechatOrderJob,
+	syncPaymentOrderJob *job.SyncPaymentOrderJob,
 	l logger.LoggerV1,
 ) *cron.Cron {
 	c := cron.New(cron.WithSeconds())
 
-	// 每 2 分钟执行一次，用于支付回调缺失时的兜底同步。
 	_, err := c.AddFunc("0 */2 * * * ?", func() {
-		if err := syncWechatOrderJob.Run(); err != nil {
-			l.Error("同步微信支付单定时任务执行失败", logger.Error(err))
+		if err := syncPaymentOrderJob.Run(); err != nil {
+			l.Error("sync payment order job failed", logger.Error(err))
 		}
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	l.Info("支付服务定时任务初始化完成")
+	l.Info("payment cron jobs initialized")
 	return c
 }
-
-

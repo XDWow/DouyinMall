@@ -113,7 +113,7 @@ func TestDispatchOrderTimeoutJobSyncsPaidOrderBeforeSkippingCancel(t *testing.T)
 	outboxRepo := &stubTimeoutOutboxRepo{addID: 9}
 	orderRepo := &stubTimeoutOrderRepo{
 		orderByID: map[int64]domain.Order{
-			1005: {ID: 1005, UserID: 2005, Status: domain.OrderStatusCreated, OrderKind: domain.OrderKindCart, OrderItems: []domain.OrderItem{{ProductID: 88}}},
+			1005: {ID: 1005, UserID: 2005, Status: domain.OrderStatusCreated, OrderKind: domain.OrderKindCart, OrderItems: []domain.OrderItem{{ProductID: 88, SKUID: 99}}},
 		},
 	}
 	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
@@ -134,6 +134,7 @@ func TestDispatchOrderTimeoutJobSyncsPaidOrderBeforeSkippingCancel(t *testing.T)
 	require.Equal(t, domain.OrderStatusPaid, paidEvent.Status)
 	require.Equal(t, int64(2005), paidEvent.UserID)
 	require.Equal(t, []int64{88}, paidEvent.ProductIDs)
+	require.Equal(t, []int64{99}, paidEvent.SKUIDs)
 }
 
 type stubTimeoutPaymentClient struct {
@@ -332,5 +333,3 @@ func (s *stubDelayQueue) DrainDue(context.Context, time.Time) ([]int64, error) {
 	s.dueIDs = nil
 	return ids, nil
 }
-
-

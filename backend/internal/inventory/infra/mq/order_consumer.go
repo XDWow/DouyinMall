@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -25,8 +26,9 @@ const (
 )
 
 type OrderStatusUpdateEvent struct {
-	OrderID int64       `json:"order_id"`
-	Status  OrderStatus `json:"status"`
+	OrderID   int64       `json:"order_id"`
+	Status    OrderStatus `json:"status"`
+	OrderKind string      `json:"order_kind,omitempty"`
 }
 
 type OrderStatus = orderv1.OrderStatus
@@ -44,8 +46,8 @@ const (
 type OrderConsumer struct {
 	client         sarama.Client
 	producer       sarama.SyncProducer
-	releaseStockUC *usecase.ReleaseStockUseCase
 	refundStockUC  *usecase.RefundStockUseCase
+	releaseStockUC *usecase.ReleaseStockUseCase
 	orderCli       orderservice.Client
 	logger         logger.LoggerV1
 	consumerGrp    sarama.ConsumerGroup
@@ -96,6 +98,19 @@ func (c *OrderConsumer) Start() error {
 }
 
 func (c *OrderConsumer) Consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdateEvent) error {
+	kind := normalizeOrderKind(evt.OrderKind)
+	switch kind {
+	case "SECKILL":
+		return nil
+	case "", "DIRECT_BUY", "CART":
+	default:
+		c.logger.Warn("skip unsupported order kind",
+			logger.Int64("orderID", evt.OrderID),
+			logger.String("orderKind", evt.OrderKind),
+		)
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -111,25 +126,16 @@ func (c *OrderConsumer) Consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdate
 	return nil
 }
 
-func (c *OrderConsumer) handlePaid(ctx context.Context, evt OrderStatusUpdateEvent) {
+func (c *OrderConsumer) handlePaid(_ context.Context, evt OrderStatusUpdateEvent) {
 	c.logger.Info("paid event received, skip inventory commit", logger.Int64("orderID", evt.OrderID))
 }
 
 func (c *OrderConsumer) handleCanceled(ctx context.Context, evt OrderStatusUpdateEvent) {
-	releaseCmd := usecase.ReleaseStockCommand{
-		OperationID: buildOrderOperationID(evt.OrderID, "release"),
-	}
-	if err := c.releaseStockUC.Execute(ctx, releaseCmd); err != nil {
-		c.logger.Warn("release reserved stock failed on cancel",
-			logger.Int64("orderID", evt.OrderID),
-			logger.Error(err))
-	}
-
-	refundCmd := usecase.RefundStockCommand{
+	cmd := usecase.RefundStockCommand{
 		OperationID: buildOrderOperationID(evt.OrderID, "refund"),
 	}
 	err := c.executeWithRetry(ctx, "RefundStockOnCancel", evt, func() error {
-		return c.refundStockUC.Execute(ctx, refundCmd)
+		return c.refundStockUC.Execute(ctx, cmd)
 	})
 	if errors.Is(err, domain.ErrDuplicateOperation) {
 		c.logger.Info("RefundStockOnCancel duplicate", logger.Int64("orderID", evt.OrderID))
@@ -139,7 +145,7 @@ func (c *OrderConsumer) handleCanceled(ctx context.Context, evt OrderStatusUpdat
 		return
 	}
 
-	c.logger.Info("order canceled, stock released/restored", logger.Int64("orderID", evt.OrderID))
+	c.logger.Info("order canceled, stock restored", logger.Int64("orderID", evt.OrderID))
 }
 
 func (c *OrderConsumer) handleRefunded(ctx context.Context, evt OrderStatusUpdateEvent) {
@@ -162,6 +168,10 @@ func (c *OrderConsumer) handleRefunded(ctx context.Context, evt OrderStatusUpdat
 
 func buildOrderOperationID(orderID int64, action string) string {
 	return fmt.Sprintf("order_%d_%s", orderID, action)
+}
+
+func normalizeOrderKind(orderKind string) string {
+	return strings.ToUpper(strings.TrimSpace(orderKind))
 }
 
 func (c *OrderConsumer) executeWithRetry(ctx context.Context, opName string, evt OrderStatusUpdateEvent, fn func() error) error {
@@ -218,6 +228,10 @@ func (c *OrderConsumer) asyncUpdateOrderStatus(ctx context.Context, evt OrderSta
 }
 
 func (c *OrderConsumer) sendToStockDeadLetter(evt OrderStatusUpdateEvent, opName string, lastErr error) {
+	if c.producer == nil || lastErr == nil {
+		return
+	}
+
 	msg := map[string]interface{}{
 		"event":     evt,
 		"operation": opName,
@@ -236,6 +250,10 @@ func (c *OrderConsumer) sendToStockDeadLetter(evt OrderStatusUpdateEvent, opName
 }
 
 func (c *OrderConsumer) sendToOrderDeadLetter(evt OrderStatusUpdateEvent, action orderv1.ChangeOrderAction, lastErr error) {
+	if c.producer == nil || lastErr == nil {
+		return
+	}
+
 	msg := map[string]interface{}{
 		"event":  evt,
 		"action": action,
@@ -259,5 +277,3 @@ func (c *OrderConsumer) Stop() error {
 	}
 	return nil
 }
-
-

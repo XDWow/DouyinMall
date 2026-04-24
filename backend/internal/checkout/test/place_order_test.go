@@ -164,6 +164,8 @@ func TestPlaceOrderPassesDiscountedPayableAmountToOrder(t *testing.T) {
 	require.NotNil(t, output)
 	require.NotNil(t, orderClient.createOrderReq)
 	require.Equal(t, int64(90), orderClient.createOrderReq.GetPayableAmount())
+	require.Len(t, orderClient.createOrderReq.GetItems(), 1)
+	require.Equal(t, int64(101), orderClient.createOrderReq.GetItems()[0].GetSkuId())
 }
 
 type staticOrderIDGenerator int64
@@ -177,6 +179,7 @@ func validPlaceOrderInput(expectedAmount int64, couponIDs []int64) usecase.Place
 		UserID: 1,
 		Items: []domain.CheckoutItem{{
 			ProductID: 1,
+			SKUID:     101,
 			Quantity:  1,
 		}},
 		CouponIDs:      couponIDs,
@@ -337,5 +340,3 @@ func refundOperationOrderID(req *inventoryv1.RefundStockReq) int64 {
 	_, _ = fmt.Sscanf(req.GetOperationId(), "order_%d_refund", &orderID)
 	return orderID
 }
-
-

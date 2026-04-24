@@ -46,6 +46,7 @@ func (repo *GormInventoryRepository) GetInventory(ctx context.Context, productID
 	if err != nil {
 		return nil, err
 	}
+
 	result := make([]domain.Inventory, len(model))
 	for i, v := range model {
 		result[i] = domain.Inventory{
@@ -398,5 +399,3 @@ func orderIDFromOperation(operationID string) (int64, bool) {
 
 	return 0, false
 }
-
-

@@ -10,7 +10,9 @@ func InitRedis() redis.Cmdable {
 	if addr == "" {
 		addr = "localhost:6379"
 	}
-	return redis.NewClient(&redis.Options{Addr: addr})
+	return redis.NewClient(&redis.Options{
+		Addr:     addr,
+		Password: viper.GetString("redis.password"),
+		DB:       viper.GetInt("redis.db"),
+	})
 }
-
-

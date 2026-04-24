@@ -10,6 +10,7 @@ import (
 func resolveInvoke(_ context.Context, in AddToCartResolveInput) (ResolvedAddToCart, error) {
 	out := ResolvedAddToCart{
 		ProductID: strings.TrimSpace(in.ProductID),
+		SKUID:     strings.TrimSpace(in.SKUID),
 		Spec:      strings.TrimSpace(in.Spec),
 		Quantity:  in.Quantity,
 	}

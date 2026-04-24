@@ -5,6 +5,7 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/product/config"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo/dao"
+	"github.com/XDWow/DouyinMall/backend/pkg/mysqlconfig"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -13,14 +14,29 @@ import (
 func InitDB() *gorm.DB {
 	// 榛樿閰嶇疆鍏滃簳
 	c := config.DBConfig{
-		DSN: "root:root@tcp(localhost:3306)/mysql",
+		Host:     "localhost",
+		Port:     3306,
+		User:     "root",
+		Database: "mysql",
 	}
 	err := viper.UnmarshalKey("db", &c)
 	if err != nil {
 		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲璇诲彇閰嶇疆澶辫触: %w", err))
 	}
 
-	db, err := gorm.Open(mysql.Open(c.DSN), &gorm.Config{})
+	dsn, err := mysqlconfig.BuildDSN(mysqlconfig.Config{
+		Host:     c.Host,
+		Port:     c.Port,
+		User:     c.User,
+		Password: c.Password,
+		Database: c.Database,
+		Params:   c.Params,
+	})
+	if err != nil {
+		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲閰嶇疆澶辫触: %w", err))
+	}
+
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲杩炴帴澶辫触: %w", err))
 	}
@@ -32,5 +48,3 @@ func InitDB() *gorm.DB {
 	}
 	return db
 }
-
-

@@ -27,20 +27,22 @@ func InitApp() *App {
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitOrderClient,
-		ioc.InitWechatNativeApiService,
-		ioc.InitWechatNativeService,
+		ioc.InitNativePayService,
+		ioc.InitPaymentProvider,
+		ioc.InitAlipayClient,
+		ioc.InitWechatNotifyHandler,
 
 		repository.NewPaymentRepository,
 
 		usecase.NewPayCallbackUC,
 		ioc.InitNativePrePaymentUC,
-		ioc.InitSyncWechatOrderUC,
+		ioc.InitSyncPaymentOrderUC,
 		usecase.NewGetPaymentUC,
 		usecase.NewConfirmPaymentUC,
 
 		grpc.NewPaymentHandler,
 
-		job.NewSyncWechatOrderJob,
+		job.NewSyncPaymentOrderJob,
 		ioc.InitJobs,
 
 		ioc.InitGRPCServer,
@@ -61,5 +63,3 @@ func newApp(
 		Cron:       cron,
 	}
 }
-
-

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/IBM/sarama"
 	seckilldomain "github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
@@ -14,8 +15,9 @@ import (
 )
 
 type OrderStatusUpdateEvent struct {
-	OrderID int64               `json:"order_id"`
-	Status  orderv1.OrderStatus `json:"status"`
+	OrderID   int64               `json:"order_id"`
+	Status    orderv1.OrderStatus `json:"status"`
+	OrderKind string              `json:"order_kind,omitempty"`
 }
 
 type OrderStatusConsumer struct {
@@ -48,7 +50,7 @@ func (c *OrderStatusConsumer) Start() error {
 		for {
 			err := cg.Consume(context.Background(), []string{TopicOrderStatusUpdate}, saramax.NewHandler[OrderStatusUpdateEvent](c.logger, c.consume))
 			if err != nil {
-				c.logger.Error("秒杀订单状态消费者消费出错", logger.Error(err))
+				c.logger.Error("seckill order status consumer exited", logger.Error(err))
 			}
 		}
 	}()
@@ -56,10 +58,14 @@ func (c *OrderStatusConsumer) Start() error {
 }
 
 func (c *OrderStatusConsumer) consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdateEvent) error {
+	kind := strings.ToUpper(strings.TrimSpace(evt.OrderKind))
+	if kind != "" && kind != "SECKILL" {
+		return nil
+	}
+
 	ctx := context.Background()
 	switch evt.Status {
 	case orderv1.OrderStatus_ORDER_STATUS_PAID:
-		// 抢到资格后前端改查订单/支付；秒杀侧不再随 PAID 变更轮询状态。
 		return nil
 	case orderv1.OrderStatus_ORDER_STATUS_CANCELED, orderv1.OrderStatus_ORDER_STATUS_REFUNDED:
 		return c.onOrderClosed(ctx, evt)
@@ -77,7 +83,9 @@ func (c *OrderStatusConsumer) onOrderClosed(ctx context.Context, evt OrderStatus
 		}
 		return err
 	}
-	if req.Status != seckilldomain.RequestStatusProcessing && req.Status != seckilldomain.RequestStatusQualified && req.Status != seckilldomain.RequestStatusLegacySuccess {
+	if req.Status != seckilldomain.RequestStatusProcessing &&
+		req.Status != seckilldomain.RequestStatusQualified &&
+		req.Status != seckilldomain.RequestStatusLegacySuccess {
 		return nil
 	}
 
@@ -93,15 +101,13 @@ func (c *OrderStatusConsumer) onOrderClosed(ctx context.Context, evt OrderStatus
 		failReason = seckilldomain.FailReasonOrderRefunded
 	}
 
-	// 1) 活动库库存回补（operation_id 幂等，避免重复消息双补）
 	if err := c.activityRepo.IncreaseStock(ctx, req.ActivityID, fmt.Sprintf("order_%d_%s", evt.OrderID, action), total); err != nil {
 		return err
 	}
-	// 2) 删除秒杀成功占有（一人一单 DB）
 	if err := c.activityRepo.DeleteSuccessClaim(ctx, req.ActivityID, req.UserID); err != nil {
 		return err
 	}
-	// 3) 流水回退为失败（仅当仍绑定该订单且为待支付/已支付态时更新；0 行表示已处理过）
+
 	n, err := c.requestRepo.MarkFailByRequestNoIfActive(ctx, requestNo, failReason)
 	if err != nil {
 		return err
@@ -109,7 +115,7 @@ func (c *OrderStatusConsumer) onOrderClosed(ctx context.Context, evt OrderStatus
 	if n == 0 {
 		return nil
 	}
-	// 4) Redis：恢复提交阶段预扣库存 + 删除用户占位
+
 	if err := c.cache.Compensate(ctx, req.ActivityID, req.UserID, total, true); err != nil {
 		return err
 	}

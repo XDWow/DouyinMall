@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -30,14 +31,14 @@ func main() {
 }
 
 func initViper() {
-	viper.SetConfigName("dev")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./internal/seckill/config")
-	viper.AddConfigPath(".")
+	configPath := pflag.String("config", "internal/seckill/config/dev.yaml", "seckill config file path")
+	pflag.Parse()
+
+	viper.SetConfigFile(*configPath)
 	viper.AutomaticEnv()
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
+	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
 	if err := viper.ReadInConfig(); err != nil {
 		panic(err)
 	}
 }
-
-

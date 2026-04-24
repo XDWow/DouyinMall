@@ -17,26 +17,32 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// Injectors from wire.go:
+
 func InitApp() *App {
 	db := ioc.InitDB()
 	loggerV1 := ioc.InitLogger()
 	paymentRepository := repository.NewPaymentRepository(db, loggerV1)
-	orderClient := ioc.InitOrderClient()
-	payCallbackUC := usecase.NewPayCallbackUC(paymentRepository, orderClient)
-	wechatService := ioc.InitWechatNativeApiService()
-	nativeApiService := ioc.InitWechatNativeService(wechatService)
-	nativePrePaymentUC := ioc.InitNativePrePaymentUC(paymentRepository, loggerV1, nativeApiService)
-	syncWechatOrderUC := ioc.InitSyncWechatOrderUC(nativeApiService, payCallbackUC, loggerV1)
+	nativePayService := ioc.InitNativePayService()
+	nativePrePaymentUC := ioc.InitNativePrePaymentUC(paymentRepository, loggerV1, nativePayService)
 	getPaymentUC := usecase.NewGetPaymentUC(paymentRepository, loggerV1)
-	confirmPaymentUC := usecase.NewConfirmPaymentUC(paymentRepository, syncWechatOrderUC)
+	client := ioc.InitOrderClient()
+	payCallbackUC := usecase.NewPayCallbackUC(paymentRepository, client)
+	syncPaymentOrderUC := ioc.InitSyncPaymentOrderUC(nativePayService, payCallbackUC, loggerV1)
+	confirmPaymentUC := usecase.NewConfirmPaymentUC(paymentRepository, syncPaymentOrderUC)
 	paymentHandler := grpc.NewPaymentHandler(nativePrePaymentUC, getPaymentUC, confirmPaymentUC)
 	server := ioc.InitGRPCServer(paymentHandler)
-	ginxServer := ioc.InitHTTPServer(payCallbackUC, loggerV1)
-	syncWechatOrderJob := job.NewSyncWechatOrderJob(syncWechatOrderUC, paymentRepository, loggerV1)
-	cron := ioc.InitJobs(syncWechatOrderJob, loggerV1)
+	string2 := ioc.InitPaymentProvider()
+	alipayClient := ioc.InitAlipayClient()
+	handler := ioc.InitWechatNotifyHandler()
+	ginxServer := ioc.InitHTTPServer(payCallbackUC, loggerV1, string2, alipayClient, handler)
+	syncPaymentOrderJob := job.NewSyncPaymentOrderJob(syncPaymentOrderUC, paymentRepository, loggerV1)
+	cron := ioc.InitJobs(syncPaymentOrderJob, loggerV1)
 	app := newApp(server, ginxServer, cron)
 	return app
 }
+
+// wire.go:
 
 type App struct {
 	GRPCServer server.Server
@@ -48,14 +54,11 @@ type App struct {
 
 func newApp(
 	grpcServer server.Server,
-	httpServer *ginx.Server,
-	cron *cron.Cron,
+	httpServer *ginx.Server, cron2 *cron.Cron,
 ) *App {
 	return &App{
 		GRPCServer: grpcServer,
 		HTTPServer: httpServer,
-		Cron:       cron,
+		Cron:       cron2,
 	}
 }
-
-

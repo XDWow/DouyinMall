@@ -1,7 +1,12 @@
 package config
 
 type DBConfig struct {
-	DSN string `yaml:"dsn"`
+	Host     string `yaml:"host" mapstructure:"host"`
+	Port     int    `yaml:"port" mapstructure:"port"`
+	User     string `yaml:"user" mapstructure:"user"`
+	Password string `yaml:"password" mapstructure:"password"`
+	Database string `yaml:"database" mapstructure:"database"`
+	Params   string `yaml:"params" mapstructure:"params"`
 }
 
 type RedisConfig struct {
@@ -20,5 +25,3 @@ type ServerConfig struct {
 	Name string `yaml:"name"`
 	Port int    `yaml:"port"`
 }
-
-

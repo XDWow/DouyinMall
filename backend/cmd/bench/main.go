@@ -135,6 +135,7 @@ func runCheckoutBench(cfg benchConfig) (metricSummary, error) {
 	if err != nil {
 		return metricSummary{}, err
 	}
+	skuID := productID + 1_000_000_000
 
 	durations, success, failure, elapsed := runWorkers(cfg.requests, cfg.concurrency, func(i int) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -144,6 +145,7 @@ func runCheckoutBench(cfg benchConfig) (metricSummary, error) {
 			UserId: userID,
 			Items: []*checkoutv1.CheckoutItem{{
 				ProductId: productID,
+				SkuId:     skuID,
 				Quantity:  1,
 			}},
 			Address: &checkoutv1.Address{
@@ -196,6 +198,7 @@ func runPaymentConsistency(cfg benchConfig) (metricSummary, error) {
 	if err != nil {
 		return metricSummary{}, err
 	}
+	skuID := productID + 2_000_000_000
 
 	orderIDs := make([]int64, 0, cfg.requests)
 	for i := 0; i < cfg.requests; i++ {
@@ -204,6 +207,7 @@ func runPaymentConsistency(cfg benchConfig) (metricSummary, error) {
 			UserId: int64(2_000_000 + i),
 			Items: []*checkoutv1.CheckoutItem{{
 				ProductId: productID,
+				SkuId:     skuID,
 				Quantity:  1,
 			}},
 			Address: &checkoutv1.Address{

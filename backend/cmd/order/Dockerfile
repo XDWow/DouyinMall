@@ -9,6 +9,7 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/order .
-COPY --from=builder /app/internal/order/config/docker.yaml ./internal/order/config/dev.yaml
+COPY --from=builder /app/internal/order/config/dev.yaml ./internal/order/config/dev.yaml
+COPY --from=builder /app/internal/order/config/prod.yaml ./internal/order/config/prod.yaml
 EXPOSE 8095 19092
-ENTRYPOINT ["./order"]
+ENTRYPOINT ["./order", "--config", "internal/order/config/prod.yaml"]

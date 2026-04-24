@@ -17,9 +17,9 @@ func main() {
 
 	// 鍚姩 Kafka 娑堣垂鑰咃紙鐩戝惉璁㈠崟鏀粯鎴愬姛浜嬩欢锛屾竻鐞嗚喘鐗╄溅锛?
 	if err := app.OrderConsumer.Start(); err != nil {
-		fmt.Printf("璀﹀憡: Kafka娑堣垂鑰呭惎鍔ㄥけ璐? %v锛岀户缁繍琛孿n", err)
+		fmt.Printf("warning: cart order consumer start failed: %v\n", err)
 	} else {
-		fmt.Println("Cart OrderConsumer宸插惎鍔?)
+		fmt.Println("cart order consumer started")
 	}
 
 	go func() {
@@ -41,7 +41,7 @@ func main() {
 	if err := app.Server.Stop(); err != nil {
 		fmt.Printf("鍏抽棴 gRPC 鏈嶅姟澶辫触: %v\n", err)
 	}
-	fmt.Println("Cart鏈嶅姟宸插叧闂?)
+	fmt.Println("cart service stopped")
 }
 
 func initViperWatch() {
@@ -57,10 +57,9 @@ func initViperWatch() {
 	// 鏀寔鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢锛堢幆澧冨彉閲忎紭鍏堬級
 	viper.AutomaticEnv()
 
+	viper.BindEnv("db.password", "DB_PASSWORD")
 	viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
 	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	viper.BindEnv("grpc.server.port", "GRPC_PORT")
 	viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 }
-
-

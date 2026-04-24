@@ -1,5 +1,10 @@
 db:
-  dsn: "root:root@tcp(localhost:13316)/DouyinMall"
+  host: "localhost"
+  port: 13316
+  user: "root"
+  password: ""
+  database: "DouyinMall"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 etcd:
   endpoints:

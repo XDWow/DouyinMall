@@ -47,11 +47,10 @@ func initViperWatch() {
 	}
 
 	viper.AutomaticEnv()
-	_ = viper.BindEnv("db.dsn", "DB_DSN")
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
 	_ = viper.BindEnv("redis.addr", "REDIS_ADDR")
 	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	_ = viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
 	_ = viper.BindEnv("canal.enabled", "CANAL_ENABLED")
+	_ = viper.BindEnv("canal.mysql.password", "CANAL_MYSQL_PASSWORD")
 }
-
-

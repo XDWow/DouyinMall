@@ -84,8 +84,9 @@ func TestSeckillHappyPath(t *testing.T) {
 
 	statusConsumer := NewOrderStatusConsumer(nil, requestRepo, activityRepo, cache, log)
 	require.NoError(t, statusConsumer.consume(nil, OrderStatusUpdateEvent{
-		OrderID: req.OrderID,
-		Status:  orderv1.OrderStatus_ORDER_STATUS_CANCELED,
+		OrderID:   req.OrderID,
+		Status:    orderv1.OrderStatus_ORDER_STATUS_CANCELED,
+		OrderKind: orderdomain.OrderKindSeckill,
 	}))
 
 	activity, err = activityRepo.FindByID(ctx, activityID)

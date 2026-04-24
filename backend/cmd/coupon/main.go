@@ -16,7 +16,7 @@ func main() {
 
 	// 鍚姩Kafka娑堣垂鑰咃紙璁㈠崟鐘舵€佸彉鏇达級
 	if err := app.OrderConsumer.Start(); err != nil {
-		fmt.Printf("璀﹀憡: Kafka娑堣垂鑰呭惎鍔ㄥけ璐? %v锛岀户缁繍琛孿n", err)
+		fmt.Printf("warning: coupon order consumer start failed: %v\n", err)
 	} else {
 		fmt.Println("Kafka娑堣垂鑰呭凡鍚姩")
 	}
@@ -29,7 +29,8 @@ func main() {
 		}
 	}()
 
-	// 浼橀泤閫€鍑?	quit := make(chan os.Signal, 1)
+	// 浼橀泤閫€鍑?
+	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
@@ -37,7 +38,7 @@ func main() {
 	if err := app.GRPCServer.Stop(); err != nil {
 		fmt.Printf("gRPC鏈嶅姟鍏抽棴澶辫触: %v\n", err)
 	}
-	fmt.Println("Coupon鏈嶅姟宸插叧闂?)
+	fmt.Println("coupon service stopped")
 }
 
 func initViper() {
@@ -47,10 +48,9 @@ func initViper() {
 	viper.AddConfigPath(".")
 
 	viper.AutomaticEnv()
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
 
 	if err := viper.ReadInConfig(); err != nil {
 		fmt.Printf("璀﹀憡: 璇诲彇閰嶇疆鏂囦欢澶辫触: %v锛屼娇鐢ㄩ粯璁ら厤缃甛n", err)
 	}
 }
-
-

@@ -43,10 +43,9 @@ func initViper() {
 	viper.AddConfigPath("./internal/inventory/config")
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
 
 	if err := viper.ReadInConfig(); err != nil {
 		fmt.Printf("warning: read inventory config failed: %v\n", err)
 	}
 }
-
-

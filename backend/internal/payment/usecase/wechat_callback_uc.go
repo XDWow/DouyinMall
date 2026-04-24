@@ -24,13 +24,17 @@ func NewPayCallbackUC(repo domain.PaymentRepository, orderCli orderservice.Clien
 		repo:     repo,
 		orderCli: orderCli,
 		nativeCBTypeToStatus: map[string]domain.PaymentStatus{
-			"SUCCESS":    domain.PaymentStatusSuccess,
-			"PAYERROR":   domain.PaymentStatusFailed,
-			"NOTPAY":     domain.PaymentStatusInit,
-			"USERPAYING": domain.PaymentStatusInit,
-			"CLOSED":     domain.PaymentStatusFailed,
-			"REVOKED":    domain.PaymentStatusFailed,
-			"REFUND":     domain.PaymentStatusRefund,
+			"SUCCESS":        domain.PaymentStatusSuccess,
+			"PAYERROR":       domain.PaymentStatusFailed,
+			"NOTPAY":         domain.PaymentStatusInit,
+			"USERPAYING":     domain.PaymentStatusInit,
+			"CLOSED":         domain.PaymentStatusFailed,
+			"REVOKED":        domain.PaymentStatusFailed,
+			"REFUND":         domain.PaymentStatusRefund,
+			"WAIT_BUYER_PAY": domain.PaymentStatusInit,
+			"TRADE_SUCCESS":  domain.PaymentStatusSuccess,
+			"TRADE_FINISHED": domain.PaymentStatusSuccess,
+			"TRADE_CLOSED":   domain.PaymentStatusFailed,
 		},
 	}
 }
@@ -42,7 +46,7 @@ func (uc *PayCallbackUC) Execute(ctx context.Context, cmd CallbackCmd) error {
 func (uc *PayCallbackUC) UpdatePaymentByTxn(ctx context.Context, cmd CallbackCmd) error {
 	status, ok := uc.nativeCBTypeToStatus[cmd.TradeState]
 	if !ok {
-		return errors.New("unknown wechat trade state")
+		return errors.New("unknown trade state")
 	}
 
 	if err := uc.repo.UpdatePayment(ctx, domain.Payment{
@@ -78,5 +82,3 @@ type CallbackCmd struct {
 	TransactionId string
 	OutTradeNo    string
 }
-
-

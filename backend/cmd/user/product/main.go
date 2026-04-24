@@ -27,9 +27,7 @@ func initViperWatch() {
 	// viper.SetEnvPrefix("USER_SERVICE")
 
 	// 鎵嬪姩缁戝畾鐜鍙橀噺鍒伴厤缃敭
-	viper.BindEnv("db.dsn", "DB_DSN")
+	viper.BindEnv("db.password", "DB_PASSWORD")
 	viper.BindEnv("redis.addr", "REDIS_ADDR")
 	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 }
-
-

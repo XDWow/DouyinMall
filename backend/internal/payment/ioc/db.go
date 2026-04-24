@@ -5,32 +5,43 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/payment/config"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/infra/db"
+	"github.com/XDWow/DouyinMall/backend/pkg/mysqlconfig"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
 func InitDB() *gorm.DB {
-	// 榛樿閰嶇疆鍏滃簳
 	c := config.DBConfig{
-		DSN: "root:root@tcp(localhost:3306)/mysql",
+		Host:     "localhost",
+		Port:     3306,
+		User:     "root",
+		Database: "mysql",
 	}
-	err := viper.UnmarshalKey("db", &c)
+	if err := viper.UnmarshalKey("db", &c); err != nil {
+		panic(fmt.Errorf("payment db config read failed: %w", err))
+	}
+	c.Password = viper.GetString("db.password")
+
+	dsn, err := mysqlconfig.BuildDSN(mysqlconfig.Config{
+		Host:     c.Host,
+		Port:     c.Port,
+		User:     c.User,
+		Password: c.Password,
+		Database: c.Database,
+		Params:   c.Params,
+	})
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲璇诲彇閰嶇疆澶辫触: %w", err))
+		panic(fmt.Errorf("payment db config invalid: %w", err))
 	}
 
-	database, err := gorm.Open(mysql.Open(c.DSN), &gorm.Config{})
+	database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲杩炴帴澶辫触: %w", err))
+		panic(fmt.Errorf("payment db connect failed: %w", err))
 	}
 
-	// 鍒濆鍖?db 鐨勮〃
-	err = db.InitTables(database)
-	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲琛ㄥけ璐? %w", err))
+	if err = db.InitTables(database); err != nil {
+		panic(fmt.Errorf("payment db init tables failed: %w", err))
 	}
 	return database
 }
-
-

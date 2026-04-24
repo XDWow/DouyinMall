@@ -23,6 +23,7 @@ func InputFromState(st *domain.State) (AddToCartResolveInput, error) {
 
 	return AddToCartResolveInput{
 		ProductID:      sharednode.SlotString(st.Session.Slots, "product_id"),
+		SKUID:          sharednode.SlotString(st.Session.Slots, "sku_id"),
 		ProductName:    sharednode.SlotString(st.Session.Slots, "product_name"),
 		ProductRef:     sharednode.SlotString(st.Session.Slots, "product_ref"),
 		Spec:           sharednode.SlotString(st.Session.Slots, "spec"),

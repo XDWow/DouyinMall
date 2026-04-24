@@ -2,6 +2,7 @@ package addtocart
 
 type AddToCartResolveInput struct {
 	ProductID      string
+	SKUID          string
 	ProductName    string
 	ProductRef     string
 	Spec           string
@@ -13,6 +14,7 @@ type AddToCartResolveInput struct {
 
 type ResolvedAddToCart struct {
 	ProductID string
+	SKUID     string
 	Spec      string
 	Quantity  int
 }

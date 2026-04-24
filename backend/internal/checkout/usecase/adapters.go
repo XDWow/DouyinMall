@@ -10,16 +10,10 @@ import (
 	productv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1"
 )
 
-// IDGenerator 璁㈠崟ID鐢熸垚鍣紙闆姳ID锛?
 type IDGenerator interface {
 	GenerateOrderID() int64
 }
 
-// ==================== Proto 鈫?Domain 杞崲 ====================
-
-// buildOrderLines 灏嗗墠绔紶鍏ョ殑 CheckoutItem 涓?Product 璇︽儏鍚堝苟涓?OrderLine锛?
-// 鐩存帴鍦ㄦ瀯寤烘椂鍒嗘祦锛氬彲璐拱鐨勬斁 available锛屽け鏁堢殑鏀?unavailable銆?
-// InStock 浣滀负鍙喘涔板垽鏂紝搴撳瓨鏁伴噺鐨勫己鏍￠獙鍦?PlaceOrder.ReserveStock 閲屽仛銆?
 func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Product) (available, unavailable []domain.OrderLine) {
 	prodMap := make(map[int64]*productv1.Product, len(protoProducts))
 	for _, p := range protoProducts {
@@ -31,15 +25,17 @@ func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Pro
 		if !ok {
 			unavailable = append(unavailable, domain.OrderLine{
 				ProductID:     item.ProductID,
+				SKUID:         item.SKUID,
 				Quantity:      item.Quantity,
 				Available:     false,
-				UnavailReason: "鍟嗗搧涓嶅瓨鍦?,
+				UnavailReason: "product not found",
 			})
 			continue
 		}
 		if !p.InStock {
 			unavailable = append(unavailable, domain.OrderLine{
 				ProductID:     p.Id,
+				SKUID:         item.SKUID,
 				Name:          p.Name,
 				Picture:       p.Picture,
 				Price:         p.Price,
@@ -47,12 +43,13 @@ func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Pro
 				Quantity:      item.Quantity,
 				Subtotal:      p.Price * item.Quantity,
 				Available:     false,
-				UnavailReason: "鍟嗗搧宸蹭笅鏋?,
+				UnavailReason: "product out of stock",
 			})
 			continue
 		}
 		available = append(available, domain.OrderLine{
 			ProductID: p.Id,
+			SKUID:     item.SKUID,
 			Name:      p.Name,
 			Picture:   p.Picture,
 			Price:     p.Price,
@@ -65,7 +62,6 @@ func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Pro
 	return
 }
 
-// toCouponOrderItems 浠?OrderLine 鎻愬彇 coupon 鏈嶅姟瑕佹眰鐨?OrderItem
 func toCouponOrderItems(lines []domain.OrderLine) []*couponv1.OrderItem {
 	result := make([]*couponv1.OrderItem, 0, len(lines))
 	for _, l := range lines {
@@ -81,10 +77,7 @@ func toCouponOrderItems(lines []domain.OrderLine) []*couponv1.OrderItem {
 	return result
 }
 
-// toCouponOptions 灏?UserCoupon 鍒楄〃杞负 domain CouponOption锛屽惈姣忚鎽婂垎鐨勪紭鎯犻噾棰濄€?
-// lines 鍙寘鍚?Available=true 鐨勮鍗曡锛岀敤浜庢寜姣斾緥鍒嗛厤鎶樻墸銆?
 func toCouponOptions(coupons []*couponv1.UserCoupon, lines []domain.OrderLine) []domain.CouponOption {
-	// 璁＄畻鍙敤琛岀殑鍟嗗搧鎬讳环
 	var productTotal int64
 	for _, l := range lines {
 		if l.Available {
@@ -109,17 +102,16 @@ func toCouponOptions(coupons []*couponv1.UserCoupon, lines []domain.OrderLine) [
 	return result
 }
 
-// calculateCouponDiscount 鏍规嵁鍒告ā鏉跨被鍨嬭绠楁€讳紭鎯犻噾棰?
 func calculateCouponDiscount(tmpl *couponv1.CouponTemplate, productTotal int64) int64 {
 	switch tmpl.Type {
-	case couponv1.CouponType_COUPON_TYPE_AMOUNT: // 婊″噺
+	case couponv1.CouponType_COUPON_TYPE_AMOUNT:
 		if productTotal >= tmpl.Threshold {
 			return tmpl.DiscountValue
 		}
 		return 0
-	case couponv1.CouponType_COUPON_TYPE_FIXED: // 绔嬪噺
+	case couponv1.CouponType_COUPON_TYPE_FIXED:
 		return tmpl.DiscountValue
-	case couponv1.CouponType_COUPON_TYPE_PERCENT: // 鎶樻墸锛屽 DiscountValue=80 琛ㄧず8鎶?
+	case couponv1.CouponType_COUPON_TYPE_PERCENT:
 		discount := productTotal * (100 - tmpl.DiscountValue) / 100
 		if tmpl.MaxDiscount > 0 && discount > tmpl.MaxDiscount {
 			discount = tmpl.MaxDiscount
@@ -130,8 +122,6 @@ func calculateCouponDiscount(tmpl *couponv1.CouponTemplate, productTotal int64) 
 	}
 }
 
-// allocateDiscountToLines 鎸夎鍗曡灏忚姣斾緥鍒嗛厤鎬绘姌鎵ｏ紝浣欐暟褰掓渶璐电殑琛岋紙閬垮厤鑸嶅叆涓㈠垎锛夈€?
-// 杩斿洖 map[ProductID]discountAmount銆?
 func allocateDiscountToLines(lines []domain.OrderLine, totalDiscount, productTotal int64) map[int64]int64 {
 	if totalDiscount == 0 || productTotal == 0 {
 		return nil
@@ -146,18 +136,15 @@ func allocateDiscountToLines(lines []domain.OrderLine, totalDiscount, productTot
 		if !l.Available {
 			continue
 		}
-		// 鎸夋瘮渚嬶細lineDiscount = totalDiscount * lineSubtotal / productTotal
 		lineDiscount := totalDiscount * l.Subtotal / productTotal
 		result[l.ProductID] = lineDiscount
 		allocated += lineDiscount
-		// 璁板綍灏忚鏈€澶х殑琛岋紝鐢ㄤ簬鎺ユ敹浣欐暟
 		if l.Subtotal > maxSubtotal {
 			maxSubtotal = l.Subtotal
 			maxProductID = l.ProductID
 		}
 	}
 
-	// 浣欐暟锛堣垗鍏ヨ宸級褰掓渶璐电殑琛?
 	if remainder := totalDiscount - allocated; remainder > 0 && maxProductID != 0 {
 		result[maxProductID] += remainder
 	}
@@ -165,19 +152,23 @@ func allocateDiscountToLines(lines []domain.OrderLine, totalDiscount, productTot
 	return result
 }
 
-// toInventoryStockItems 灏?CheckoutItem 杞负 inventory 鏈嶅姟鐨?StockItem
 func toInventoryStockItems(items []domain.CheckoutItem) []*inventoryv1.StockItem {
 	result := make([]*inventoryv1.StockItem, 0, len(items))
+	indexByProductID := make(map[int64]int, len(items))
 	for _, item := range items {
+		if idx, ok := indexByProductID[item.ProductID]; ok {
+			result[idx].Quantity += int32(item.Quantity)
+			continue
+		}
 		result = append(result, &inventoryv1.StockItem{
 			ProductId: item.ProductID,
 			Quantity:  int32(item.Quantity),
 		})
+		indexByProductID[item.ProductID] = len(result) - 1
 	}
 	return result
 }
 
-// toOrderAddress 灏?domain Address 杞负 order proto Address
 func toOrderAddress(addr domain.Address) *orderv1.Address {
 	return &orderv1.Address{
 		StreetAddress: addr.Street,
@@ -188,7 +179,6 @@ func toOrderAddress(addr domain.Address) *orderv1.Address {
 	}
 }
 
-// toOrderItems 灏?OrderLine 杞负 order proto OrderItem
 func toOrderItems(lines []domain.OrderLine, currency string) []*orderv1.OrderItem {
 	result := make([]*orderv1.OrderItem, 0, len(lines))
 	for _, line := range lines {
@@ -201,16 +191,15 @@ func toOrderItems(lines []domain.OrderLine, currency string) []*orderv1.OrderIte
 		}
 		result = append(result, &orderv1.OrderItem{
 			ProductId:        line.ProductID,
+			SkuId:            line.SKUID,
 			Quantity:         line.Quantity,
 			SnapshotPrice:    line.Price,
 			SnapshotCurrency: snapCurrency,
-			ConvertedPrice:   line.Price, // TODO: 姹囩巼杞崲
+			ConvertedPrice:   line.Price,
 		})
 	}
 	return result
 }
-
-// ==================== 閫氱敤杈呭姪鍑芥暟 ====================
 
 func extractProductIDs(items []domain.CheckoutItem) []int64 {
 	ids := make([]int64, 0, len(items))
@@ -220,7 +209,21 @@ func extractProductIDs(items []domain.CheckoutItem) []int64 {
 	return ids
 }
 
-// sumSelectedCouponDiscount 姹囨€荤敤鎴烽€変腑鐨勪紭鎯犲埜鐨勬姌鎵ｉ噾棰?
+func validateCheckoutItems(items []domain.CheckoutItem) error {
+	for _, item := range items {
+		if item.ProductID <= 0 {
+			return fmt.Errorf("product_id is required")
+		}
+		if item.SKUID <= 0 {
+			return fmt.Errorf("sku_id is required")
+		}
+		if item.Quantity <= 0 {
+			return fmt.Errorf("quantity must be positive")
+		}
+	}
+	return nil
+}
+
 func sumSelectedCouponDiscount(coupons []domain.CouponOption, selectedIDs []int64) int64 {
 	selectedSet := make(map[int64]struct{}, len(selectedIDs))
 	for _, id := range selectedIDs {
@@ -235,13 +238,10 @@ func sumSelectedCouponDiscount(coupons []domain.CouponOption, selectedIDs []int6
 	return total
 }
 
-// operationID 鐢熸垚搴撳瓨鎿嶄綔鐨勫箓绛塈D
 func operationID(orderID int64, action string) string {
 	return fmt.Sprintf("order_%d_%s", orderID, action)
 }
 
-// toInsufficientStockError 灏?inventory 鏈嶅姟杩斿洖鐨勫簱瀛樹笉瓒虫槑缁嗚浆涓?domain 缁撴瀯鍖栭敊璇€?
-// lines 鐢ㄤ簬琛ュ厖鍟嗗搧鍚嶇О锛坧roto 鍙湁 product_id锛夈€?
 func toInsufficientStockError(items []*inventoryv1.InsufficientItem, lines []domain.OrderLine) *domain.InsufficientStockError {
 	nameMap := make(map[int64]string, len(lines))
 	for _, l := range lines {
@@ -260,7 +260,6 @@ func toInsufficientStockError(items []*inventoryv1.InsufficientItem, lines []dom
 	return &domain.InsufficientStockError{Items: result}
 }
 
-// toCouponUnavailableError 灏?coupon 鏈嶅姟杩斿洖鐨勫け璐ユ槑缁嗚浆涓?domain 缁撴瀯鍖栭敊璇€?
 func toCouponUnavailableError(failures []*couponv1.CouponFailure) *domain.CouponUnavailableError {
 	items := make([]domain.CouponFailureItem, len(failures))
 	for i, f := range failures {
@@ -271,5 +270,3 @@ func toCouponUnavailableError(failures []*couponv1.CouponFailure) *domain.Coupon
 	}
 	return &domain.CouponUnavailableError{Failures: items}
 }
-
-

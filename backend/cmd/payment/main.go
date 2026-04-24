@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -24,7 +25,7 @@ func main() {
 
 	go func() {
 		port := viper.GetInt("http.server.port")
-		log.Printf("Payment HTTP service (for wechat callback) starting on port %d...", port)
+		log.Printf("Payment HTTP service starting on port %d...", port)
 		if err := app.HTTPServer.Start(); err != nil {
 			log.Fatalf("HTTP server run error: %v", err)
 		}
@@ -51,19 +52,23 @@ func main() {
 
 func initViperWatch() {
 	cwd, _ := os.Getwd()
-	viper.SetConfigName("dev")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./internal/payment/config")
-	viper.AddConfigPath("../internal/payment/config")
-	viper.AddConfigPath("../../internal/payment/config")
+	configPath := pflag.String("config", "internal/payment/config/dev.yaml", "payment config file path")
+	pflag.Parse()
 
+	viper.SetConfigFile(*configPath)
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w (宸ヤ綔鐩綍: %s)", err, cwd))
+		panic(fmt.Errorf("read payment config failed: %w (cwd: %s)", err, cwd))
 	}
 
+	viper.AutomaticEnv()
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
+	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
+	_ = viper.BindEnv("payment.provider", "PAYMENT_PROVIDER")
+	_ = viper.BindEnv("alipay.app_id", "ALIPAY_APP_ID")
+	_ = viper.BindEnv("alipay.private_key", "ALIPAY_PRIVATE_KEY")
+	_ = viper.BindEnv("alipay.public_key", "ALIPAY_PUBLIC_KEY")
+	_ = viper.BindEnv("alipay.notify_url", "ALIPAY_NOTIFY_URL")
 	viper.WatchConfig()
 
-	log.Println("閰嶇疆鏂囦欢鍔犺浇鎴愬姛:", viper.ConfigFileUsed())
+	log.Println("payment config loaded:", viper.ConfigFileUsed())
 }
-
-

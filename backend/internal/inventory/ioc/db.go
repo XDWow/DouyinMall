@@ -5,6 +5,7 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/config"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/infra/db"
+	"github.com/XDWow/DouyinMall/backend/pkg/mysqlconfig"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -13,14 +14,29 @@ import (
 func InitDB() *gorm.DB {
 	// 默认配置兜底
 	c := config.DBConfig{
-		DSN: "root:root@tcp(localhost:3306)/douyin_mall",
+		Host:     "localhost",
+		Port:     3306,
+		User:     "root",
+		Database: "douyin_mall",
 	}
 	err := viper.UnmarshalKey("db", &c)
 	if err != nil {
 		panic(fmt.Errorf("数据库初始化读取配置失败: %w", err))
 	}
 
-	database, err := gorm.Open(mysql.Open(c.DSN), &gorm.Config{})
+	dsn, err := mysqlconfig.BuildDSN(mysqlconfig.Config{
+		Host:     c.Host,
+		Port:     c.Port,
+		User:     c.User,
+		Password: c.Password,
+		Database: c.Database,
+		Params:   c.Params,
+	})
+	if err != nil {
+		panic(fmt.Errorf("数据库初始化配置失败: %w", err))
+	}
+
+	database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(fmt.Errorf("数据库初始化连接失败: %w", err))
 	}
@@ -32,5 +48,3 @@ func InitDB() *gorm.DB {
 	}
 	return database
 }
-
-

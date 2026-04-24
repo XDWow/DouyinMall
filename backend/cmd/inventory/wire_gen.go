@@ -42,5 +42,3 @@ type App struct {
 	GRPCServer    server.Server
 	OrderConsumer *mq.OrderConsumer
 }
-
-

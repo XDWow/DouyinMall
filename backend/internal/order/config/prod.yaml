@@ -1,0 +1,44 @@
+db:
+  host: "134.175.67.79"
+  port: 3306
+  user: "app"
+  password: ""
+  database: "douyin_mall"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "114.132.75.56:16379"
+  password: ""
+  db: 0
+
+etcd:
+  endpoints:
+    - "42.193.160.221:2379"
+
+grpc:
+  server:
+    name: order.service
+    port: 8095
+    etcdTTL: 60
+
+mcp:
+  server:
+    addr: ""
+    name: "order-mcp"
+    version: "1.0.0"
+  upstream:
+    service_name: "order.service"
+    direct_addr: "127.0.0.1:8095"
+  tools:
+    - key: "get_order"
+      name: "get_order"
+      description: "Get a single order summary."
+      enabled: true
+    - key: "list_user_orders"
+      name: "list_user_orders"
+      description: "List the first page of user orders."
+      enabled: true
+
+kafka:
+  brokers:
+    - "43.136.121.171:29092"

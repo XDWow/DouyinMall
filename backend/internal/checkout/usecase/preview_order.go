@@ -48,6 +48,9 @@ func (uc *PreviewOrderUseCase) Execute(ctx context.Context, input PreviewOrderIn
 	if len(input.Items) == 0 {
 		return nil, domain.ErrInvalidInput
 	}
+	if err := validateCheckoutItems(input.Items); err != nil {
+		return nil, err
+	}
 
 	// 1. 鏌ヨ鍟嗗搧
 	resp, err := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Id: extractProductIDs(input.Items)})
@@ -74,5 +77,3 @@ func (uc *PreviewOrderUseCase) Execute(ctx context.Context, input PreviewOrderIn
 		AvailableCoupons: coupons,
 	}, nil
 }
-
-

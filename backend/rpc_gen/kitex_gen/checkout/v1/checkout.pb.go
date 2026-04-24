@@ -11,6 +11,7 @@ import (
 type CheckoutItem struct {
 	ProductId int64 `protobuf:"varint,1,opt,name=product_id" json:"product_id,omitempty"`
 	Quantity  int64 `protobuf:"varint,2,opt,name=quantity" json:"quantity,omitempty"`
+	SkuId     int64 `protobuf:"varint,3,opt,name=sku_id" json:"sku_id,omitempty"`
 }
 
 func (x *CheckoutItem) Reset() { *x = CheckoutItem{} }
@@ -29,6 +30,13 @@ func (x *CheckoutItem) GetProductId() int64 {
 func (x *CheckoutItem) GetQuantity() int64 {
 	if x != nil {
 		return x.Quantity
+	}
+	return 0
+}
+
+func (x *CheckoutItem) GetSkuId() int64 {
+	if x != nil {
+		return x.SkuId
 	}
 	return 0
 }
@@ -158,6 +166,7 @@ type ProductDetail struct {
 	Subtotal          int64  `protobuf:"varint,7,opt,name=subtotal" json:"subtotal,omitempty"`
 	Available         bool   `protobuf:"varint,8,opt,name=available" json:"available,omitempty"`
 	UnavailableReason string `protobuf:"bytes,9,opt,name=unavailable_reason" json:"unavailable_reason,omitempty"`
+	SkuId             int64  `protobuf:"varint,10,opt,name=sku_id" json:"sku_id,omitempty"`
 }
 
 func (x *ProductDetail) Reset() { *x = ProductDetail{} }
@@ -227,6 +236,13 @@ func (x *ProductDetail) GetUnavailableReason() string {
 		return x.UnavailableReason
 	}
 	return ""
+}
+
+func (x *ProductDetail) GetSkuId() int64 {
+	if x != nil {
+		return x.SkuId
+	}
+	return 0
 }
 
 type CouponItem struct {
@@ -487,5 +503,3 @@ type CheckoutService interface {
 	PlaceOrder(ctx context.Context, req *PlaceOrderReq) (res *PlaceOrderResp, err error)
 	PayOrder(ctx context.Context, req *PayOrderReq) (res *PayOrderResp, err error)
 }
-
-

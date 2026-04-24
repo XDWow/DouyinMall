@@ -53,7 +53,9 @@ func (h *InventoryHandler) GetInventory(ctx context.Context, req *inventoryv1.Ge
 
 	inv := inventories[0]
 	return &inventoryv1.GetInventoryResp{
-		ProductId: inv.ProductID,
+		ProductId:      inv.ProductID,
+		AvailableStock: inv.Stock,
+		SoldStock:      0,
 	}, nil
 }
 
@@ -228,5 +230,3 @@ func (h *InventoryHandler) AdjustStock(ctx context.Context, req *inventoryv1.Adj
 
 	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
 }
-
-

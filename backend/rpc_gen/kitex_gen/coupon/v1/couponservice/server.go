@@ -23,4 +23,3 @@ func RegisterService(svr server.Server, handler v1.CouponService, opts ...server
 	return svr.RegisterService(serviceInfo(), handler, opts...)
 }
 
-

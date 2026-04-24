@@ -9,12 +9,12 @@ import (
 
 type CartService interface {
 	AddItems(ctx context.Context, userID int64, items []domain.CartItem) error
-	DeleteItems(ctx context.Context, userID int64, productIDs []int64) error
+	DeleteItems(ctx context.Context, userID int64, skuIDs []int64) error
 	GetCart(ctx context.Context, userID int64) (domain.Cart, error)
 	EmptyCart(ctx context.Context, userID int64) error
 	ChangeQty(ctx context.Context, userID int64, item domain.CartItem) error
-	IncrementQty(ctx context.Context, userID, productID int64) (newQuantity int64, err error)
-	DecrementQty(ctx context.Context, userID, productID int64) (newQuantity int64, err error)
+	IncrementQty(ctx context.Context, userID, skuID int64) (newQuantity int64, err error)
+	DecrementQty(ctx context.Context, userID, skuID int64) (newQuantity int64, err error)
 }
 
 type cartService struct {
@@ -31,8 +31,8 @@ func (s *cartService) AddItems(ctx context.Context, userID int64, items []domain
 	return s.repo.AddItems(ctx, userID, items)
 }
 
-func (s *cartService) DeleteItems(ctx context.Context, userID int64, productIDs []int64) error {
-	return s.repo.DeleteItems(ctx, userID, productIDs)
+func (s *cartService) DeleteItems(ctx context.Context, userID int64, skuIDs []int64) error {
+	return s.repo.DeleteItems(ctx, userID, skuIDs)
 }
 
 func (s *cartService) GetCart(ctx context.Context, userID int64) (domain.Cart, error) {
@@ -47,12 +47,10 @@ func (s *cartService) ChangeQty(ctx context.Context, userID int64, item domain.C
 	return s.repo.ChangeQty(ctx, userID, item)
 }
 
-func (s *cartService) IncrementQty(ctx context.Context, userID, productID int64) (newQuantity int64, err error) {
-	return s.repo.IncrementQty(ctx, userID, productID)
+func (s *cartService) IncrementQty(ctx context.Context, userID, skuID int64) (newQuantity int64, err error) {
+	return s.repo.IncrementQty(ctx, userID, skuID)
 }
 
-func (s *cartService) DecrementQty(ctx context.Context, userID, productID int64) (newQuantity int64, err error) {
-	return s.repo.DecrementQty(ctx, userID, productID)
+func (s *cartService) DecrementQty(ctx context.Context, userID, skuID int64) (newQuantity int64, err error) {
+	return s.repo.DecrementQty(ctx, userID, skuID)
 }
-
-

@@ -39,7 +39,7 @@ type CartIntegrationSuite struct {
 
 func TestCartIntegration(t *testing.T) {
 	if testing.Short() {
-		t.Skip("璺宠繃闆嗘垚娴嬭瘯锛堢煭妯″紡锛?)
+		t.Skip("skipping integration test in short mode")
 	}
 	suite.Run(t, new(CartIntegrationSuite))
 }
@@ -47,7 +47,6 @@ func TestCartIntegration(t *testing.T) {
 func (s *CartIntegrationSuite) SetupSuite() {
 	ctx := context.Background()
 
-	// 鍚姩 MySQL 瀹瑰櫒
 	mysqlReq := testcontainers.ContainerRequest{
 		Image:        "mysql:8.0",
 		ExposedPorts: []string{"3306/tcp"},
@@ -74,18 +73,13 @@ func (s *CartIntegrationSuite) SetupSuite() {
 
 	dsn := "root:root@tcp(" + mysqlHost + ":" + mysqlPort.Port() + ")/douyinmall_test?charset=utf8mb4&parseTime=True&loc=Local"
 
-	// 娣诲姞閲嶈瘯閫昏緫锛岀‘淇濊繛鎺ユ垚鍔?
 	var db *gorm.DB
 	for i := 0; i < 5; i++ {
 		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
 		if err == nil {
-			// 娴嬭瘯杩炴帴
-			sqlDB, err := db.DB()
-			if err == nil {
-				err = sqlDB.Ping()
-				if err == nil {
-					break
-				}
+			sqlDB, dbErr := db.DB()
+			if dbErr == nil && sqlDB.Ping() == nil {
+				break
 			}
 		}
 		if i < 4 {
@@ -94,11 +88,8 @@ func (s *CartIntegrationSuite) SetupSuite() {
 	}
 	require.NoError(s.T(), err)
 	s.db = db
+	require.NoError(s.T(), db.AutoMigrate(&dao.CartItem{}))
 
-	err = db.AutoMigrate(&dao.CartItem{})
-	require.NoError(s.T(), err)
-
-	// 鍚姩 Redis 瀹瑰櫒
 	redisReq := testcontainers.ContainerRequest{
 		Image:        "redis:7-alpine",
 		ExposedPorts: []string{"6379/tcp"},
@@ -122,22 +113,19 @@ func (s *CartIntegrationSuite) SetupSuite() {
 	})
 	s.redis = redisClient
 
-	// 鍒濆鍖栨湇鍔＄粍浠?
 	cartDAO := dao.NewGORMCartDAO(db)
 	cartCache := cache.NewRedisCache(redisClient)
-	testLogger := logger.NewNopLogger()
-	cartRepo := repository.NewCachedCartRepository(cartCache, cartDAO, testLogger)
-	cartSvc := service.NewCartService(cartRepo)
-	s.cartHandler = handler.NewCartHandler(cartSvc)
+	cartRepo := repository.NewCachedCartRepository(cartCache, cartDAO, logger.NewNopLogger())
+	s.cartHandler = handler.NewCartHandler(service.NewCartService(cartRepo))
 }
 
 func (s *CartIntegrationSuite) TearDownSuite() {
 	ctx := context.Background()
 	if s.mysqlContainer != nil {
-		s.mysqlContainer.Terminate(ctx)
+		_ = s.mysqlContainer.Terminate(ctx)
 	}
 	if s.redisContainer != nil {
-		s.redisContainer.Terminate(ctx)
+		_ = s.redisContainer.Terminate(ctx)
 	}
 }
 
@@ -150,58 +138,42 @@ func (s *CartIntegrationSuite) SetupTest() {
 func (s *CartIntegrationSuite) TestAddItem() {
 	ctx := context.Background()
 
-	req := &cartv1.AddItemReq{
-		UserId:     1001,
-		ProductIds: []int64{2001},
-	}
-
-	resp, err := s.cartHandler.AddItem(ctx, req)
+	resp, err := s.cartHandler.AddItem(ctx, addItemReq(1001, 2001, 3001, 1))
 	require.NoError(s.T(), err)
 	assert.NotNil(s.T(), resp)
 
-	// 楠岃瘉 Redis
-	key := "cart:1001"
-	result, err := s.redis.HGetAll(ctx, key).Result()
+	qty, err := s.redis.HGet(ctx, "cart:1001", "3001").Int64()
 	require.NoError(s.T(), err)
-	assert.Equal(s.T(), "1", result["2001"])
+	assert.Equal(s.T(), int64(1), qty)
+	productID, err := s.redis.HGet(ctx, "cart:1001:products", "3001").Int64()
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), int64(2001), productID)
 
-	// 绛夊緟寮傛鍐?MySQL 瀹屾垚
 	time.Sleep(100 * time.Millisecond)
 
-	// 楠岃瘉 MySQL
 	var item dao.CartItem
-	err = s.db.Where("user_id = ? AND product_id = ?", 1001, 2001).First(&item).Error
+	err = s.db.Where("user_id = ? AND sku_id = ?", 1001, 3001).First(&item).Error
 	require.NoError(s.T(), err)
+	assert.Equal(s.T(), int64(2001), item.ProductID)
 	assert.Equal(s.T(), int64(1), item.Quantity)
 }
 
-func (s *CartIntegrationSuite) TestAddItem_Duplicate() {
+func (s *CartIntegrationSuite) TestAddItemDuplicateIncrementsSameSKU() {
 	ctx := context.Background()
 
-	req := &cartv1.AddItemReq{
-		UserId:     1001,
-		ProductIds: []int64{2001},
-	}
-
-	// 绗竴娆℃坊鍔?
-	_, err := s.cartHandler.AddItem(ctx, req)
+	_, err := s.cartHandler.AddItem(ctx, addItemReq(1001, 2001, 3001, 1))
+	require.NoError(s.T(), err)
+	_, err = s.cartHandler.AddItem(ctx, addItemReq(1001, 2001, 3001, 1))
 	require.NoError(s.T(), err)
 
-	// 绗簩娆℃坊鍔狅紙搴旇绱姞锛?
-	_, err = s.cartHandler.AddItem(ctx, req)
-	require.NoError(s.T(), err)
-
-	// 绛夊緟寮傛鍐?MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 楠岃瘉鏁伴噺鏄?2
-	key := "cart:1001"
-	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
+	qty, err := s.redis.HGet(ctx, "cart:1001", "3001").Int64()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(2), qty)
 
 	var item dao.CartItem
-	err = s.db.Where("user_id = ? AND product_id = ?", 1001, 2001).First(&item).Error
+	err = s.db.Where("user_id = ? AND sku_id = ?", 1001, 3001).First(&item).Error
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(2), item.Quantity)
 }
@@ -209,106 +181,82 @@ func (s *CartIntegrationSuite) TestAddItem_Duplicate() {
 func (s *CartIntegrationSuite) TestGetCart() {
 	ctx := context.Background()
 
-	// 鍏堟坊鍔犲嚑涓晢鍝?
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2002}})
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2001, 3001, 1))
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2002, 3002, 1))
 	time.Sleep(100 * time.Millisecond)
 
-	req := &cartv1.GetCartReq{
-		UserId: 1001,
-	}
-
-	resp, err := s.cartHandler.GetCart(ctx, req)
+	resp, err := s.cartHandler.GetCart(ctx, &cartv1.GetCartReq{UserId: 1001})
 	require.NoError(s.T(), err)
-	assert.NotNil(s.T(), resp)
-	assert.Equal(s.T(), int64(1001), resp.Cart.UserId)
-	assert.Len(s.T(), resp.Cart.Items, 2)
+	require.NotNil(s.T(), resp.GetCart())
+	assert.Equal(s.T(), int64(1001), resp.GetCart().GetUserId())
+	assert.Len(s.T(), resp.GetCart().GetItems(), 2)
 
-	productIDs := make(map[int64]bool)
-	for _, item := range resp.Cart.Items {
-		productIDs[item.ProductId] = true
+	skuIDs := make(map[int64]bool)
+	for _, item := range resp.GetCart().GetItems() {
+		skuIDs[item.GetSkuId()] = true
 	}
-	assert.True(s.T(), productIDs[2001])
-	assert.True(s.T(), productIDs[2002])
+	assert.True(s.T(), skuIDs[3001])
+	assert.True(s.T(), skuIDs[3002])
 }
 
-func (s *CartIntegrationSuite) TestGetCart_Empty() {
+func (s *CartIntegrationSuite) TestGetCartEmpty() {
 	ctx := context.Background()
 
-	req := &cartv1.GetCartReq{
-		UserId: 9999,
-	}
-
-	resp, err := s.cartHandler.GetCart(ctx, req)
+	resp, err := s.cartHandler.GetCart(ctx, &cartv1.GetCartReq{UserId: 9999})
 	require.NoError(s.T(), err)
-	assert.NotNil(s.T(), resp)
-	assert.Equal(s.T(), int64(9999), resp.Cart.UserId)
-	assert.Len(s.T(), resp.Cart.Items, 0)
+	require.NotNil(s.T(), resp.GetCart())
+	assert.Equal(s.T(), int64(9999), resp.GetCart().GetUserId())
+	assert.Empty(s.T(), resp.GetCart().GetItems())
 }
 
 func (s *CartIntegrationSuite) TestDeleteItem() {
 	ctx := context.Background()
 
-	// 鍏堟坊鍔犲晢鍝?
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2001, 3001, 1))
 	time.Sleep(100 * time.Millisecond)
 
-	// 鍒犻櫎鍟嗗搧
-	req := &cartv1.DeleteItemReq{
-		UserId:     1001,
-		ProductIds: []int64{2001},
-	}
-
-	resp, err := s.cartHandler.DeleteItem(ctx, req)
+	resp, err := s.cartHandler.DeleteItem(ctx, &cartv1.DeleteItemReq{
+		UserId: 1001,
+		SkuIds: []int64{3001},
+	})
 	require.NoError(s.T(), err)
 	assert.NotNil(s.T(), resp)
 
-	// 绛夊緟寮傛鍒犻櫎 MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 楠岃瘉 Redis 涓凡鍒犻櫎
-	key := "cart:1001"
-	exists, err := s.redis.HExists(ctx, key, "2001").Result()
+	exists, err := s.redis.HExists(ctx, "cart:1001", "3001").Result()
+	require.NoError(s.T(), err)
+	assert.False(s.T(), exists)
+	exists, err = s.redis.HExists(ctx, "cart:1001:products", "3001").Result()
 	require.NoError(s.T(), err)
 	assert.False(s.T(), exists)
 
-	// 楠岃瘉 MySQL 涓凡鍒犻櫎
 	var count int64
-	s.db.Model(&dao.CartItem{}).Where("user_id = ? AND product_id = ?", 1001, 2001).Count(&count)
+	s.db.Model(&dao.CartItem{}).Where("user_id = ? AND sku_id = ?", 1001, 3001).Count(&count)
 	assert.Equal(s.T(), int64(0), count)
 }
 
 func (s *CartIntegrationSuite) TestChangeQty() {
 	ctx := context.Background()
 
-	// 鍏堟坊鍔犲晢鍝?
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2001, 3001, 1))
 	time.Sleep(100 * time.Millisecond)
 
-	// 淇敼鏁伴噺涓?5
-	req := &cartv1.ChangeQtyReq{
+	resp, err := s.cartHandler.ChangeQty(ctx, &cartv1.ChangeQtyReq{
 		UserId: 1001,
-		Item: &cartv1.CartItem{
-			ProductId: 2001,
-			Quantity:  5,
-		},
-	}
-
-	resp, err := s.cartHandler.ChangeQty(ctx, req)
+		Item:   cartItem(2001, 3001, 5),
+	})
 	require.NoError(s.T(), err)
 	assert.NotNil(s.T(), resp)
 
-	// 绛夊緟寮傛鍐?MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 楠岃瘉鏁伴噺鏄?5
-	key := "cart:1001"
-	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
+	qty, err := s.redis.HGet(ctx, "cart:1001", "3001").Int64()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(5), qty)
 
 	var item dao.CartItem
-	err = s.db.Where("user_id = ? AND product_id = ?", 1001, 2001).First(&item).Error
+	err = s.db.Where("user_id = ? AND sku_id = ?", 1001, 3001).First(&item).Error
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(5), item.Quantity)
 }
@@ -316,27 +264,20 @@ func (s *CartIntegrationSuite) TestChangeQty() {
 func (s *CartIntegrationSuite) TestIncrementQty() {
 	ctx := context.Background()
 
-	// 鍏堟坊鍔犲晢鍝?
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2001, 3001, 1))
 	time.Sleep(100 * time.Millisecond)
 
-	// 澧炲姞鏁伴噺
-	req := &cartv1.IncrementQtyReq{
-		UserId:    1001,
-		ProductId: 2001,
-	}
-
-	resp, err := s.cartHandler.IncrementQty(ctx, req)
+	resp, err := s.cartHandler.IncrementQty(ctx, &cartv1.IncrementQtyReq{
+		UserId: 1001,
+		SkuId:  3001,
+	})
 	require.NoError(s.T(), err)
-	assert.NotNil(s.T(), resp)
-	assert.Equal(s.T(), int64(2), resp.NewQuantity)
+	require.NotNil(s.T(), resp)
+	assert.Equal(s.T(), int64(2), resp.GetNewQuantity())
 
-	// 绛夊緟寮傛鍐?MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 楠岃瘉鏁伴噺鏄?2
-	key := "cart:1001"
-	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
+	qty, err := s.redis.HGet(ctx, "cart:1001", "3001").Int64()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(2), qty)
 }
@@ -344,117 +285,104 @@ func (s *CartIntegrationSuite) TestIncrementQty() {
 func (s *CartIntegrationSuite) TestDecrementQty() {
 	ctx := context.Background()
 
-	// 鍏堟坊鍔犲晢鍝侊紝鏁伴噺璁句负 3
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2001, 3001, 3))
 	time.Sleep(100 * time.Millisecond)
 
-	// 鍑忓皯鏁伴噺
-	req := &cartv1.DecrementQtyReq{
-		UserId:    1001,
-		ProductId: 2001,
-	}
-
-	resp, err := s.cartHandler.DecrementQty(ctx, req)
+	resp, err := s.cartHandler.DecrementQty(ctx, &cartv1.DecrementQtyReq{
+		UserId: 1001,
+		SkuId:  3001,
+	})
 	require.NoError(s.T(), err)
-	assert.NotNil(s.T(), resp)
-	assert.Equal(s.T(), int64(2), resp.NewQuantity)
+	require.NotNil(s.T(), resp)
+	assert.Equal(s.T(), int64(2), resp.GetNewQuantity())
 
-	// 绛夊緟寮傛鍐?MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 楠岃瘉鏁伴噺鏄?2
-	key := "cart:1001"
-	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
+	qty, err := s.redis.HGet(ctx, "cart:1001", "3001").Int64()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(2), qty)
 }
 
-func (s *CartIntegrationSuite) TestDecrementQty_MinQuantity() {
+func (s *CartIntegrationSuite) TestDecrementQtyMinQuantity() {
 	ctx := context.Background()
 
-	// 鍏堟坊鍔犲晢鍝侊紙鏁伴噺涓?1锛?
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2001, 3001, 1))
 	time.Sleep(100 * time.Millisecond)
 
-	// 灏濊瘯鍑忓皯鏁伴噺锛堝簲璇ュけ璐ワ級
-	req := &cartv1.DecrementQtyReq{
-		UserId:    1001,
-		ProductId: 2001,
-	}
-
-	resp, err := s.cartHandler.DecrementQty(ctx, req)
+	resp, err := s.cartHandler.DecrementQty(ctx, &cartv1.DecrementQtyReq{
+		UserId: 1001,
+		SkuId:  3001,
+	})
 	assert.Error(s.T(), err)
 	assert.Nil(s.T(), resp)
-	assert.Contains(s.T(), err.Error(), "涓嶈兘鍐嶅噺灏?)
+	assert.Contains(s.T(), err.Error(), "cannot be decremented")
 }
 
 func (s *CartIntegrationSuite) TestEmptyCart() {
 	ctx := context.Background()
 
-	// 鍏堟坊鍔犲嚑涓晢鍝?
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2001}})
-	s.cartHandler.AddItem(ctx, &cartv1.AddItemReq{UserId: 1001, ProductIds: []int64{2002}})
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2001, 3001, 1))
+	require.NoError(s.T(), addCartItem(ctx, s.cartHandler, 1001, 2002, 3002, 1))
 	time.Sleep(100 * time.Millisecond)
 
-	// 娓呯┖璐墿杞?
-	req := &cartv1.EmptyCartReq{
-		UserId: 1001,
-	}
-
-	resp, err := s.cartHandler.EmptyCart(ctx, req)
+	resp, err := s.cartHandler.EmptyCart(ctx, &cartv1.EmptyCartReq{UserId: 1001})
 	require.NoError(s.T(), err)
 	assert.NotNil(s.T(), resp)
 
-	// 绛夊緟寮傛鍒犻櫎 MySQL
 	time.Sleep(100 * time.Millisecond)
 
-	// 楠岃瘉 Redis 宸叉竻绌?
-	key := "cart:1001"
-	exists, err := s.redis.Exists(ctx, key).Result()
+	exists, err := s.redis.Exists(ctx, "cart:1001", "cart:1001:products").Result()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(0), exists)
 
-	// 楠岃瘉 MySQL 宸叉竻绌?
 	var count int64
 	s.db.Model(&dao.CartItem{}).Where("user_id = ?", 1001).Count(&count)
 	assert.Equal(s.T(), int64(0), count)
 }
 
-func (s *CartIntegrationSuite) TestGetCart_RedisMiss_LoadFromMySQL() {
+func (s *CartIntegrationSuite) TestGetCartRedisMissLoadFromMySQL() {
 	ctx := context.Background()
 
-	// 鐩存帴鍦?MySQL 鎻掑叆鏁版嵁锛堟ā鎷?Redis miss锛?
-	item := dao.CartItem{
+	require.NoError(s.T(), s.db.Create(&dao.CartItem{
 		UserID:    1001,
 		ProductID: 2001,
+		SKUID:     3001,
 		Quantity:  3,
-	}
-	s.db.Create(&item)
+	}).Error)
+	require.NoError(s.T(), s.redis.Del(ctx, "cart:1001", "cart:1001:products").Err())
 
-	// 娓呯┖ Redis锛堟ā鎷?miss锛?
-	s.redis.Del(ctx, "cart:1001")
-
-	// 鑾峰彇璐墿杞︼紙搴旇浠?MySQL 鍔犺浇骞跺洖鍐?Redis锛?
-	req := &cartv1.GetCartReq{
-		UserId: 1001,
-	}
-
-	resp, err := s.cartHandler.GetCart(ctx, req)
+	resp, err := s.cartHandler.GetCart(ctx, &cartv1.GetCartReq{UserId: 1001})
 	require.NoError(s.T(), err)
-	assert.NotNil(s.T(), resp)
-	assert.Len(s.T(), resp.Cart.Items, 1)
-	assert.Equal(s.T(), int64(3), resp.Cart.Items[0].Quantity)
+	require.Len(s.T(), resp.GetCart().GetItems(), 1)
+	assert.Equal(s.T(), int64(3001), resp.GetCart().GetItems()[0].GetSkuId())
+	assert.Equal(s.T(), int64(3), resp.GetCart().GetItems()[0].GetQuantity())
 
-	// 绛夊緟寮傛鍥炲啓 Redis
 	time.Sleep(100 * time.Millisecond)
 
-	// 楠岃瘉 Redis 宸插洖鍐?
-	key := "cart:1001"
-	qty, err := s.redis.HGet(ctx, key, "2001").Int64()
+	qty, err := s.redis.HGet(ctx, "cart:1001", "3001").Int64()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), int64(3), qty)
+	productID, err := s.redis.HGet(ctx, "cart:1001:products", "3001").Int64()
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), int64(2001), productID)
 }
 
+func addItemReq(userID, productID, skuID, quantity int64) *cartv1.AddItemReq {
+	return &cartv1.AddItemReq{
+		UserId: userID,
+		Items:  []*cartv1.CartItem{cartItem(productID, skuID, quantity)},
+	}
+}
 
+func cartItem(productID, skuID, quantity int64) *cartv1.CartItem {
+	return &cartv1.CartItem{
+		ProductId: productID,
+		SkuId:     skuID,
+		Quantity:  quantity,
+	}
+}
+
+func addCartItem(ctx context.Context, h *handler.CartHandler, userID, productID, skuID, quantity int64) error {
+	_, err := h.AddItem(ctx, addItemReq(userID, productID, skuID, quantity))
+	return err
+}

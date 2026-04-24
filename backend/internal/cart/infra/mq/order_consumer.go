@@ -18,6 +18,7 @@ type OrderStatusUpdateEvent struct {
 	Status     OrderStatus `json:"status"`
 	OrderKind  string      `json:"order_kind,omitempty"`
 	ProductIDs []int64     `json:"product_ids,omitempty"`
+	SKUIDs     []int64     `json:"sku_ids,omitempty"`
 }
 
 type OrderStatus uint8
@@ -81,8 +82,8 @@ func (c *OrderConsumer) Consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdate
 	if evt.Status != OrderStatusPaid || evt.OrderKind != "CART" {
 		return nil
 	}
-	if evt.UserID == 0 || len(evt.ProductIDs) == 0 {
-		c.logger.Warn("paid cart order event missing user or products",
+	if evt.UserID == 0 || len(evt.SKUIDs) == 0 {
+		c.logger.Warn("paid cart order event missing user or skus",
 			logger.Int64("orderID", evt.OrderID))
 		return nil
 	}
@@ -93,9 +94,9 @@ func (c *OrderConsumer) Consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdate
 	c.logger.Info("delete paid cart items",
 		logger.Int64("orderID", evt.OrderID),
 		logger.Int64("userID", evt.UserID),
-		logger.Int("productCount", len(evt.ProductIDs)))
+		logger.Int("skuCount", len(evt.SKUIDs)))
 
-	if err := c.cartService.DeleteItems(ctx, evt.UserID, evt.ProductIDs); err != nil {
+	if err := c.cartService.DeleteItems(ctx, evt.UserID, evt.SKUIDs); err != nil {
 		c.logger.Warn("delete cart items failed",
 			logger.Int64("orderID", evt.OrderID),
 			logger.Int64("userID", evt.UserID),
@@ -110,5 +111,3 @@ func (c *OrderConsumer) Stop() error {
 	}
 	return nil
 }
-
-

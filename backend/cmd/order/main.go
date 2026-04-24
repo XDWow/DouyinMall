@@ -73,8 +73,9 @@ func initViperWatch() {
 
 	viper.AutomaticEnv()
 	viper.SetEnvPrefix("ORDER")
-	_ = viper.BindEnv("db.dsn", "DB_DSN")
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
 	_ = viper.BindEnv("redis.addr", "REDIS_ADDR")
+	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
 	_ = viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
 	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")

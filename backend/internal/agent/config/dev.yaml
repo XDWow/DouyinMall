@@ -1,4 +1,4 @@
-# 密钥：DB_DSN、LLM_API_KEY、QDRANT_HOST、QDRANT_PORT、QDRANT_COLLECTION（可选 QDRANT_API_KEY、QDRANT_USE_TLS，环境变量或 backend/.env）
+# 密钥：DB_PASSWORD、LLM_API_KEY、QDRANT_API_KEY 等放环境变量或 backend/.env；地址、端口、库名放本配置文件。
 grpc:
   server:
     port: 8087
@@ -12,7 +12,12 @@ http:
   idle_timeout_seconds: 120
 
 db:
-  dsn: ""
+  host: "douyinmall-mysql"
+  port: 3306
+  user: "root"
+  password: ""
+  database: "douyinmall_agent"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
   addr: "douyinmall-redis:6379"

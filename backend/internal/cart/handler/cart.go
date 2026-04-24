@@ -17,9 +17,13 @@ func NewCartHandler(cartService service.CartService) *CartHandler {
 }
 
 func (h *CartHandler) AddItem(ctx context.Context, req *cartv1.AddItemReq) (*cartv1.AddItemResp, error) {
-	items := make([]domain.CartItem, len(req.GetProductIds()))
-	for i, pid := range req.GetProductIds() {
-		items[i] = domain.CartItem{ProductID: pid, Quantity: 1}
+	items := make([]domain.CartItem, 0, len(req.GetItems()))
+	for _, item := range req.GetItems() {
+		items = append(items, domain.CartItem{
+			ProductID: item.GetProductId(),
+			SKUID:     item.GetSkuId(),
+			Quantity:  item.GetQuantity(),
+		})
 	}
 	if err := h.CartService.AddItems(ctx, req.GetUserId(), items); err != nil {
 		return nil, err
@@ -28,7 +32,7 @@ func (h *CartHandler) AddItem(ctx context.Context, req *cartv1.AddItemReq) (*car
 }
 
 func (h *CartHandler) DeleteItem(ctx context.Context, req *cartv1.DeleteItemReq) (*cartv1.DeleteItemResp, error) {
-	if err := h.CartService.DeleteItems(ctx, req.GetUserId(), req.GetProductIds()); err != nil {
+	if err := h.CartService.DeleteItems(ctx, req.GetUserId(), req.GetSkuIds()); err != nil {
 		return nil, err
 	}
 	return &cartv1.DeleteItemResp{}, nil
@@ -44,6 +48,7 @@ func (h *CartHandler) GetCart(ctx context.Context, req *cartv1.GetCartReq) (*car
 	for _, item := range cart.Items {
 		items = append(items, &cartv1.CartItem{
 			ProductId: item.ProductID,
+			SkuId:     item.SKUID,
 			Quantity:  item.Quantity,
 		})
 	}
@@ -67,6 +72,7 @@ func (h *CartHandler) EmptyCart(ctx context.Context, req *cartv1.EmptyCartReq) (
 func (h *CartHandler) ChangeQty(ctx context.Context, req *cartv1.ChangeQtyReq) (*cartv1.ChangeQtyResp, error) {
 	item := domain.CartItem{
 		ProductID: req.GetItem().GetProductId(),
+		SKUID:     req.GetItem().GetSkuId(),
 		Quantity:  req.GetItem().GetQuantity(),
 	}
 	err := h.CartService.ChangeQty(ctx, req.GetUserId(), item)
@@ -77,7 +83,7 @@ func (h *CartHandler) ChangeQty(ctx context.Context, req *cartv1.ChangeQtyReq) (
 }
 
 func (h *CartHandler) IncrementQty(ctx context.Context, req *cartv1.IncrementQtyReq) (*cartv1.IncrementQtyResp, error) {
-	newQty, err := h.CartService.IncrementQty(ctx, req.GetUserId(), req.GetProductId())
+	newQty, err := h.CartService.IncrementQty(ctx, req.GetUserId(), req.GetSkuId())
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +93,7 @@ func (h *CartHandler) IncrementQty(ctx context.Context, req *cartv1.IncrementQty
 }
 
 func (h *CartHandler) DecrementQty(ctx context.Context, req *cartv1.DecrementQtyReq) (*cartv1.DecrementQtyResp, error) {
-	newQty, err := h.CartService.DecrementQty(ctx, req.GetUserId(), req.GetProductId())
+	newQty, err := h.CartService.DecrementQty(ctx, req.GetUserId(), req.GetSkuId())
 	if err != nil {
 		return nil, err
 	}
@@ -95,5 +101,3 @@ func (h *CartHandler) DecrementQty(ctx context.Context, req *cartv1.DecrementQty
 		NewQuantity: newQty,
 	}, nil
 }
-
-

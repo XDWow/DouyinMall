@@ -14,11 +14,18 @@ type Config struct {
 }
 
 type DBConfig struct {
-	DSN string `yaml:"dsn"`
+	Host     string `yaml:"host" mapstructure:"host"`
+	Port     int    `yaml:"port" mapstructure:"port"`
+	User     string `yaml:"user" mapstructure:"user"`
+	Password string `yaml:"password" mapstructure:"password"`
+	Database string `yaml:"database" mapstructure:"database"`
+	Params   string `yaml:"params" mapstructure:"params"`
 }
 
 type RedisConfig struct {
-	Addr string `yaml:"addr"`
+	Addr     string `yaml:"addr" mapstructure:"addr"`
+	Password string `yaml:"password" mapstructure:"password"`
+	DB       int    `yaml:"db" mapstructure:"db"`
 }
 
 type EtcdConfig struct {
@@ -47,8 +54,8 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// 环境变量覆盖
-	if dsn := os.Getenv("DB_DSN"); dsn != "" {
-		cfg.DB.DSN = dsn
+	if password := os.Getenv("DB_PASSWORD"); password != "" {
+		cfg.DB.Password = password
 	}
 	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
 		cfg.Redis.Addr = redisAddr
@@ -59,6 +66,3 @@ func LoadConfig(path string) (*Config, error) {
 
 	return &cfg, nil
 }
-
-
-

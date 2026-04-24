@@ -1,5 +1,10 @@
 db:
-  dsn: "root:root@tcp(douyinmall-mysql:3306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
+  host: "douyinmall-mysql"
+  port: 3306
+  user: "root"
+  password: ""
+  database: "douyinmall"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
   addr: "douyinmall-redis:6379"
@@ -24,5 +29,5 @@ canal:
     host: "douyinmall-mysql"
     port: 3306
     user: "root"
-    password: "root"
+    password: ""
   server_id: 1234

@@ -36,25 +36,6 @@ func (c *RedisCache) HSet(ctx context.Context, key, field string, value int64) e
 	return c.client.Expire(ctx, key, c.ttl).Err()
 }
 
-// HIncrBy 閫氳繃 Pipeline 瀵逛竴涓垨澶氫釜 field 鎵ц HINCRBY +1锛屽彧闇€涓€娆＄綉缁滃線杩?
-func (c *RedisCache) HIncrBy(ctx context.Context, key string, fields ...string) ([]int64, error) {
-	pipe := c.client.Pipeline()
-	cmds := make([]*redis.IntCmd, len(fields))
-	for i, field := range fields {
-		cmds[i] = pipe.HIncrBy(ctx, key, field, 1)
-	}
-	pipe.Expire(ctx, key, c.ttl)
-	if _, err := pipe.Exec(ctx); err != nil {
-		return nil, err
-	}
-	result := make([]int64, len(fields))
-	for i, cmd := range cmds {
-		result[i] = cmd.Val()
-	}
-	return result, nil
-}
-
-// HSetBatch 閫氳繃鍗曟潯 HSET 鍛戒护鎵归噺鍐欏叆澶氫釜 field-value锛圧edis 3.0+ 鏀寔鍙彉鍙傛暟锛?
 func (c *RedisCache) HSetBatch(ctx context.Context, key string, fieldValues map[string]int64) error {
 	if len(fieldValues) == 0 {
 		return nil
@@ -69,12 +50,43 @@ func (c *RedisCache) HSetBatch(ctx context.Context, key string, fieldValues map[
 	return c.client.Expire(ctx, key, c.ttl).Err()
 }
 
+func (c *RedisCache) HIncrBy(ctx context.Context, key, field string, increment int64) (int64, error) {
+	result, err := c.client.HIncrBy(ctx, key, field, increment).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, c.client.Expire(ctx, key, c.ttl).Err()
+}
+
+func (c *RedisCache) HIncrByBatch(ctx context.Context, key string, fieldIncrements map[string]int64) (map[string]int64, error) {
+	if len(fieldIncrements) == 0 {
+		return nil, nil
+	}
+	pipe := c.client.Pipeline()
+	cmds := make(map[string]*redis.IntCmd, len(fieldIncrements))
+	for field, increment := range fieldIncrements {
+		cmds[field] = pipe.HIncrBy(ctx, key, field, increment)
+	}
+	pipe.Expire(ctx, key, c.ttl)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, err
+	}
+	result := make(map[string]int64, len(cmds))
+	for field, cmd := range cmds {
+		result[field] = cmd.Val()
+	}
+	return result, nil
+}
+
 func (c *RedisCache) HDel(ctx context.Context, key string, fields ...string) error {
 	return c.client.HDel(ctx, key, fields...).Err()
 }
 
-func (c *RedisCache) Del(ctx context.Context, key string) error {
-	return c.client.Del(ctx, key).Err()
+func (c *RedisCache) Del(ctx context.Context, keys ...string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	return c.client.Del(ctx, keys...).Err()
 }
 
 func (c *RedisCache) DecrementIfGreaterThanOne(ctx context.Context, key, field string) (int64, error) {
@@ -85,10 +97,8 @@ func (c *RedisCache) DecrementIfGreaterThanOne(ctx context.Context, key, field s
 
 	newQty, ok := result.(int64)
 	if !ok || newQty < 0 {
-		return 0, fmt.Errorf("鍟嗗搧鏁伴噺涓嶈兘鍐嶅噺灏戜簡")
+		return 0, fmt.Errorf("cart item quantity cannot be decremented")
 	}
 
 	return newQty, nil
 }
-
-

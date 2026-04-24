@@ -8,12 +8,12 @@ import (
 
 type ConfirmPaymentUC struct {
 	repo   domain.PaymentRepository
-	syncUC *SyncWechatOrderUC
+	syncUC *SyncPaymentOrderUC
 }
 
 func NewConfirmPaymentUC(
 	repo domain.PaymentRepository,
-	syncUC *SyncWechatOrderUC,
+	syncUC *SyncPaymentOrderUC,
 ) *ConfirmPaymentUC {
 	return &ConfirmPaymentUC{
 		repo:   repo,
@@ -31,7 +31,7 @@ func (uc *ConfirmPaymentUC) Execute(ctx context.Context, bizTradeNo string) (dom
 	case domain.PaymentStatusSuccess:
 		return pmt, nil
 	case domain.PaymentStatusInit:
-		if err = uc.syncUC.SyncWechatInfo(ctx, bizTradeNo); err != nil {
+		if err = uc.syncUC.SyncOrderInfo(ctx, bizTradeNo); err != nil {
 			return domain.Payment{}, err
 		}
 		return uc.repo.GetPayment(ctx, bizTradeNo)
@@ -39,5 +39,3 @@ func (uc *ConfirmPaymentUC) Execute(ctx context.Context, bizTradeNo string) (dom
 		return pmt, nil
 	}
 }
-
-

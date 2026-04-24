@@ -18,6 +18,7 @@ func main() {
 	pflag.Parse()
 
 	viper.SetConfigFile(*configPath)
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("read config failed: %v", err)
 	}
@@ -67,5 +68,3 @@ func main() {
 		log.Fatalf("aftersale MCP server failed: %v", err)
 	}
 }
-
-

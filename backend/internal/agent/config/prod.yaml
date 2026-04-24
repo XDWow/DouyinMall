@@ -11,7 +11,12 @@ http:
   idle_timeout_seconds: 120
 
 db:
-  dsn: ""
+  host: "134.175.67.79"
+  port: 3306
+  user: "CHANGE_ME_DB_USER"
+  password: ""
+  database: "douyinmall_agent"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
   addr: "114.132.75.56:16379"
@@ -66,37 +71,37 @@ llm:
   downgrade_one: true
   retry_times: 1
   weak:
-    provider: "iflow"
-    base_url: "https://apis.iflow.cn"
+    provider: "ark"
+    base_url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
     api_key: ""
-    model: "qwen3-max"
+    model: "ep-20260423170743-2hm6p"
     timeout_seconds: 60
     temperature: 0
     max_tokens: 256
   strong:
-    provider: "iflow"
-    base_url: "https://apis.iflow.cn"
+    provider: "ark"
+    base_url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
     api_key: ""
-    model: "qwen3-max"
+    model: "ep-20260331165600-tzrck"
     timeout_seconds: 60
     temperature: 0.2
     max_tokens: 512
 
 embedding:
-  provider: "ollama"
-  base_url: "http://127.0.0.1:11434"
+  provider: "ark"
+  base_url: "https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal"
   api_key: ""
-  model: "qwen3-embedding:0.6b"
+  model: "ep-20260331170306-c7qvn"
   timeout_seconds: 15
 
 knowledge_base:
   qdrant:
-    host: "your-qdrant-host"
-    port: 6334
+    host: "43.136.121.171"
+    port: 6333
     api_key: ""
     collection: "agent_knowledge"
     use_tls: false
-    score_threshold: 0.35
+    score_threshold: 0.6
 
 workflow:
   rate_limit_per_minute: 30
@@ -106,7 +111,7 @@ workflow:
   semantic_cache_score: 0.9
   semantic_cache_top_k: 20
   retrieve_top_k: 8
-  retrieve_min_score: 0.35
+  retrieve_min_score: 0.6
   confidence_threshold: 0.62
   max_answer_tokens: 512
   checkpoint_ttl_seconds: 604800

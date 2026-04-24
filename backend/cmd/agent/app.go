@@ -18,6 +18,7 @@ import (
 	httpHandler "github.com/XDWow/DouyinMall/backend/internal/agent/transport/http"
 	agentusecase "github.com/XDWow/DouyinMall/backend/internal/agent/usecase"
 	pkglogger "github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/XDWow/DouyinMall/backend/pkg/mysqlconfig"
 	agentservice "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/agent/v1/agentservice"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	kitexserver "github.com/cloudwego/kitex/server"
@@ -34,7 +35,7 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gorm.io/driver/mysql"
+	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -250,11 +251,19 @@ func registerRoutes(engine *gin.Engine, cfg agentconfig.Config, service agentuse
 }
 
 func initDB(ctx context.Context, cfg agentconfig.DBConfig) (*gorm.DB, error) {
-	if strings.TrimSpace(cfg.DSN) == "" {
-		return nil, fmt.Errorf("db.dsn is required")
+	dsn, err := mysqlconfig.BuildDSN(mysqlconfig.Config{
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		User:     cfg.User,
+		Password: cfg.Password,
+		Database: cfg.Database,
+		Params:   cfg.Params,
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	db, err := gorm.Open(mysql.Open(cfg.DSN), &gorm.Config{})
+	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("open mysql failed: %w", err)
 	}

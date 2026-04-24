@@ -15,7 +15,12 @@ type Config struct {
 }
 
 type DBConfig struct {
-	DSN string `mapstructure:"dsn"`
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	Database string `mapstructure:"database"`
+	Params   string `mapstructure:"params"`
 }
 
 type EmbeddingConfig struct {
@@ -123,7 +128,7 @@ func validateConfig(cfg Config, mode string) {
 }
 
 func bindEnv() {
-	mustBindEnv("db.dsn", "DB_DSN")
+	mustBindEnv("db.password", "DB_PASSWORD")
 	mustBindEnv("embedding.provider", "EMBEDDING_PROVIDER")
 	mustBindEnv("embedding.base_url", "EMBEDDING_BASE_URL")
 	mustBindEnv("embedding.api_key", "EMBEDDING_API_KEY", "LLM_API_KEY")

@@ -83,6 +83,7 @@ func TestCheckoutComposeEndToEnd(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotZero(t, createProductResp.GetId())
+	skuID := createProductResp.GetId() + 1_000_000
 
 	adjustResp, err := inventoryClient.AdjustStock(ctx, &inventoryv1.AdjustStockReq{
 		Reason: "compose_e2e_seed",
@@ -101,6 +102,7 @@ func TestCheckoutComposeEndToEnd(t *testing.T) {
 		Items: []*checkoutv1.CheckoutItem{
 			{
 				ProductId: createProductResp.GetId(),
+				SkuId:     skuID,
 				Quantity:  1,
 			},
 		},
@@ -131,6 +133,7 @@ func TestCheckoutComposeEndToEnd(t *testing.T) {
 	require.Equal(t, "DIRECT_BUY", orderResp.GetOrder().GetOrderKind())
 	require.Equal(t, "please call before delivery", orderResp.GetOrder().GetRemark())
 	require.Len(t, orderResp.GetOrder().GetItems(), 1)
+	require.EqualValues(t, skuID, orderResp.GetOrder().GetItems()[0].GetSkuId())
 	require.EqualValues(t, 299, orderResp.GetOrder().GetTotalAmount())
 
 	batchResp, err := inventoryClient.BatchGetInventory(ctx, &inventoryv1.BatchGetInventoryReq{
@@ -213,6 +216,7 @@ func TestCheckoutTimeoutCancelRestoresStock(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotZero(t, createProductResp.GetId())
+	skuID := createProductResp.GetId() + 2_000_000
 
 	adjustResp, err := inventoryClient.AdjustStock(ctx, &inventoryv1.AdjustStockReq{
 		Reason: "compose_e2e_timeout_seed",
@@ -228,6 +232,7 @@ func TestCheckoutTimeoutCancelRestoresStock(t *testing.T) {
 		UserId: userID,
 		Items: []*checkoutv1.CheckoutItem{{
 			ProductId: createProductResp.GetId(),
+			SkuId:     skuID,
 			Quantity:  1,
 		}},
 		Address: &checkoutv1.Address{
@@ -342,5 +347,3 @@ func openRedis(t *testing.T) *redis.Client {
 
 	return rdb
 }
-
-

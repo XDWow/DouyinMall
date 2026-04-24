@@ -3,6 +3,7 @@ package domain
 // CheckoutItem 鍓嶇浼犲叆鐨勫晢鍝侀」锛堝彧鏈塈D鍜屾暟閲忥級
 type CheckoutItem struct {
 	ProductID int64
+	SKUID     int64
 	Quantity  int64
 }
 
@@ -35,6 +36,7 @@ type Address struct {
 // 鏃㈡槸 PreviewOrder 鐨勮繑鍥炴暟鎹紝涔熸槸 PlaceOrder 浼犵粰 Order 鏈嶅姟鐨勬暟鎹?
 type OrderLine struct {
 	ProductID     int64
+	SKUID         int64
 	Name          string
 	Picture       string
 	Price         int64 // 涓嬪崟鏃剁殑浠锋牸蹇収锛堝垎锛夛紝閿佸畾姝ゅ埢鐨勪环鏍?
@@ -97,5 +99,3 @@ func ValidatePriceChange(expected, actual int64) error {
 	}
 	return nil
 }
-
-

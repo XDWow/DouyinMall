@@ -9,6 +9,8 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/seckill .
-COPY --from=builder /app/internal/seckill/config/docker.yaml ./internal/seckill/config/dev.yaml
+COPY --from=builder /app/internal/seckill/config/dev.yaml ./internal/seckill/config/dev.yaml
+COPY --from=builder /app/internal/seckill/config/prod.yaml ./internal/seckill/config/prod.yaml
 EXPOSE 8098
 ENTRYPOINT ["./seckill"]
+CMD ["--config", "internal/seckill/config/prod.yaml"]

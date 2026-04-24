@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/XDWow/DouyinMall/backend/internal/checkout/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
@@ -19,7 +20,6 @@ import (
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1/productservice"
 )
 
-// 鏅€氫笅鍗?
 type PlaceOrderUseCase struct {
 	productClient   productservice.Client
 	inventoryClient inventoryservice.Client
@@ -59,8 +59,8 @@ type PlaceOrderInput struct {
 	PaymentMethod  string
 	Currency       string
 	OrderKind      string
-	Remark         string // 璁㈠崟澶囨敞
-	ExpectedAmount int64  // preview 涓湅鍒扮殑閲戦锛岀湡姝ｆ敮浠樼殑鏃跺€欎細鍏滃簳鍐嶇畻涓€娆★紝濡傛灉璺熶箣鍓嶇敤鎴风湅鍒扮殑涓嶄竴鏍凤紝灏辫繑鍥?
+	Remark         string
+	ExpectedAmount int64
 }
 
 type PlaceOrderOutput struct {
@@ -69,103 +69,115 @@ type PlaceOrderOutput struct {
 	TotalAmount int64
 }
 
-func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput) (output *PlaceOrderOutput, err error) {
-	if vErr := uc.validate(input); vErr != nil {
-		return nil, vErr
+const (
+	orderKindDirectBuy = "DIRECT_BUY"
+	orderKindCart      = "CART"
+	orderKindSeckill   = "SECKILL"
+)
+
+func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput) (*PlaceOrderOutput, error) {
+	if err := uc.validate(input); err != nil {
+		return nil, err
+	}
+	orderKind, err := normalizeOrderKind(input.OrderKind)
+	if err != nil {
+		return nil, err
 	}
 
-	productResp, queryErr := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Id: extractProductIDs(input.Items)})
-	if queryErr != nil {
-		return nil, fmt.Errorf("query products: %w", queryErr)
+	productResp, err := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Id: extractProductIDs(input.Items)})
+	if err != nil {
+		return nil, fmt.Errorf("query products: %w", err)
 	}
 
 	lines, unavailable := buildOrderLines(input.Items, productResp.Product)
-	// 鏈夌殑璁㈠崟椤瑰け鏁堜簡锛屽繀椤昏繑鍥烇紝鐢ㄦ埛鍙互閫夋嫨閲嶆柊涓嬪崟
 	if len(unavailable) > 0 {
 		items := make([]domain.UnavailableItem, len(unavailable))
 		for i, l := range unavailable {
-			items[i] = domain.UnavailableItem{ProductID: l.ProductID, Name: l.Name, Reason: l.UnavailReason}
+			items[i] = domain.UnavailableItem{
+				ProductID: l.ProductID,
+				SKUID:     l.SKUID,
+				Name:      l.Name,
+				Reason:    l.UnavailReason,
+			}
 		}
 		return nil, &domain.UnavailableItemsError{Items: items}
 	}
 
-	// 鏌ヤ竴涓嬮€夋嫨鐨勪紭鎯犲埜鏄惁杩樺湪鍙娇鐢ㄥ垪琛ㄤ腑
 	var couponDiscount int64
 	if len(input.CouponIDs) > 0 {
-		couponResp, couponErr := uc.couponClient.ListAvailableCoupons(ctx, &couponv1.ListAvailableCouponsReq{
+		couponResp, err := uc.couponClient.ListAvailableCoupons(ctx, &couponv1.ListAvailableCouponsReq{
 			UserId: input.UserID,
 			Items:  toCouponOrderItems(lines),
 		})
-		if couponErr != nil {
-			return nil, fmt.Errorf("鏌ヨ浼樻儬鍒稿嚭閿? %w", couponErr)
+		if err != nil {
+			return nil, fmt.Errorf("list available coupons: %w", err)
 		}
 		coupons := toCouponOptions(couponResp.Coupons, lines)
 		couponDiscount = sumSelectedCouponDiscount(coupons, input.CouponIDs)
 	}
 
 	price := domain.CalculatePrice(lines, couponDiscount)
-	if priceErr := domain.ValidatePriceChange(input.ExpectedAmount, price.TotalAmount); priceErr != nil {
-		return nil, priceErr
+	if err := domain.ValidatePriceChange(input.ExpectedAmount, price.TotalAmount); err != nil {
+		return nil, err
 	}
-	// --- 鍟嗗搧銆佷紭鎯犲埜鏍￠獙瀹屾垚 ---
 
 	orderID := uc.idGen.GenerateOrderID()
-	commitResp, commitErr := uc.inventoryClient.CommitStock(ctx, &inventoryv1.CommitStockReq{
+	commitResp, err := uc.inventoryClient.CommitStock(ctx, &inventoryv1.CommitStockReq{
 		OperationId: operationID(orderID, "commit"),
 		Items:       toInventoryStockItems(input.Items),
 	})
-	if commitErr != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInsufficientStock, commitErr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrInsufficientStock, err)
 	}
-	if commitResp != nil && commitResp.StatusCode != 0 {
+	if commitResp != nil && commitResp.GetStatusCode() != 0 {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInsufficientStock, commitResp.GetStatusMsg())
 	}
 
 	if len(input.CouponIDs) > 0 {
-		couponReserveResp, couponErr := uc.couponClient.ReserveCoupon(ctx, &couponv1.ReserveCouponReq{
+		couponReserveResp, err := uc.couponClient.ReserveCoupon(ctx, &couponv1.ReserveCouponReq{
 			UserId:        input.UserID,
 			UserCouponIds: input.CouponIDs,
 			OrderId:       orderID,
 			Items:         toCouponOrderItems(lines),
 		})
-		if couponErr != nil { // 璋冪敤鍑洪敊锛屼笉鐭ラ亾浼樻儬鍒告墸浜嗚繕鏄病鎵ｏ紝涔熸槸澶辫触锛屽洖閫€浼樻儬鍒革紝閬垮厤閿佷綇浼樻儬鍒?
+		if err != nil {
 			uc.restoreCommittedStock(ctx, orderID)
 			uc.releaseReservedCoupons(ctx, orderID)
-			return nil, fmt.Errorf("reserve coupons: %w", couponErr)
+			return nil, fmt.Errorf("reserve coupons: %w", err)
 		}
-		if !couponReserveResp.Success { // 鏄庣‘鏄墸澶辫触浜?
+		if !couponReserveResp.GetSuccess() {
 			uc.restoreCommittedStock(ctx, orderID)
-			return nil, toCouponUnavailableError(couponReserveResp.Failures)
+			return nil, toCouponUnavailableError(couponReserveResp.GetFailures())
 		}
 	}
 
-	if _, createErr := uc.orderClient.CreateOrder(ctx, &orderv1.CreateOrderReq{
+	if _, err := uc.orderClient.CreateOrder(ctx, &orderv1.CreateOrderReq{
 		OrderId:       orderID,
 		UserId:        input.UserID,
 		Currency:      input.Currency,
 		Address:       toOrderAddress(input.Address),
 		Remark:        input.Remark,
-		OrderKind:     normalizeOrderKind(input.OrderKind),
+		OrderKind:     orderKind,
 		PayableAmount: price.TotalAmount,
 		Items:         toOrderItems(lines, input.Currency),
-	}); createErr != nil {
+	}); err != nil {
 		uc.restoreCommittedStock(ctx, orderID)
 		uc.releaseReservedCoupons(ctx, orderID)
-		return nil, fmt.Errorf("%w: %v", domain.ErrOrderCreateFailed, createErr)
+		return nil, fmt.Errorf("%w: %v", domain.ErrOrderCreateFailed, err)
 	}
 
-	payResp, payErr := uc.paymentClient.NativePrepay(ctx, &paymentv1.NativePrePayRequest{
+	payResp, err := uc.paymentClient.NativePrepay(ctx, &paymentv1.NativePrePayRequest{
 		Amt: &paymentv1.Amount{
 			Total:    price.TotalAmount,
 			Currency: input.Currency,
 		},
 		BizTradeNo:  fmt.Sprintf("%d", orderID),
-		Description: fmt.Sprintf("璁㈠崟 %d 鏀粯", orderID),
+		Description: fmt.Sprintf("order %d", orderID),
 	})
-	if payErr != nil { // 璋冪敤鏀粯澶辫触锛屼笉褰卞搷璁㈠崟鍒涘缓锛屾墦涓棩蹇?
+	if err != nil {
 		uc.logger.Warn("create initial payment session failed",
 			logger.Int64("orderID", orderID),
-			logger.Error(payErr),
+			logger.Error(err),
 		)
 		return &PlaceOrderOutput{
 			OrderID:     orderID,
@@ -182,16 +194,19 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 
 func (uc *PlaceOrderUseCase) validate(input PlaceOrderInput) error {
 	if input.UserID <= 0 {
-		return errors.New("鏃犳晥鐨勭敤鎴穒d")
+		return errors.New("invalid user_id")
 	}
 	if len(input.Items) == 0 {
 		return domain.ErrInvalidInput
 	}
+	if err := validateCheckoutItems(input.Items); err != nil {
+		return err
+	}
 	if input.Address.ReceiverName == "" || input.Address.Phone == "" {
-		return errors.New("鍦板潃琛ュ畬鏁?)
+		return errors.New("address receiver_name and phone are required")
 	}
 	if input.PaymentMethod == "" {
-		return errors.New("鏈€夋嫨鏀粯鏂瑰紡")
+		return errors.New("payment_method is required")
 	}
 	if input.ExpectedAmount <= 0 {
 		return errors.New("expected amount must be positive")
@@ -221,11 +236,15 @@ func (uc *PlaceOrderUseCase) releaseReservedCoupons(ctx context.Context, orderID
 	}
 }
 
-func normalizeOrderKind(orderKind string) string {
-	if orderKind == "" {
-		return "DIRECT_BUY"
+func normalizeOrderKind(orderKind string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(orderKind)) {
+	case "", orderKindDirectBuy:
+		return orderKindDirectBuy, nil
+	case orderKindCart:
+		return orderKindCart, nil
+	case orderKindSeckill:
+		return "", errors.New("seckill orders must use seckill submit flow")
+	default:
+		return "", fmt.Errorf("unsupported order_kind: %s", orderKind)
 	}
-	return orderKind
 }
-
-

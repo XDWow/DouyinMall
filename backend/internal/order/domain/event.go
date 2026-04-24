@@ -8,6 +8,7 @@ type OrderStatusUpdateEvent struct {
 	Status     OrderStatus `json:"status"`
 	OrderKind  string      `json:"order_kind,omitempty"`
 	ProductIDs []int64     `json:"product_ids,omitempty"`
+	SKUIDs     []int64     `json:"sku_ids,omitempty"`
 }
 
 type OutboxEvent struct {
@@ -27,10 +28,10 @@ func BuildOrderStatusUpdateEvent(order *Order) OrderStatusUpdateEvent {
 
 	event.UserID = order.UserID
 	event.ProductIDs = make([]int64, 0, len(order.OrderItems))
+	event.SKUIDs = make([]int64, 0, len(order.OrderItems))
 	for _, item := range order.OrderItems {
 		event.ProductIDs = append(event.ProductIDs, item.ProductID)
+		event.SKUIDs = append(event.SKUIDs, item.SKUID)
 	}
 	return event
 }
-
-

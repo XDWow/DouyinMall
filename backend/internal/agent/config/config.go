@@ -37,7 +37,12 @@ type HTTPConfig struct {
 }
 
 type DBConfig struct {
-	DSN string `mapstructure:"dsn"`
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+	Database string `mapstructure:"database"`
+	Params   string `mapstructure:"params"`
 }
 
 type RedisConfig struct {

@@ -10,15 +10,15 @@ import (
 
 type CartDAO interface {
 	FindCartByUserID(ctx context.Context, userID int64) ([]CartItem, error)
-	FindCartItemByUserIDAndProductID(ctx context.Context, userID, productID int64) (CartItem, error)
-	UpsertIncrement(ctx context.Context, userID, productID int64) error
-	UpsertIncrementBatch(ctx context.Context, userID int64, productIDs []int64) error // 鎵归噺 INSERT ON CONFLICT +1
+	FindCartItemByUserIDAndSKUID(ctx context.Context, userID, skuID int64) (CartItem, error)
+	UpsertIncrement(ctx context.Context, item CartItem) error
+	UpsertIncrementBatch(ctx context.Context, userID int64, items []CartItem) error
 	Upsert(ctx context.Context, item CartItem) error
-	Delete(ctx context.Context, userID, productID int64) error
-	DeleteByProductIDs(ctx context.Context, userID int64, productIDs []int64) error // 鎵归噺 DELETE WHERE product_id IN
+	Delete(ctx context.Context, userID, skuID int64) error
+	DeleteBySKUIDs(ctx context.Context, userID int64, skuIDs []int64) error
 	DeleteByUserID(ctx context.Context, userID int64) error
-	IncrementQuantity(ctx context.Context, userID, productID int64) error
-	DecrementQuantity(ctx context.Context, userID, productID int64) error
+	IncrementQuantity(ctx context.Context, userID, skuID int64) error
+	DecrementQuantity(ctx context.Context, userID, skuID int64) error
 }
 
 type GORMCartDAO struct {
@@ -31,8 +31,9 @@ func NewGORMCartDAO(db *gorm.DB) CartDAO {
 
 type CartItem struct {
 	ID        int64 `gorm:"primaryKey;autoIncrement"`
-	UserID    int64 `gorm:"not null;uniqueIndex:uidx_user_product"`
-	ProductID int64 `gorm:"not null;uniqueIndex:uidx_user_product"`
+	UserID    int64 `gorm:"not null;uniqueIndex:uidx_user_sku"`
+	ProductID int64 `gorm:"not null"`
+	SKUID     int64 `gorm:"column:sku_id;not null;uniqueIndex:uidx_user_sku"`
 	Quantity  int64 `gorm:"not null;default:1"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -50,45 +51,48 @@ func (d *GORMCartDAO) FindCartByUserID(ctx context.Context, userID int64) ([]Car
 	return items, err
 }
 
-func (d *GORMCartDAO) FindCartItemByUserIDAndProductID(ctx context.Context, userID, productID int64) (CartItem, error) {
+func (d *GORMCartDAO) FindCartItemByUserIDAndSKUID(ctx context.Context, userID, skuID int64) (CartItem, error) {
 	var item CartItem
 	err := d.db.WithContext(ctx).
-		Where("user_id = ? AND product_id = ?", userID, productID).
+		Where("user_id = ? AND sku_id = ?", userID, skuID).
 		First(&item).Error
 	return item, err
 }
 
-// 鎻掑叆涓€椤癸紝濡傛灉瀛樺湪锛屾暟閲?1
-func (d *GORMCartDAO) UpsertIncrement(ctx context.Context, userID, productID int64) error {
+func (d *GORMCartDAO) UpsertIncrement(ctx context.Context, item CartItem) error {
+	if item.Quantity <= 0 {
+		item.Quantity = 1
+	}
 	return d.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}, {Name: "product_id"}},
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "sku_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"quantity":   gorm.Expr("quantity + ?", 1), // 鐢╣orm琛ㄨ揪寮忓師瀛愭€?1
+			"product_id": item.ProductID,
+			"quantity":   gorm.Expr("quantity + ?", item.Quantity),
 			"updated_at": time.Now(),
 		}),
-	}).Create(&CartItem{
-		UserID:    userID,
-		ProductID: productID,
-		Quantity:  1,
-	}).Error
+	}).Create(&item).Error
 }
 
-// UpsertIncrementBatch 鎵归噺鎻掑叆锛屽凡瀛樺湪鍒欐暟閲?1锛屼竴鏉?SQL 瀹屾垚
-func (d *GORMCartDAO) UpsertIncrementBatch(ctx context.Context, userID int64, productIDs []int64) error {
-	if len(productIDs) == 0 {
+func (d *GORMCartDAO) UpsertIncrementBatch(ctx context.Context, userID int64, items []CartItem) error {
+	if len(items) == 0 {
 		return nil
 	}
-	items := make([]CartItem, len(productIDs))
-	for i, pid := range productIDs {
-		items[i] = CartItem{UserID: userID, ProductID: pid, Quantity: 1}
+	daoItems := make([]CartItem, 0, len(items))
+	for _, item := range items {
+		if item.Quantity <= 0 {
+			item.Quantity = 1
+		}
+		item.UserID = userID
+		daoItems = append(daoItems, item)
 	}
 	return d.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}, {Name: "product_id"}},
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "sku_id"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"quantity":   gorm.Expr("quantity + ?", 1),
+			"product_id": gorm.Expr("VALUES(product_id)"),
+			"quantity":   gorm.Expr("quantity + VALUES(quantity)"),
 			"updated_at": time.Now(),
 		}),
-	}).Create(&items).Error
+	}).Create(&daoItems).Error
 }
 
 func (d *GORMCartDAO) Upsert(ctx context.Context, item CartItem) error {
@@ -96,24 +100,23 @@ func (d *GORMCartDAO) Upsert(ctx context.Context, item CartItem) error {
 		return gorm.ErrInvalidData
 	}
 	return d.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "user_id"}, {Name: "product_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"quantity", "updated_at"}),
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "sku_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"product_id", "quantity", "updated_at"}),
 	}).Create(&item).Error
 }
 
-func (d *GORMCartDAO) Delete(ctx context.Context, userID, productID int64) error {
+func (d *GORMCartDAO) Delete(ctx context.Context, userID, skuID int64) error {
 	return d.db.WithContext(ctx).
-		Where("user_id = ? AND product_id = ?", userID, productID).
+		Where("user_id = ? AND sku_id = ?", userID, skuID).
 		Delete(&CartItem{}).Error
 }
 
-// DeleteByProductIDs 鎵归噺鍒犻櫎锛岀敤 IN 瀛愬彞涓€鏉?SQL 鎼炲畾
-func (d *GORMCartDAO) DeleteByProductIDs(ctx context.Context, userID int64, productIDs []int64) error {
-	if len(productIDs) == 0 {
+func (d *GORMCartDAO) DeleteBySKUIDs(ctx context.Context, userID int64, skuIDs []int64) error {
+	if len(skuIDs) == 0 {
 		return nil
 	}
 	return d.db.WithContext(ctx).
-		Where("user_id = ? AND product_id IN ?", userID, productIDs).
+		Where("user_id = ? AND sku_id IN ?", userID, skuIDs).
 		Delete(&CartItem{}).Error
 }
 
@@ -123,18 +126,17 @@ func (d *GORMCartDAO) DeleteByUserID(ctx context.Context, userID int64) error {
 		Delete(&CartItem{}).Error
 }
 
-func (d *GORMCartDAO) IncrementQuantity(ctx context.Context, userID, productID int64) error {
-	err := d.db.WithContext(ctx).
+func (d *GORMCartDAO) IncrementQuantity(ctx context.Context, userID, skuID int64) error {
+	return d.db.WithContext(ctx).
 		Model(&CartItem{}).
-		Where("user_id = ? AND product_id = ?", userID, productID).
+		Where("user_id = ? AND sku_id = ?", userID, skuID).
 		UpdateColumn("quantity", gorm.Expr("quantity + ?", 1)).Error
-	return err
 }
 
-func (d *GORMCartDAO) DecrementQuantity(ctx context.Context, userID, productID int64) error {
+func (d *GORMCartDAO) DecrementQuantity(ctx context.Context, userID, skuID int64) error {
 	result := d.db.WithContext(ctx).
 		Model(&CartItem{}).
-		Where("user_id = ? AND product_id = ? AND quantity > 1", userID, productID).
+		Where("user_id = ? AND sku_id = ? AND quantity > 1", userID, skuID).
 		UpdateColumn("quantity", gorm.Expr("quantity - ?", 1))
 
 	if result.Error != nil {
@@ -145,5 +147,3 @@ func (d *GORMCartDAO) DecrementQuantity(ctx context.Context, userID, productID i
 	}
 	return nil
 }
-
-
