@@ -126,7 +126,7 @@ func toProtoChatResponse(resp *agentusecase.ChatOutput, userMessage string) *age
 		Reply:              resp.Reply,
 		Intent:             toProtoIntent(resp.Intent, userMessage),
 		Knowledge:          make([]*agentv1.KnowledgeRef, 0, len(resp.References)),
-		ToolExecs:          make([]*agentv1.ToolExec, 0, len(resp.UsedToolNames)),
+		ToolExecs:          make([]*agentv1.ToolExec, 0, len(resp.ToolExecutions)),
 		SuggestedQuestions: buildSuggestedQuestions(resp, userMessage),
 		SessionId:          resp.SessionID,
 		TraceId:            firstNonEmpty(resp.TraceID, resp.Trace.TraceID),
@@ -142,10 +142,24 @@ func toProtoChatResponse(resp *agentusecase.ChatOutput, userMessage string) *age
 			Relevance: float32(ref.Score),
 		})
 	}
-	for _, name := range resp.UsedToolNames {
+	for _, item := range resp.ToolExecutions {
 		result.ToolExecs = append(result.ToolExecs, &agentv1.ToolExec{
-			ToolName: name,
+			ToolName:  item.Name,
+			Params:    stringifyMap(item.Arguments),
+			Reasoning: item.Reason,
+			Success:   item.Success,
+			Result:    item.Result,
+			Error:     item.Error,
+			LatencyMs: item.LatencyMs,
 		})
+	}
+	if len(result.ToolExecs) == 0 {
+		for _, name := range resp.UsedToolNames {
+			result.ToolExecs = append(result.ToolExecs, &agentv1.ToolExec{
+				ToolName: name,
+				Success:  true,
+			})
+		}
 	}
 
 	if resp.NeedHandoff {

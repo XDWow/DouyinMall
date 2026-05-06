@@ -39,26 +39,26 @@ func (svc *productService) GetProduct(ctx context.Context, id int64) (product do
 }
 
 func (svc *productService) CreateProduct(ctx context.Context, product domain.Product) (productID int64, err error) {
-	// 鏁忔劅璇嶆牎楠?
+	// 闁轰礁绻戦崝鍛嫚瀹ュ棛澧″Δ?
 	if err := svc.checkSensitiveWords(ctx, product.Name, product.Description); err != nil {
-		svc.logger.Error("浜у搧鍖呭惈鏁忔劅璇嶏紝鍒涘缓澶辫触")
+		svc.logger.Error("sensitive word validation failed", logger.Error(err))
 		return 0, err
 	}
 	if len(product.Picture) != 0 || len(product.SlideImgs) != 0 {
-		// 涓婁紶涓€涓?鐓х墖锛岃疆鎾浘
+		// 濞戞挸锕ｇ槐鑸电▔閳ь剚绋?闁绘挆鍛暬闁挎稑鐭侀悿鍡涘箻椤撶偞绂?
 	}
 	return svc.repo.CreateProduct(ctx, product)
 }
 
 func (svc *productService) UpdateProduct(ctx context.Context, product domain.Product) (productID int64, err error) {
-	// 鏁忔劅璇嶆牎楠岋紙鍙牎楠岄潪绌哄瓧娈碉級
+	// 闁轰礁绻戦崝鍛嫚瀹ュ棛澧″Δ鐘茬焿缁辨瑩宕ｉ鍛ⅰ濡ょ姴鐭傚顏嗙矚閸濆嫮鎽熸繛鍫㈩暜缁?
 	if err := svc.checkSensitiveWords(ctx, product.Name, product.Description); err != nil {
-		svc.logger.Error("浜у搧鍖呭惈鏁忔劅璇嶏紝鍒涘缓澶辫触")
+		svc.logger.Error("sensitive word validation failed", logger.Error(err))
 		return 0, err
 	}
 
 	if len(product.Picture) != 0 || len(product.SlideImgs) != 0 {
-		// 鏇存柊鐓х墖锛岃疆鎾浘
+		// 闁哄洤鐡ㄩ弻濠囨偂瑜忔晶鏍晬瀹€鍐瀭闁圭虎鍘煎ù?
 	}
 	return svc.repo.UpdateProduct(ctx, product)
 }
@@ -68,11 +68,9 @@ func (svc *productService) DeleteProduct(ctx context.Context, id, userID int64) 
 }
 
 func (svc *productService) checkSensitiveWords(ctx context.Context, productName string, productDescription string) error {
-	// 鍚庨潰鎼?ai 妫€娴?
-	if strings.ContainsAny(productName, "鏁忔劅璇?) || strings.ContainsAny(productDescription, "鏁忔劅璇?) {
-		return fmt.Errorf("浜у搧鍚嶅瓧鎴栨弿杩板瓨鍦ㄦ晱鎰熻瘝姹囷紒")
+	// 闁告艾閰ｅ浼村箹?ai 婵☆偀鍋撴繛?
+	if strings.Contains(productName, "blocked") || strings.Contains(productDescription, "blocked") {
+		return fmt.Errorf("product contains sensitive words")
 	}
 	return nil
 }
-
-

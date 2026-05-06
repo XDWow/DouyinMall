@@ -13,40 +13,53 @@ func main() {
 
 	app := InitApp()
 
-	port := viper.GetInt("grpc.server.port")
-	log.Printf("Search service starting on port %d...", port)
+	log.Printf("search service starting, grpc port=%d http port=%d",
+		viper.GetInt("grpc.server.port"),
+		viper.GetInt("http.server.port"))
 
 	for i, consumer := range app.Consumers {
 		if err := consumer.Start(); err != nil {
-			log.Fatalf("Consumer %d 鍚姩澶辫触: %v", i+1, err)
+			log.Fatalf("consumer %d start failed: %v", i+1, err)
 		}
-		log.Printf("Consumer %d started", i+1)
+		log.Printf("consumer %d started", i+1)
 	}
 
-	// 鍚姩 gRPC Server锛堥樆濉烇級
-	if err := app.Server.Run(); err != nil {
-		log.Fatalf("server run error: %v", err)
+	grpcErr := make(chan error, 1)
+	go func() {
+		grpcErr <- app.Server.Run()
+	}()
+
+	httpErr := make(chan error, 1)
+	go func() {
+		httpErr <- app.HTTPServer.Start()
+	}()
+
+	select {
+	case err := <-grpcErr:
+		if err != nil {
+			log.Fatalf("grpc server run error: %v", err)
+		}
+	case err := <-httpErr:
+		if err != nil {
+			log.Fatalf("http server run error: %v", err)
+		}
 	}
 }
 
 func initViperWatch() {
-	cfile := pflag.String("config",
-		"internal/search/config/dev.yaml", "閰嶇疆鏂囦欢璺緞")
+	cfile := pflag.String("config", "internal/search/config/dev.yaml", "config file path")
 	pflag.Parse()
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w", err))
+		panic(fmt.Errorf("read config failed: %w", err))
 	}
 
-	// 鏀寔鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢锛堢幆澧冨彉閲忎紭鍏堬級
 	viper.AutomaticEnv()
-
-	// 鎵嬪姩缁戝畾鐜鍙橀噺鍒伴厤缃敭
-	viper.BindEnv("db.password", "DB_PASSWORD")
-	viper.BindEnv("elasticsearch.addresses", "ES_ADDRESSES")
-	viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
-	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
-	viper.BindEnv("grpc.server.port", "GRPC_PORT")
-	viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
+	_ = viper.BindEnv("elasticsearch.addresses", "ES_ADDRESSES")
+	_ = viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
+	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")
+	_ = viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 }

@@ -3,14 +3,13 @@ package test
 import (
 	"context"
 	"errors"
-	"github.com/XDWow/DouyinMall/backend/internal/order/usecase"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
+	"github.com/XDWow/DouyinMall/backend/internal/order/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +19,7 @@ func TestChangeOrderStatusMarksOutboxByOutboxID(t *testing.T) {
 	orderRepo := &stubStatusOrderRepo{
 		order: domain.Order{ID: 1001, UserID: 2001, Status: domain.OrderStatusCreated},
 	}
-	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	producer := &stubOrderStatusProducer{}
 	uc := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
 
 	result, err := uc.Execute(context.Background(), usecase.ChangeOrderStatusCmd{
@@ -46,7 +45,7 @@ func TestChangeOrderStatusLeavesPendingOutboxOnFastPathSendFailure(t *testing.T)
 	orderRepo := &stubStatusOrderRepo{
 		order: domain.Order{ID: 1002, UserID: 2002, Status: domain.OrderStatusCreated},
 	}
-	producer := mq.NewSaramaProducer(&stubSyncProducer{sendMessageErr: errors.New("send failed")})
+	producer := &stubOrderStatusProducer{sendMessageErr: errors.New("send failed")}
 	uc := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
 
 	result, err := uc.Execute(context.Background(), usecase.ChangeOrderStatusCmd{
@@ -68,7 +67,7 @@ func TestChangeOrderStatusReturnsUnchangedResult(t *testing.T) {
 	orderRepo := &stubStatusOrderRepo{
 		order: domain.Order{ID: 1003, UserID: 2003, Status: domain.OrderStatusPaid},
 	}
-	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	producer := &stubOrderStatusProducer{}
 	uc := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
 
 	result, err := uc.Execute(context.Background(), usecase.ChangeOrderStatusCmd{
@@ -83,7 +82,7 @@ func TestChangeOrderStatusReturnsUnchangedResult(t *testing.T) {
 func TestBatchCancelOrderEmptyOrderIDs(t *testing.T) {
 	orderRepo := &stubStatusOrderRepo{}
 	outboxRepo := &stubOutboxRepo{}
-	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	producer := &stubOrderStatusProducer{}
 	uc := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
 
 	require.NoError(t, uc.Execute(context.Background(), nil))
@@ -98,7 +97,7 @@ func TestBatchCancelOrderSkipsNonCreated(t *testing.T) {
 			21: {ID: 21, UserID: 201, Status: domain.OrderStatusPaid},
 		},
 	}
-	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	producer := &stubOrderStatusProducer{}
 	uc := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
 
 	require.NoError(t, uc.Execute(context.Background(), []int64{21}))
@@ -117,7 +116,7 @@ func TestBatchCancelOrderMarksSentByOutboxID(t *testing.T) {
 			12: {ID: 12, UserID: 102, Status: domain.OrderStatusCreated},
 		},
 	}
-	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	producer := &stubOrderStatusProducer{}
 	uc := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
 
 	err := uc.Execute(context.Background(), []int64{11, 12})
@@ -145,7 +144,7 @@ func TestBatchCancelOrderFailsWhenBatchUpdateStatusFails(t *testing.T) {
 		},
 		batchUpdateErr: domain.ErrRecordNotFound,
 	}
-	producer := mq.NewSaramaProducer(&stubSyncProducer{})
+	producer := &stubOrderStatusProducer{}
 	uc := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTxManager{}, logger.NewNopLogger())
 
 	err := uc.Execute(context.Background(), []int64{31, 32})
@@ -323,38 +322,24 @@ func (stubTxManager) Tx(ctx context.Context, fn func(context.Context) error) err
 	return fn(ctx)
 }
 
-type stubSyncProducer struct {
+type stubOrderStatusProducer struct {
 	sendMessageErr  error
 	sendMessagesErr error
 }
 
-func (s *stubSyncProducer) SendMessage(*sarama.ProducerMessage) (int32, int64, error) {
-	return 0, 0, s.sendMessageErr
+func (s *stubOrderStatusProducer) SendMessage(context.Context, domain.OrderStatusUpdateEvent) error {
+	return s.sendMessageErr
 }
 
-func (s *stubSyncProducer) SendMessages(msgs []*sarama.ProducerMessage) error {
+func (s *stubOrderStatusProducer) SendMessages(_ context.Context, events []domain.OrderStatusUpdateEvent) []error {
 	if s.sendMessagesErr != nil {
-		return s.sendMessagesErr
+		errs := make([]error, len(events))
+		for i := range errs {
+			errs[i] = s.sendMessagesErr
+		}
+		return errs
 	}
 	return nil
 }
 
-func (s *stubSyncProducer) Close() error { return nil }
-
-func (s *stubSyncProducer) TxnStatus() sarama.ProducerTxnStatusFlag { return 0 }
-
-func (s *stubSyncProducer) IsTransactional() bool { return false }
-
-func (s *stubSyncProducer) BeginTxn() error { return nil }
-
-func (s *stubSyncProducer) CommitTxn() error { return nil }
-
-func (s *stubSyncProducer) AbortTxn() error { return nil }
-
-func (s *stubSyncProducer) AddOffsetsToTxn(map[string][]*sarama.PartitionOffsetMetadata, string) error {
-	return nil
-}
-
-func (s *stubSyncProducer) AddMessageToTxn(*sarama.ConsumerMessage, string, *string) error {
-	return nil
-}
+var _ mq.OrderStatusProducer = (*stubOrderStatusProducer)(nil)

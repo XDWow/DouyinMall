@@ -157,34 +157,6 @@ func (x *BatchGetInventoryResp) GetInventories() []*GetInventoryResp {
 	return nil
 }
 
-type ReserveStockReq struct {
-	OperationId string       `protobuf:"bytes,1,opt,name=operation_id" json:"operation_id,omitempty"`
-	Items       []*StockItem `protobuf:"bytes,2,rep,name=items" json:"items,omitempty"`
-	ExpireTime  int64        `protobuf:"varint,3,opt,name=expire_time" json:"expire_time,omitempty"`
-}
-
-func (x *ReserveStockReq) Reset()                            { *x = ReserveStockReq{} }
-func (x *ReserveStockReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
-func (x *ReserveStockReq) Unmarshal(in []byte) error         { return prutal.Unmarshal(in, x) }
-func (x *ReserveStockReq) GetOperationId() string {
-	if x != nil {
-		return x.OperationId
-	}
-	return ""
-}
-func (x *ReserveStockReq) GetItems() []*StockItem {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-func (x *ReserveStockReq) GetExpireTime() int64 {
-	if x != nil {
-		return x.ExpireTime
-	}
-	return 0
-}
-
 type CommitStockReq struct {
 	OperationId string       `protobuf:"bytes,1,opt,name=operation_id" json:"operation_id,omitempty"`
 	Items       []*StockItem `protobuf:"bytes,2,rep,name=items" json:"items,omitempty"`
@@ -200,27 +172,6 @@ func (x *CommitStockReq) GetOperationId() string {
 	return ""
 }
 func (x *CommitStockReq) GetItems() []*StockItem {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-type ReleaseStockReq struct {
-	OperationId string       `protobuf:"bytes,1,opt,name=operation_id" json:"operation_id,omitempty"`
-	Items       []*StockItem `protobuf:"bytes,2,rep,name=items" json:"items,omitempty"`
-}
-
-func (x *ReleaseStockReq) Reset()                            { *x = ReleaseStockReq{} }
-func (x *ReleaseStockReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
-func (x *ReleaseStockReq) Unmarshal(in []byte) error         { return prutal.Unmarshal(in, x) }
-func (x *ReleaseStockReq) GetOperationId() string {
-	if x != nil {
-		return x.OperationId
-	}
-	return ""
-}
-func (x *ReleaseStockReq) GetItems() []*StockItem {
 	if x != nil {
 		return x.Items
 	}
@@ -272,11 +223,7 @@ func (x *AdjustStockReq) GetItems() []*StockItem {
 type InventoryService interface {
 	GetInventory(ctx context.Context, req *GetInventoryReq) (res *GetInventoryResp, err error)
 	BatchGetInventory(ctx context.Context, req *BatchGetInventoryReq) (res *BatchGetInventoryResp, err error)
-	ReserveStock(ctx context.Context, req *ReserveStockReq) (res *InventoryOpResp, err error)
 	CommitStock(ctx context.Context, req *CommitStockReq) (res *InventoryOpResp, err error)
-	ReleaseStock(ctx context.Context, req *ReleaseStockReq) (res *InventoryOpResp, err error)
 	RefundStock(ctx context.Context, req *RefundStockReq) (res *InventoryOpResp, err error)
 	AdjustStock(ctx context.Context, req *AdjustStockReq) (res *InventoryOpResp, err error)
 }
-
-

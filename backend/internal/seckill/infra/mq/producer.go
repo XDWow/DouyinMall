@@ -4,65 +4,83 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"time"
 
-	"github.com/IBM/sarama"
-	"github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
+	seckilldomain "github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
+	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	rmq_client "github.com/apache/rocketmq-clients/golang"
 )
 
-const (
-	TopicSeckillCreateOrder           = "seckill.create_order"
-	TopicSeckillCreateOrderDeadLetter = "seckill.create_order.dead_letter"
-	TopicOrderStatusUpdate            = "order_status_update"
-)
+type Producer struct {
+	producer rmq_client.Producer
+}
 
-type Producer struct{ producer sarama.SyncProducer }
+type transactionWrapper struct {
+	tx rmq_client.Transaction
+}
 
-func NewProducer(producer sarama.SyncProducer) domain.Producer {
+func NewProducer(producer rmq_client.Producer) *Producer {
 	return &Producer{producer: producer}
 }
 
-func (p *Producer) Publish(ctx context.Context, evt domain.Event) error {
+func NewTransactionChecker(cache seckilldomain.Cache, l logger.LoggerV1) *rmq_client.TransactionChecker {
+	return &rmq_client.TransactionChecker{
+		Check: func(msg *rmq_client.MessageView) rmq_client.TransactionResolution {
+			var evt seckilldomain.Event
+			if err := json.Unmarshal(msg.GetBody(), &evt); err != nil {
+				l.Error("transaction checker failed to decode seckill event", logger.Error(err))
+				return rmq_client.ROLLBACK
+			}
+
+			resolution, err := cache.ResolveTransaction(context.Background(), evt.ActivityID, evt.UserID, evt.RequestNo)
+			if err != nil {
+				l.Warn("transaction checker resolve failed",
+					logger.Error(err),
+					logger.String("requestNo", evt.RequestNo))
+				return rmq_client.UNKNOW
+			}
+
+			switch resolution {
+			case seckilldomain.TransactionResolutionCommit:
+				return rmq_client.COMMIT
+			case seckilldomain.TransactionResolutionRollback:
+				return rmq_client.ROLLBACK
+			default:
+				return rmq_client.UNKNOW
+			}
+		},
+	}
+}
+
+func (p *Producer) Prepare(ctx context.Context, evt seckilldomain.Event) (seckilldomain.Transaction, error) {
 	data, err := json.Marshal(evt)
 	if err != nil {
-		return fmt.Errorf("序列化秒杀事件失败: %w", err)
+		return nil, fmt.Errorf("marshal seckill event failed: %w", err)
 	}
-	_, _, err = p.producer.SendMessage(&sarama.ProducerMessage{
-		Topic: TopicSeckillCreateOrder,
-		Key:   sarama.StringEncoder(strconv.FormatInt(evt.ActivityID, 10)),
-		Value: sarama.ByteEncoder(data),
-	})
-	if err != nil {
-		return fmt.Errorf("发布秒杀事件到 Kafka 失败: %w", err)
+
+	msg := &rmq_client.Message{
+		Topic: TopicSeckillRequest,
+		Body:  data,
 	}
-	return nil
+	msg.SetKeys(evt.RequestNo)
+
+	tx := p.producer.BeginTransaction()
+	if _, err = p.producer.SendWithTransaction(ctx, msg, tx); err != nil {
+		return nil, fmt.Errorf("send half seckill message failed: %w", err)
+	}
+	return &transactionWrapper{tx: tx}, nil
 }
 
-type seckillDeadLetterMessage struct {
-	Event           domain.Event `json:"event"`
-	Error           string       `json:"error"`
-	Attempts        int          `json:"attempts"`
-	SourceTopic     string       `json:"source_topic"`
-	SourcePartition int32        `json:"source_partition"`
-	SourceOffset    int64        `json:"source_offset"`
-	FailedAt        time.Time    `json:"failed_at"`
+func (t *transactionWrapper) Commit() error {
+	return t.tx.Commit()
 }
 
-func publishSeckillDeadLetter(_ context.Context, producer sarama.SyncProducer, msg seckillDeadLetterMessage) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("序列化秒杀死信失败: %w", err)
-	}
-	_, _, err = producer.SendMessage(&sarama.ProducerMessage{
-		Topic: TopicSeckillCreateOrderDeadLetter,
-		Key:   sarama.StringEncoder(strconv.FormatInt(msg.Event.ActivityID, 10)),
-		Value: sarama.ByteEncoder(data),
-	})
-	if err != nil {
-		return fmt.Errorf("发布秒杀死信失败: %w", err)
-	}
-	return nil
+func (t *transactionWrapper) Rollback() error {
+	return t.tx.RollBack()
 }
 
-
+func (p *Producer) Stop() error {
+	if p == nil || p.producer == nil {
+		return nil
+	}
+	return p.producer.GracefulStop()
+}

@@ -13,6 +13,8 @@ import (
 )
 
 func Build(_ context.Context, chatModel model.ToolCallingChatModel, registry *agenttool.Registry, skills *agentskill.Registry) (compose.AnyGraph, error) {
+	// AddToCart stays deterministic:
+	// assist (optional) -> resolve -> ensure args -> submit.
 	wf := compose.NewWorkflow[struct{}, *domain.ChatResult](compose.WithGenLocalState(domain.SharedGraphState))
 	agent := sharednode.NewSubgraphAgent(chatModel, registry, skills, 384)
 

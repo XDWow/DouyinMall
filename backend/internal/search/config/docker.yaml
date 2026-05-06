@@ -1,0 +1,54 @@
+db:
+  host: "douyinmall-mysql"
+  port: 3306
+  user: "root"
+  password: ""
+  database: "douyinmall"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "106.52.154.235:6379"
+
+etcd:
+  endpoints:
+    - "douyinmall-etcd:2379"
+
+kafka:
+  brokers:
+    - "10.1.4.4:29092"
+
+grpc:
+  server:
+    name: search.service
+    port: 8093
+    etcdTTL: 60
+
+http:
+  server:
+    port: 18093
+
+mcp:
+  server:
+    addr: ":19093"
+    name: "search-mcp"
+    version: "1.0.0"
+  upstream:
+    service_name: "search.service"
+    direct_addr: "127.0.0.1:8093"
+  tools:
+    - key: "search_product"
+      name: "search_product"
+      description: "Search products by keyword."
+      enabled: true
+
+llm:
+  base_url: "https://apis.iflow.cn/v1"
+  api_key: ""
+  chat_model: "qwen3-vl-plus"
+  timeout_seconds: 30
+
+embedding:
+  base_url: "https://api.siliconflow.cn/v1"
+  api_key: ""
+  model: "BAAI/bge-large-zh-v1.5"
+  timeout_seconds: 30

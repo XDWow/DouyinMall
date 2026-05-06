@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/service"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
+	"github.com/XDWow/DouyinMall/backend/pkg/rocketmqx"
+	rmq_client "github.com/apache/rocketmq-clients/golang"
 )
 
 const TopicOrderStatusUpdate = "order_status_update"
@@ -34,51 +34,36 @@ const (
 )
 
 type OrderConsumer struct {
-	client      sarama.Client
 	cartService service.CartService
 	logger      logger.LoggerV1
-	consumerGrp sarama.ConsumerGroup
+	consumer    *rocketmqx.Consumer
 }
 
 func NewOrderConsumer(
-	client sarama.Client,
+	client rmq_client.SimpleConsumer,
 	cartService service.CartService,
 	l logger.LoggerV1,
+	options rocketmqx.ConsumerOptions,
 ) *OrderConsumer {
-	return &OrderConsumer{
-		client:      client,
+	c := &OrderConsumer{
 		cartService: cartService,
 		logger:      l,
 	}
+	c.consumer = rocketmqx.NewConsumer(client, rocketmqx.NewHandler[OrderStatusUpdateEvent](l, c.Consume), l, options)
+	return c
 }
 
 func (c *OrderConsumer) Start() error {
-	cg, err := sarama.NewConsumerGroupFromClient("cart-order-consumer", c.client)
-	if err != nil {
+	if err := c.consumer.Start(); err != nil {
 		return err
 	}
-	c.consumerGrp = cg
-
-	go func() {
-		for {
-			err := cg.Consume(
-				context.Background(),
-				[]string{TopicOrderStatusUpdate},
-				saramax.NewHandler[OrderStatusUpdateEvent](c.logger, c.Consume),
-			)
-			if err != nil {
-				c.logger.Error("cart order consumer exited, retrying", logger.Error(err))
-			}
-		}
-	}()
-
-	c.logger.Info("Cart OrderConsumer started",
+	c.logger.Info("cart order consumer started",
 		logger.String("topic", TopicOrderStatusUpdate),
 		logger.String("consumerGroup", "cart-order-consumer"))
 	return nil
 }
 
-func (c *OrderConsumer) Consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdateEvent) error {
+func (c *OrderConsumer) Consume(_ *rmq_client.MessageView, evt OrderStatusUpdateEvent) error {
 	if evt.Status != OrderStatusPaid || evt.OrderKind != "CART" {
 		return nil
 	}
@@ -106,8 +91,5 @@ func (c *OrderConsumer) Consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdate
 }
 
 func (c *OrderConsumer) Stop() error {
-	if c.consumerGrp != nil {
-		return c.consumerGrp.Close()
-	}
-	return nil
+	return c.consumer.Stop()
 }

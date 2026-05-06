@@ -1,8 +1,9 @@
 package main
 
-import "sync"
+import (
+	"fmt"
+)
 
 func main() {
-	wg := sync.WaitGroup{}
-	wg.Go()
+
 }

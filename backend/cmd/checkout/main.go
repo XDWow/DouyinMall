@@ -22,6 +22,14 @@ func main() {
 		}
 	}()
 
+	go func() {
+		port := viper.GetInt("http.server.port")
+		log.Printf("Checkout HTTP service starting on port %d...", port)
+		if err := app.HTTPServer.Start(); err != nil {
+			log.Fatalf("HTTP server run error: %v", err)
+		}
+	}()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit

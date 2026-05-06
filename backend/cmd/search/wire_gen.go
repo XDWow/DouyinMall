@@ -10,13 +10,13 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/search/events"
 	"github.com/XDWow/DouyinMall/backend/internal/search/infra/es"
 	"github.com/XDWow/DouyinMall/backend/internal/search/ioc"
-	"github.com/XDWow/DouyinMall/backend/internal/search/transport/grpc"
+	transportgrpc "github.com/XDWow/DouyinMall/backend/internal/search/transport/grpc"
+	transporthttp "github.com/XDWow/DouyinMall/backend/internal/search/transport/http"
 	"github.com/XDWow/DouyinMall/backend/internal/search/usecase"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
 	"github.com/cloudwego/kitex/server"
 )
-
-// Injectors from wire.go:
 
 func InitApp() *App {
 	esClient := ioc.InitES()
@@ -32,29 +32,29 @@ func InitApp() *App {
 	aiSearchUseCase := usecase.NewAISearchUseCase(llmClient, embedder, productRepo, loggerV1)
 	syncUseCase := usecase.NewSyncUseCase(productRepo, merchantRepo, embedder, loggerV1)
 	client := ioc.InitProductClient()
-	searchHandler := grpc.NewSearchHandler(searchProductsUseCase, searchMerchantsUseCase, suggestUseCase, aggregationsUseCase, aiSearchUseCase, syncUseCase, esClient, client)
+	searchHandler := transportgrpc.NewSearchHandler(searchProductsUseCase, searchMerchantsUseCase, suggestUseCase, aggregationsUseCase, aiSearchUseCase, syncUseCase, esClient, client)
 	server := ioc.InitGRPCServer(searchHandler)
+	httpHandler := transporthttp.NewHandler(searchProductsUseCase, searchMerchantsUseCase, suggestUseCase, aggregationsUseCase, aiSearchUseCase)
+	httpServer := ioc.InitHTTPServer(httpHandler)
 	saramaClient := ioc.InitKafkaClient()
 	productConsumer := events.NewProductConsumer(saramaClient, loggerV1, syncUseCase)
 	merchantConsumer := events.NewMerchantConsumer(saramaClient, loggerV1, syncUseCase)
-	app := newApp(server, productConsumer, merchantConsumer)
+	app := newApp(server, httpServer, productConsumer, merchantConsumer)
 	return app
 }
 
-// wire.go:
-
 func newApp(
 	svr server.Server,
+	httpServer *ginx.Server,
 	productConsumer *events.ProductConsumer,
 	merchantConsumer *events.MerchantConsumer,
 ) *App {
 	return &App{
-		Server: svr,
+		Server:     svr,
+		HTTPServer: httpServer,
 		Consumers: []saramax.Consumer{
 			productConsumer,
 			merchantConsumer,
 		},
 	}
 }
-
-

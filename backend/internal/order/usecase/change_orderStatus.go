@@ -13,7 +13,7 @@ import (
 type ChangeOrderStatusUseCase struct {
 	orderRepo  domain.OrderRepository
 	outboxRepo domain.OutboxRepository
-	producer   mq.SaramaProducer
+	producer   mq.OrderStatusProducer
 	tx         domain.TxManager
 	log        logger.LoggerV1
 }
@@ -21,7 +21,7 @@ type ChangeOrderStatusUseCase struct {
 func NewChangeOrderStatusUseCase(
 	orderRepo domain.OrderRepository,
 	outboxRepo domain.OutboxRepository,
-	producer mq.SaramaProducer,
+	producer mq.OrderStatusProducer,
 	tx domain.TxManager,
 	log logger.LoggerV1,
 ) *ChangeOrderStatusUseCase {
@@ -41,6 +41,14 @@ type ChangeOrderStatusCmd struct {
 
 type ChangeOrderStatusResult struct {
 	Changed bool
+}
+
+func (uc *ChangeOrderStatusUseCase) ChangeOrderStatus(ctx context.Context, orderID int64, action domain.OrderAction) error {
+	_, err := uc.Execute(ctx, ChangeOrderStatusCmd{
+		OrderID: orderID,
+		Action:  action,
+	})
+	return err
 }
 
 func (uc *ChangeOrderStatusUseCase) Execute(ctx context.Context, cmd ChangeOrderStatusCmd) (ChangeOrderStatusResult, error) {

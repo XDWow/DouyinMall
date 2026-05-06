@@ -5,13 +5,16 @@ package main
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/checkout/ioc"
 	transportgrpc "github.com/XDWow/DouyinMall/backend/internal/checkout/transport/grpc"
+	transporthttp "github.com/XDWow/DouyinMall/backend/internal/checkout/transport/http"
 	"github.com/XDWow/DouyinMall/backend/internal/checkout/usecase"
 	"github.com/cloudwego/kitex/server"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/google/wire"
 )
 
 type App struct {
 	GRPCServer server.Server
+	HTTPServer *ginx.Server
 }
 
 func InitApp() *App {
@@ -34,9 +37,11 @@ func InitApp() *App {
 
 		// Transport
 		transportgrpc.NewCheckoutHandler,
+		transporthttp.NewHandler,
 
 		// Server
 		ioc.InitGRPCServer,
+		ioc.InitHTTPServer,
 
 		// App
 		newApp,
@@ -44,8 +49,8 @@ func InitApp() *App {
 	return nil
 }
 
-func newApp(grpcServer server.Server) *App {
-	return &App{GRPCServer: grpcServer}
+func newApp(grpcServer server.Server, httpServer *ginx.Server) *App {
+	return &App{GRPCServer: grpcServer, HTTPServer: httpServer}
 }
 
 

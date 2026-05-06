@@ -1,5 +1,5 @@
 db:
-  host: "douyinmall-mysql"
+  host: "134.175.67.79"
   port: 3306
   user: "root"
   password: ""
@@ -7,11 +7,11 @@ db:
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "douyinmall-redis:6379"
+  addr: "106.52.154.235:6379"
 
 etcd:
   endpoints:
-    - "douyinmall-etcd:2379"
+    - "42.193.160.221:2379"
 
 grpc:
   server:

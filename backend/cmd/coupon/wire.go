@@ -22,7 +22,8 @@ func InitApp() *App {
 		// 鍩虹璁炬柦
 		ioc.InitLogger,
 		ioc.InitDB,
-		ioc.InitKafkaClient,
+		ioc.InitRocketMQOrderStatusConsumer,
+		ioc.InitRocketMQConsumerOptions,
 
 		// Repository
 		repository.NewCouponRepository,
@@ -60,5 +61,3 @@ func newApp(
 		OrderConsumer: orderConsumer,
 	}
 }
-
-

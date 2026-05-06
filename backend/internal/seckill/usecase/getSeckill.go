@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
 )
 
@@ -36,4 +37,29 @@ func (uc *GetResultUseCase) Execute(ctx context.Context, requestNo string) (*dom
 	return result, nil
 }
 
+func (uc *GetResultUseCase) ExecuteForUser(ctx context.Context, requestNo string, userID int64) (*domain.Result, error) {
+	request, err := uc.requestRepo.FindByRequestNo(ctx, requestNo)
+	if err != nil {
+		return nil, err
+	}
+	if request.UserID != userID {
+		return nil, domain.ErrRequestNotFound
+	}
 
+	result, err := uc.cache.GetResult(ctx, requestNo)
+	if err != nil {
+		return nil, err
+	}
+	if result != nil {
+		return result, nil
+	}
+
+	result = &domain.Result{
+		RequestNo:  request.RequestNo,
+		Status:     request.Status,
+		OrderID:    request.OrderID,
+		FailReason: request.FailReason,
+	}
+	_ = uc.cache.SetResult(ctx, *result)
+	return result, nil
+}

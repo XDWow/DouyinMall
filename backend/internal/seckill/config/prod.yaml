@@ -2,12 +2,12 @@ db:
   host: "134.175.67.79"
   port: 3306
   user: "app"
-  password: ""
+  password: "0324"
   database: "douyin_mall"
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "114.132.75.56:16379"
+  addr: "106.52.154.235:6379"
   password: ""
   db: 0
 
@@ -20,6 +20,21 @@ grpc:
     name: seckill.service
     port: 8098
 
-kafka:
-  brokers:
-    - "43.136.121.171:29092"
+http:
+  server:
+    port: 18098
+
+rocketmq:
+  endpoint: "43.136.121.171:8081"
+  access_key: ""
+  secret_key: ""
+  request_group: "seckill-request-consumer"
+  dead_letter_group: "seckill-request-dead-letter-consumer"
+  invisible_duration_sec: 30
+  handle_timeout_sec: 25
+  shutdown_timeout_sec: 10
+  await_duration_sec: 5
+  max_message_num: 16
+  producer_max_attempts: 3
+  global_worker_num: 32
+  per_activity_concurrency: 8

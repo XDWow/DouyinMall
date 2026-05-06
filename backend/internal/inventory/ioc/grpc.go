@@ -14,17 +14,17 @@ import (
 )
 
 func InitGRPCServer(inventoryHandler *grpc.InventoryHandler) server.Server {
-	// 初始化 etcd 注册中心
-	etcdCfg := config.EtcdConfig{
-		Endpoints: []string{"localhost:12379"},
-	}
+	etcdCfg := config.EtcdConfig{}
 	viper.UnmarshalKey("etcd", &etcdCfg)
-	r, err := etcd.NewEtcdRegistry(etcdCfg.Endpoints)
-	if err != nil {
-		panic(fmt.Errorf("创建 etcd 注册中心失败: %w", err))
+	if len(etcdCfg.Endpoints) == 0 {
+		panic("etcd endpoints are empty")
 	}
 
-	// 服务配置
+	r, err := etcd.NewEtcdRegistry(etcdCfg.Endpoints)
+	if err != nil {
+		panic(fmt.Errorf("create etcd registry: %w", err))
+	}
+
 	grpcCfg := config.GRPCConfig{
 		Server: config.ServerConfig{
 			Name: "inventory.service",
@@ -34,17 +34,12 @@ func InitGRPCServer(inventoryHandler *grpc.InventoryHandler) server.Server {
 	viper.UnmarshalKey("grpc", &grpcCfg)
 	addr, _ := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", grpcCfg.Server.Port))
 
-	// 创建 Kitex 服务
-	svr := inventoryv1.NewServer(
+	return inventoryv1.NewServer(
 		inventoryHandler,
-		server.WithRegistry(r),       // 注册到 etcd
-		server.WithServiceAddr(addr), // 服务监听地址
+		server.WithRegistry(r),
+		server.WithServiceAddr(addr),
 		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{
 			ServiceName: grpcCfg.Server.Name,
 		}),
 	)
-
-	return svr
 }
-
-

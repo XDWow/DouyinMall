@@ -50,7 +50,7 @@ func normalizeStage(node string) string {
 	switch node {
 	case "UnderstandingNode", "RouteNode":
 		return "intent"
-	case "PromotionRAGNode", "AftersalesPolicyRAGNode":
+	case "PromotionCacheLookupNode", "PromotionRAGNode", "AftersalesPolicyCacheLookupNode", "AftersalesPolicyRAGNode":
 		return "retrieval"
 	case "ProductServiceGraph", "ProductServiceAgentNode",
 		"OrderServiceGraph", "OrderServiceAgentNode",

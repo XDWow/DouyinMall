@@ -17,7 +17,6 @@ import (
 
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
 	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
-	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	"github.com/XDWow/DouyinMall/backend/pkg/mcpruntime"
 )
 
@@ -26,7 +25,7 @@ type discoveredMCPTool struct {
 	Tool       *mcpWrappedTool
 }
 
-func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig, skills *agentskill.Registry) (*Registry, error) {
+func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig) (*Registry, error) {
 	discovered, err := discoverMCPTools(ctx, servers)
 	if err != nil {
 		return nil, err
@@ -38,22 +37,6 @@ func NewMCPRegistry(ctx context.Context, servers []agentconfig.MCPServerConfig, 
 			baseTool: item.Tool,
 			info:     item.Tool.info,
 		})
-	}
-	if skills != nil {
-		ft, ferr := NewFetchSkillTool(skills)
-		if ferr != nil {
-			return nil, fmt.Errorf("fetch_skill tool: %w", ferr)
-		}
-		if ft != nil {
-			info, ierr := ft.Info(ctx)
-			if ierr != nil {
-				return nil, fmt.Errorf("fetch_skill info: %w", ierr)
-			}
-			registered = append(registered, registeredTool{
-				baseTool: ft,
-				info:     info,
-			})
-		}
 	}
 	return newRegistry(ctx, registered)
 }

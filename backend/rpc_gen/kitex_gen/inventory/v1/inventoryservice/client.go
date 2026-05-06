@@ -13,9 +13,7 @@ import (
 type Client interface {
 	GetInventory(ctx context.Context, req *v1.GetInventoryReq, callOptions ...callopt.Option) (r *v1.GetInventoryResp, err error)
 	BatchGetInventory(ctx context.Context, req *v1.BatchGetInventoryReq, callOptions ...callopt.Option) (r *v1.BatchGetInventoryResp, err error)
-	ReserveStock(ctx context.Context, req *v1.ReserveStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error)
 	CommitStock(ctx context.Context, req *v1.CommitStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error)
-	ReleaseStock(ctx context.Context, req *v1.ReleaseStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error)
 	RefundStock(ctx context.Context, req *v1.RefundStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error)
 	AdjustStock(ctx context.Context, req *v1.AdjustStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error)
 }
@@ -51,19 +49,9 @@ func (p *kInventoryServiceClient) BatchGetInventory(ctx context.Context, req *v1
 	return p.kClient.BatchGetInventory(ctx, req)
 }
 
-func (p *kInventoryServiceClient) ReserveStock(ctx context.Context, req *v1.ReserveStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.ReserveStock(ctx, req)
-}
-
 func (p *kInventoryServiceClient) CommitStock(ctx context.Context, req *v1.CommitStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.CommitStock(ctx, req)
-}
-
-func (p *kInventoryServiceClient) ReleaseStock(ctx context.Context, req *v1.ReleaseStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.ReleaseStock(ctx, req)
 }
 
 func (p *kInventoryServiceClient) RefundStock(ctx context.Context, req *v1.RefundStockReq, callOptions ...callopt.Option) (r *v1.InventoryOpResp, err error) {
@@ -75,5 +63,3 @@ func (p *kInventoryServiceClient) AdjustStock(ctx context.Context, req *v1.Adjus
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.AdjustStock(ctx, req)
 }
-
-

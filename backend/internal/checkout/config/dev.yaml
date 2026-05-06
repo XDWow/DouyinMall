@@ -1,11 +1,15 @@
 etcd:
   endpoints:
-    - "127.0.0.1:2379"
+    - "42.193.160.221:2379"
 
 grpc:
   server:
     port: 8086
     name: checkout.service
+
+http:
+  server:
+    port: 18086
 
 snowflake:
   node_id: 1

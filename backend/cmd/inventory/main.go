@@ -44,6 +44,11 @@ func initViper() {
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
 	_ = viper.BindEnv("db.password", "DB_PASSWORD")
+	_ = viper.BindEnv("redis.addr", "REDIS_ADDR")
+	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
+	_ = viper.BindEnv("rocketmq.endpoint", "ROCKETMQ_ENDPOINT")
+	_ = viper.BindEnv("rocketmq.access_key", "ROCKETMQ_ACCESS_KEY")
+	_ = viper.BindEnv("rocketmq.secret_key", "ROCKETMQ_SECRET_KEY")
 
 	if err := viper.ReadInConfig(); err != nil {
 		fmt.Printf("warning: read inventory config failed: %v\n", err)

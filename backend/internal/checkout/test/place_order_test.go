@@ -235,14 +235,8 @@ func (s *stubInventoryClient) GetInventory(context.Context, *inventoryv1.GetInve
 func (s *stubInventoryClient) BatchGetInventory(context.Context, *inventoryv1.BatchGetInventoryReq, ...callopt.Option) (*inventoryv1.BatchGetInventoryResp, error) {
 	panic("unexpected call")
 }
-func (s *stubInventoryClient) ReserveStock(context.Context, *inventoryv1.ReserveStockReq, ...callopt.Option) (*inventoryv1.InventoryOpResp, error) {
-	panic("unexpected call")
-}
 func (s *stubInventoryClient) CommitStock(context.Context, *inventoryv1.CommitStockReq, ...callopt.Option) (*inventoryv1.InventoryOpResp, error) {
 	return s.commitResp, s.commitErr
-}
-func (s *stubInventoryClient) ReleaseStock(context.Context, *inventoryv1.ReleaseStockReq, ...callopt.Option) (*inventoryv1.InventoryOpResp, error) {
-	panic("unexpected call")
 }
 func (s *stubInventoryClient) RefundStock(_ context.Context, req *inventoryv1.RefundStockReq, _ ...callopt.Option) (*inventoryv1.InventoryOpResp, error) {
 	s.refundReq = req

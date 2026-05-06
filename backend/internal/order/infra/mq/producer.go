@@ -3,77 +3,58 @@ package mq
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 
-	"github.com/IBM/sarama"
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
+	"github.com/XDWow/DouyinMall/backend/pkg/rocketmqx"
+	rmq_client "github.com/apache/rocketmq-clients/golang"
 )
 
 const (
 	topicUpdateOrderStatus = "order_status_update"
 )
 
-type SaramaProducer struct {
-	producer sarama.SyncProducer
+type OrderStatusProducer interface {
+	SendMessage(ctx context.Context, evt domain.OrderStatusUpdateEvent) error
+	SendMessages(ctx context.Context, events []domain.OrderStatusUpdateEvent) []error
 }
 
-func NewSaramaProducer(syncProducer sarama.SyncProducer) SaramaProducer {
-	return SaramaProducer{
-		producer: syncProducer,
-	}
+type Producer struct {
+	producer rocketmqx.MessageProducer
 }
 
-func (p *SaramaProducer) SendMessage(ctx context.Context, evt domain.OrderStatusUpdateEvent) error {
+func NewProducer(producer rocketmqx.MessageProducer) OrderStatusProducer {
+	return &Producer{producer: producer}
+}
+
+func (p *Producer) SendMessage(ctx context.Context, evt domain.OrderStatusUpdateEvent) error {
 	data, _ := json.Marshal(evt)
-	_, _, err := p.producer.SendMessage(&sarama.ProducerMessage{
+	msg := &rmq_client.Message{
 		Topic: topicUpdateOrderStatus,
-		Value: sarama.StringEncoder(data),
-	})
-	return err
+		Body:  data,
+	}
+	msg.SetKeys(int64Key(evt.OrderID))
+	return p.producer.Send(ctx, msg)
 }
 
-func (p *SaramaProducer) SendMessages(ctx context.Context, events []domain.OrderStatusUpdateEvent) []error {
+func (p *Producer) SendMessages(ctx context.Context, events []domain.OrderStatusUpdateEvent) []error {
 	if len(events) == 0 {
 		return nil
 	}
 
-	messages := make([]*sarama.ProducerMessage, 0, len(events))
+	msgs := make([]*rmq_client.Message, 0, len(events))
 	for _, evt := range events {
 		data, _ := json.Marshal(evt)
-		messages = append(messages, &sarama.ProducerMessage{
+		msg := &rmq_client.Message{
 			Topic: topicUpdateOrderStatus,
-			Value: sarama.StringEncoder(data),
-		})
-	}
-	return sendMessages(p.producer, messages)
-}
-
-func sendMessages(producer sarama.SyncProducer, messages []*sarama.ProducerMessage) []error {
-	err := producer.SendMessages(messages)
-	if err == nil {
-		return nil
-	}
-
-	if errs, ok := err.(sarama.ProducerErrors); ok {
-		results := make([]error, len(messages))
-		for _, e := range errs {
-			if e.Msg == nil {
-				continue
-			}
-			for i, msg := range messages {
-				if msg == e.Msg {
-					results[i] = e.Err
-					break
-				}
-			}
+			Body:  data,
 		}
-		return results
+		msg.SetKeys(int64Key(evt.OrderID))
+		msgs = append(msgs, msg)
 	}
-
-	results := make([]error, len(messages))
-	for i := range results {
-		results[i] = err
-	}
-	return results
+	return p.producer.SendBatch(ctx, msgs)
 }
 
-
+func int64Key(orderID int64) string {
+	return strconv.FormatInt(orderID, 10)
+}

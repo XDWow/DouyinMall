@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/IBM/sarama"
 	orderv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1"
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1/orderservice"
 	paymentv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1"
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1/paymentservice"
 	seckillv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/seckill/v1"
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/seckill/v1/seckillservice"
+	"github.com/apache/rocketmq-clients/golang"
 	"github.com/cloudwego/kitex/client"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
@@ -27,13 +27,13 @@ import (
 )
 
 const (
-	seckillHostPort = "127.0.0.1:8098"
-	orderHostPort   = "127.0.0.1:8095"
-	paymentHostPort = "127.0.0.1:8092"
-	mockWechatURL   = "http://127.0.0.1:8888"
-	mysqlDSN        = "root:root@tcp(127.0.0.1:13306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
-	redisAddr       = "127.0.0.1:16379"
-	kafkaAddr       = "10.1.4.4:29092"
+	seckillHostPort  = "127.0.0.1:8098"
+	orderHostPort    = "127.0.0.1:8095"
+	paymentHostPort  = "127.0.0.1:8092"
+	mockWechatURL    = "http://127.0.0.1:8888"
+	mysqlDSN         = "root:root@tcp(127.0.0.1:13306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
+	redisAddr        = "127.0.0.1:16379"
+	rocketMQEndpoint = "127.0.0.1:8081"
 )
 
 func TestSeckillComposeEndToEnd(t *testing.T) {
@@ -90,8 +90,8 @@ func TestSeckillComposeEndToEnd(t *testing.T) {
 		resultResp, err = seckillClient.GetSeckillResult(pollCtx, &seckillv1.GetSeckillResultReq{
 			RequestNo: submitResp.GetRequestNo(),
 		})
-		return err == nil && resultResp.GetStatus() == "QUALIFIED" && resultResp.GetOrderId() != 0
-	}, 20*time.Second, 500*time.Millisecond, "seckill should qualify with order id for payment")
+		return err == nil && resultResp.GetStatus() == "SUCCESS" && resultResp.GetOrderId() != 0
+	}, 20*time.Second, 500*time.Millisecond, "seckill should succeed with order id for payment")
 
 	orderResp, err := orderClient.GetOrder(ctx, &orderv1.GetOrderReq{OrderId: resultResp.GetOrderId()})
 	require.NoError(t, err)
@@ -174,12 +174,23 @@ func TestSeckillCreateOrderFailureCompensates(t *testing.T) {
 
 	stockRedisKey := fmt.Sprintf("seckill:stock:%d", createResp.GetActivityId())
 	userRedisKey := fmt.Sprintf("seckill:user:%d:%d", createResp.GetActivityId(), userID)
+	statusRedisKey := fmt.Sprintf("seckill:req:status:%s", requestNo)
+	dataRedisKey := fmt.Sprintf("seckill:req:data:%s", requestNo)
+
 	require.NoError(t, rdb.DecrBy(ctx, stockRedisKey, 1).Err())
-	require.NoError(t, rdb.Set(ctx, userRedisKey, "1", time.Hour).Err())
+	require.NoError(t, rdb.Set(ctx, userRedisKey, requestNo, time.Hour).Err())
+	require.NoError(t, rdb.Set(ctx, statusRedisKey, "PROCESSING", time.Hour).Err())
+
+	resultPayload, err := json.Marshal(map[string]any{
+		"requestNo": requestNo,
+		"status":    "PROCESSING",
+	})
+	require.NoError(t, err)
+	require.NoError(t, rdb.Set(ctx, dataRedisKey, resultPayload, time.Hour).Err())
 
 	_, err = db.ExecContext(ctx,
-		"INSERT INTO seckill_request (request_no, activity_id, user_id, status, order_id, fail_reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())",
-		requestNo, createResp.GetActivityId(), userID, "PROCESSING", 0, "",
+		"INSERT INTO seckill_request (request_no, activity_id, user_id, status, fail_reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+		requestNo, createResp.GetActivityId(), userID, "PROCESSING", "",
 	)
 	require.NoError(t, err)
 
@@ -190,18 +201,18 @@ func TestSeckillCreateOrderFailureCompensates(t *testing.T) {
 		"product_id":    productID,
 		"sku_id":        skuID,
 		"seckill_price": 259,
-		"quantity":      1,
 	})
 	require.NoError(t, err)
 
-	producer := openKafkaProducer(t)
-	defer func() { _ = producer.Close() }()
+	producer := openRocketMQProducer(t)
+	defer func() { _ = producer.GracefulStop() }()
 
-	_, _, err = producer.SendMessage(&sarama.ProducerMessage{
-		Topic: "seckill.create_order",
-		Key:   sarama.StringEncoder(requestNo),
-		Value: sarama.ByteEncoder(payload),
-	})
+	msg := &golang.Message{
+				Topic: "seckill_request",
+		Body:  payload,
+	}
+	msg.SetKeys(requestNo)
+	_, err = producer.Send(ctx, msg)
 	require.NoError(t, err)
 
 	var resultResp *seckillv1.GetSeckillResultResp
@@ -212,7 +223,7 @@ func TestSeckillCreateOrderFailureCompensates(t *testing.T) {
 		resultResp, err = seckillClient.GetSeckillResult(pollCtx, &seckillv1.GetSeckillResultReq{
 			RequestNo: requestNo,
 		})
-		return err == nil && resultResp.GetStatus() == "FAIL" && resultResp.GetFailReason() == "CREATE_ORDER_FAIL"
+		return err == nil && resultResp.GetStatus() == "FAILED" && resultResp.GetFailReason() == "CREATE_ORDER_FAIL"
 	}, 20*time.Second, 500*time.Millisecond, "seckill request should fail and be compensated")
 
 	require.Eventually(t, func() bool {
@@ -225,15 +236,13 @@ func TestSeckillCreateOrderFailureCompensates(t *testing.T) {
 	require.EqualValues(t, 0, exists)
 
 	var requestStatus, failReason string
-	var orderID int64
 	err = db.QueryRowContext(ctx,
-		"SELECT status, fail_reason, order_id FROM seckill_request WHERE request_no = ?",
+		"SELECT status, fail_reason FROM seckill_request WHERE request_no = ?",
 		requestNo,
-	).Scan(&requestStatus, &failReason, &orderID)
+	).Scan(&requestStatus, &failReason)
 	require.NoError(t, err)
-	require.Equal(t, "FAIL", requestStatus)
+	require.Equal(t, "FAILED", requestStatus)
 	require.Equal(t, "CREATE_ORDER_FAIL", failReason)
-	require.Zero(t, orderID)
 
 	var availableStock int32
 	err = db.QueryRowContext(ctx,
@@ -243,15 +252,13 @@ func TestSeckillCreateOrderFailureCompensates(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 1, availableStock)
 
-	var opCount int
+	var qualificationCount int
 	err = db.QueryRowContext(ctx,
-		"SELECT COUNT(1) FROM seckill_operation WHERE activity_id = ? AND operation_id IN (?, ?)",
-		createResp.GetActivityId(),
-		"deduct_"+requestNo,
-		"restore_"+requestNo+"_invalid_order",
-	).Scan(&opCount)
+		"SELECT COUNT(1) FROM seckill_qualification WHERE activity_id = ? AND user_id = ?",
+		createResp.GetActivityId(), userID,
+	).Scan(&qualificationCount)
 	require.NoError(t, err)
-	require.Equal(t, 2, opCount)
+	require.Zero(t, qualificationCount)
 }
 
 func ensureServiceReady(t *testing.T, addr string) {
@@ -286,9 +293,9 @@ func openMySQL(t *testing.T) *sql.DB {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		checkCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		return db.PingContext(ctx) == nil
+		return db.PingContext(checkCtx) == nil
 	}, 15*time.Second, 500*time.Millisecond, "mysql is not reachable")
 
 	return db
@@ -299,29 +306,32 @@ func openRedis(t *testing.T) *redis.Client {
 
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
 	require.Eventually(t, func() bool {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		checkCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		return rdb.Ping(ctx).Err() == nil
+		return rdb.Ping(checkCtx).Err() == nil
 	}, 15*time.Second, 500*time.Millisecond, "redis is not reachable")
 
 	return rdb
 }
 
-func openKafkaProducer(t *testing.T) sarama.SyncProducer {
+func openRocketMQProducer(t *testing.T) golang.Producer {
 	t.Helper()
 
-	cfg := sarama.NewConfig()
-	cfg.Version = sarama.V4_1_0_0
-	cfg.Producer.Return.Successes = true
-	cfg.Producer.RequiredAcks = sarama.WaitForAll
-	cfg.Producer.Retry.Max = 3
-
-	var producer sarama.SyncProducer
+	var producer golang.Producer
 	require.Eventually(t, func() bool {
 		var err error
-		producer, err = sarama.NewSyncProducer([]string{kafkaAddr}, cfg)
-		return err == nil
-	}, 15*time.Second, 500*time.Millisecond, "kafka producer is not reachable")
+		producer, err = golang.NewProducer(
+			&golang.Config{Endpoint: rocketMQEndpoint},
+		golang.WithTopics("seckill_request"),
+		)
+		if err != nil {
+			return false
+		}
+		if err = producer.Start(); err != nil {
+			return false
+		}
+		return true
+	}, 15*time.Second, 500*time.Millisecond, "rocketmq producer is not reachable")
 
 	return producer
 }

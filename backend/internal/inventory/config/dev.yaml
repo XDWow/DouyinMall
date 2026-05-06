@@ -1,17 +1,18 @@
 db:
-  host: "localhost"
-  port: 13306
-  user: "root"
+  host: "134.175.67.79"
+  port: 3306
+  user: "app"
   password: ""
-  database: "DouyinMall"
+  database: "douyin_mall"
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "localhost:6379"
+  addr: "106.52.154.235:6379"
+  password: "0624"
 
 etcd:
   endpoints:
-    - "localhost:12379"
+    - "42.193.160.221:2379"
 
 grpc:
   server:
@@ -32,6 +33,12 @@ mcp:
       description: "Get inventory stock by product id."
       enabled: true
 
-kafka:
-  brokers:
-    - "10.1.4.4:29092"
+rocketmq:
+  endpoint: "43.136.121.171:8081"
+  access_key: ""
+  secret_key: ""
+  consumer_group: "inventory-consumer"
+  await_duration_sec: 5
+  max_message_num: 16
+  invisible_duration_sec: 30
+  producer_max_attempts: 3

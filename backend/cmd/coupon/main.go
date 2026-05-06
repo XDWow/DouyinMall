@@ -14,31 +14,27 @@ func main() {
 
 	app := InitApp()
 
-	// 鍚姩Kafka娑堣垂鑰咃紙璁㈠崟鐘舵€佸彉鏇达級
 	if err := app.OrderConsumer.Start(); err != nil {
 		fmt.Printf("warning: coupon order consumer start failed: %v\n", err)
 	} else {
-		fmt.Println("Kafka娑堣垂鑰呭凡鍚姩")
+		fmt.Println("coupon order consumer started")
 	}
 
-	// 鍚姩gRPC鏈嶅姟
 	go func() {
-		fmt.Printf("Coupon gRPC鏈嶅姟鍚姩鍦? %d\n", viper.GetInt("grpc.server.port"))
+		fmt.Printf("coupon grpc server listening on %d\n", viper.GetInt("grpc.server.port"))
 		if err := app.GRPCServer.Run(); err != nil {
-			panic(fmt.Errorf("gRPC鏈嶅姟鍚姩澶辫触: %w", err))
+			panic(fmt.Errorf("start coupon grpc server: %w", err))
 		}
 	}()
 
-	// 浼橀泤閫€鍑?
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	fmt.Println("姝ｅ湪鍏抽棴Coupon鏈嶅姟...")
+	fmt.Println("shutting down coupon service")
 	if err := app.GRPCServer.Stop(); err != nil {
-		fmt.Printf("gRPC鏈嶅姟鍏抽棴澶辫触: %v\n", err)
+		fmt.Printf("stop coupon grpc server failed: %v\n", err)
 	}
-	fmt.Println("coupon service stopped")
 }
 
 func initViper() {
@@ -49,8 +45,11 @@ func initViper() {
 
 	viper.AutomaticEnv()
 	_ = viper.BindEnv("db.password", "DB_PASSWORD")
+	_ = viper.BindEnv("rocketmq.endpoint", "ROCKETMQ_ENDPOINT")
+	_ = viper.BindEnv("rocketmq.access_key", "ROCKETMQ_ACCESS_KEY")
+	_ = viper.BindEnv("rocketmq.secret_key", "ROCKETMQ_SECRET_KEY")
 
 	if err := viper.ReadInConfig(); err != nil {
-		fmt.Printf("璀﹀憡: 璇诲彇閰嶇疆鏂囦欢澶辫触: %v锛屼娇鐢ㄩ粯璁ら厤缃甛n", err)
+		fmt.Printf("warning: read coupon config failed: %v\n", err)
 	}
 }

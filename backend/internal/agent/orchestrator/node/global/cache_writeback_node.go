@@ -43,7 +43,7 @@ func (n *CacheWritebackService) Write(ctx context.Context, state *domain.State) 
 	if n == nil || state == nil || state.Input == nil || state.Response == nil {
 		return nil
 	}
-	if !exactCacheableIntent(state.Intent) {
+	if !CanWriteCache(state) {
 		return nil
 	}
 

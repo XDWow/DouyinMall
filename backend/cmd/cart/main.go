@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,51 +16,62 @@ func main() {
 
 	app := InitApp()
 
-	// 鍚姩 Kafka 娑堣垂鑰咃紙鐩戝惉璁㈠崟鏀粯鎴愬姛浜嬩欢锛屾竻鐞嗚喘鐗╄溅锛?
 	if err := app.OrderConsumer.Start(); err != nil {
-		fmt.Printf("warning: cart order consumer start failed: %v\n", err)
+		log.Printf("cart order consumer start failed: %v", err)
 	} else {
-		fmt.Println("cart order consumer started")
+		log.Printf("cart order consumer started")
 	}
 
+	grpcErr := make(chan error, 1)
 	go func() {
-		fmt.Printf("Cart gRPC鏈嶅姟鍚姩鍦? %d\n", viper.GetInt("grpc.server.port"))
-		if err := app.Server.Run(); err != nil {
-			panic(fmt.Errorf("gRPC鏈嶅姟鍚姩澶辫触: %w", err))
-		}
+		grpcErr <- app.Server.Run()
 	}()
 
-	// 浼橀泤閫€鍑?
+	httpErr := make(chan error, 1)
+	go func() {
+		httpErr <- app.HTTPServer.Start()
+	}()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
 
-	fmt.Println("姝ｅ湪鍏抽棴Cart鏈嶅姟...")
-	if err := app.OrderConsumer.Stop(); err != nil {
-		fmt.Printf("鍏抽棴 Kafka 娑堣垂鑰呭け璐? %v\n", err)
+	select {
+	case <-quit:
+		if err := app.OrderConsumer.Stop(); err != nil {
+			log.Printf("stop cart order consumer failed: %v", err)
+		}
+		if err := app.Server.Stop(); err != nil {
+			log.Printf("stop cart grpc failed: %v", err)
+		}
+	case err := <-grpcErr:
+		if err != nil {
+			panic(fmt.Errorf("cart grpc run failed: %w", err))
+		}
+	case err := <-httpErr:
+		if err != nil {
+			panic(fmt.Errorf("cart http run failed: %w", err))
+		}
 	}
-	if err := app.Server.Stop(); err != nil {
-		fmt.Printf("鍏抽棴 gRPC 鏈嶅姟澶辫触: %v\n", err)
-	}
-	fmt.Println("cart service stopped")
 }
 
 func initViperWatch() {
-	cfile := pflag.String("config",
-		"internal/cart/config/dev.yaml", "閰嶇疆鏂囦欢璺緞")
+	cfile := pflag.String("config", "internal/cart/config/dev.yaml", "config file path")
 	pflag.Parse()
+
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w", err))
+		panic(fmt.Errorf("read config failed: %w", err))
 	}
 
-	// 鏀寔鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢锛堢幆澧冨彉閲忎紭鍏堬級
 	viper.AutomaticEnv()
-
-	viper.BindEnv("db.password", "DB_PASSWORD")
-	viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
-	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
-	viper.BindEnv("grpc.server.port", "GRPC_PORT")
-	viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
+	_ = viper.BindEnv("db.password", "DB_PASSWORD")
+	_ = viper.BindEnv("redis.addr", "REDIS_ADDR")
+	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
+	_ = viper.BindEnv("rocketmq.endpoint", "ROCKETMQ_ENDPOINT")
+	_ = viper.BindEnv("rocketmq.access_key", "ROCKETMQ_ACCESS_KEY")
+	_ = viper.BindEnv("rocketmq.secret_key", "ROCKETMQ_SECRET_KEY")
+	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")
+	_ = viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 }

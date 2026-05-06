@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/XDWow/DouyinMall/backend/internal/product/producer"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/cloudwego/kitex/server"
 )
 
@@ -20,8 +21,7 @@ func (p *producerWrapper) Start(ctx context.Context) error {
 }
 
 type App struct {
-	Server    server.Server
-	Producers []ProducerComponent
+	Server     server.Server
+	HTTPServer *ginx.Server
+	Producers  []ProducerComponent
 }
-
-

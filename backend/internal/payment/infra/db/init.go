@@ -3,7 +3,5 @@ package db
 import "gorm.io/gorm"
 
 func InitTables(db *gorm.DB) error {
-	return db.AutoMigrate(&Payment{})
+	return db.AutoMigrate(&Payment{}, &PaymentOutboxEventModel{})
 }
-
-

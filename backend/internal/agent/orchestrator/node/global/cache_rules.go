@@ -28,7 +28,30 @@ func ShouldSkipCache(st *domain.State) bool {
 	if strings.TrimSpace(st.Input.Message) == "" {
 		return true
 	}
-	return strings.TrimSpace(st.Input.InterruptID) != ""
+	if strings.TrimSpace(st.Input.InterruptID) != "" {
+		return true
+	}
+	return false
+}
+
+func CanReadCache(st *domain.State) bool {
+	if ShouldSkipCache(st) {
+		return false
+	}
+	return domain.DefaultReadOnlyForIntent(st.Intent) && (exactCacheableIntent(st.Intent) || semanticCacheableIntent(st.Intent))
+}
+
+func CanWriteCache(st *domain.State) bool {
+	if !CanReadCache(st) || st.Response == nil {
+		return false
+	}
+	if st.Response.Trace.CacheHit || st.Response.Interrupted || st.Response.Interrupt != nil {
+		return false
+	}
+	if st.Response.NeedHandoff {
+		return false
+	}
+	return st.Response.Status == "" || st.Response.Status == domain.ReplyStatusAnswered
 }
 
 func exactCacheableIntent(intent domain.Intent) bool {
@@ -42,7 +65,7 @@ func exactCacheableIntent(intent domain.Intent) bool {
 
 func semanticCacheableIntent(intent domain.Intent) bool {
 	switch intent {
-	case domain.IntentAftersalesPolicy:
+	case domain.IntentProductService, domain.IntentOrderService, domain.IntentPromotionService, domain.IntentAftersalesPolicy:
 		return true
 	default:
 		return false

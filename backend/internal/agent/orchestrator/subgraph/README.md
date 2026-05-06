@@ -1,64 +1,59 @@
-# subgraph：当前生效的业务子图
+# Subgraph Layout
 
-这里现在只保留主图真正会路由到的业务子图。
+当前客服主图只负责通用编排：
 
-主图入口在：
-- [builder.go](/D:/workspace/go/DouyinMall/backend/internal/agent/orchestrator/graph/builder.go)
+`AccessGuard -> SessionLoad -> Understanding -> Route -> Subgraph -> Finalize`
 
-主图当前只会接入这些子图：
-- `addtocart/`
-- `aftersalesapply/`
-- `aftersalespolicy/`
-- `orderservice/`
+真正的业务行为都收敛在子图里。子图分两类：
+
+## Read Flows
+
 - `productservice/`
-- `promotionservice/`
-- `unknown/`
-
-公共辅助目录：
-- `common/`
-  放子图共用的小工具，例如 agent 输出解析、slots 文本渲染、引用转换。
-
-## 子图分层
-
-### 1. 确定性子图
-- `addtocart/`
-- `aftersalesapply/`
-
-特点：
-- 直接消费主图 `UnderstandingNode` 已提取好的 `session.Slots`
-- 缺参走 interrupt/resume
-- 参数齐全后直接构造 `tool_calls`
-- 统一交给 `ToolsNode` 执行
-
-### 2. agent 子图
 - `orderservice/`
-- `productservice/`
 - `promotionservice/`
 - `aftersalespolicy/`
 
-特点：
-- 读型、说明型、歧义型问题
-- 由 `shared/subgraph_agent.go` 驱动模型多轮
-- 模型在白名单能力内决定直接回答、调工具或 clarification
-- `promotionservice`、`aftersalespolicy` 先 RAG，再进入 Agent
+读型子图统一使用 `readflow.Build`：
 
-### 3. 兜底子图
+1. 在子图内部先查读缓存。
+2. 命中缓存时直接返回 `ChatResult`，不再走 RAG、工具或 Agent。
+3. 未命中时继续执行子图自己的能力：商品和订单走 ADK Agent，优惠和售后政策先 RAG 再交给 ADK Agent。
+4. 每个子图只声明 intent、node 名、工具白名单、skill 白名单、RAG 域、prompt 和 slots 上下文。
+
+缓存不放在主图做全局判断。原因是“是否能读缓存”属于读型业务能力，而写型子图如加购、售后申请不能被缓存短路。
+
+## Write Flows
+
+- `addtocart/`
+- `aftersalesapply/`
+
+写型子图保持确定性编排：
+
+1. 消费 `UnderstandingNode` 已提取的 slots。
+2. 缺参数时用 interrupt/resume 追问。
+3. 参数齐全后由业务代码构造受控 `tool_calls`。
+4. 最终交给统一工具执行链路，不让模型自由提交写操作。
+
+## Fallback
+
 - `unknown/`
 
-特点：
-- 只负责无法稳定判断时的兜底澄清
-- 不调工具，不走 RAG
+兜底子图只负责友好收口，不调用工具，不走 RAG。
 
-## 建议阅读顺序
+## Shared Packages
 
-如果你现在想快速看懂代码，按这个顺序看最省力：
+- `common/`：agent JSON 解析、slots 渲染、interrupt、引用解析等小工具。
+- `readflow/`：读型客服子图模板，封装“缓存 -> 可选 RAG -> ADK Agent”。
 
-1. `graph/builder.go`
-2. `node/global/understanding/`
-3. `node/shared/subgraph_agent.go`
-4. `subgraph/addtocart/`
-5. `subgraph/aftersalesapply/`
-6. `subgraph/orderservice/`
-7. `subgraph/productservice/`
-8. `subgraph/promotionservice/`
-9. `subgraph/aftersalespolicy/`
+## Recommended Reading Order
+
+1. `orchestrator/graph/builder.go`
+2. `orchestrator/node/global/understanding/`
+3. `orchestrator/subgraph/readflow/`
+4. `orchestrator/node/shared/subgraph_agent.go`
+5. `orchestrator/subgraph/productservice/`
+6. `orchestrator/subgraph/orderservice/`
+7. `orchestrator/subgraph/promotionservice/`
+8. `orchestrator/subgraph/aftersalespolicy/`
+9. `orchestrator/subgraph/addtocart/`
+10. `orchestrator/subgraph/aftersalesapply/`

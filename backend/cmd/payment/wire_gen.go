@@ -7,6 +7,7 @@
 package main
 
 import (
+	paymentdb "github.com/XDWow/DouyinMall/backend/internal/payment/infra/db"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/job"
@@ -20,14 +21,15 @@ import (
 // Injectors from wire.go:
 
 func InitApp() *App {
-	db := ioc.InitDB()
+	gormDB := ioc.InitDB()
 	loggerV1 := ioc.InitLogger()
-	paymentRepository := repository.NewPaymentRepository(db, loggerV1)
+	paymentRepository := repository.NewPaymentRepository(gormDB, loggerV1)
+	paymentOutboxRepository := repository.NewPaymentOutboxRepository(gormDB)
+	txManager := paymentdb.NewGormTxManager(gormDB)
 	nativePayService := ioc.InitNativePayService()
 	nativePrePaymentUC := ioc.InitNativePrePaymentUC(paymentRepository, loggerV1, nativePayService)
 	getPaymentUC := usecase.NewGetPaymentUC(paymentRepository, loggerV1)
-	client := ioc.InitOrderClient()
-	payCallbackUC := usecase.NewPayCallbackUC(paymentRepository, client)
+	payCallbackUC := usecase.NewPayCallbackUC(paymentRepository, paymentOutboxRepository, txManager, loggerV1)
 	syncPaymentOrderUC := ioc.InitSyncPaymentOrderUC(nativePayService, payCallbackUC, loggerV1)
 	confirmPaymentUC := usecase.NewConfirmPaymentUC(paymentRepository, syncPaymentOrderUC)
 	paymentHandler := grpc.NewPaymentHandler(nativePrePaymentUC, getPaymentUC, confirmPaymentUC)
@@ -36,8 +38,12 @@ func InitApp() *App {
 	alipayClient := ioc.InitAlipayClient()
 	handler := ioc.InitWechatNotifyHandler()
 	ginxServer := ioc.InitHTTPServer(payCallbackUC, loggerV1, string2, alipayClient, handler)
+	producer := ioc.InitRocketMQProducerClient()
+	messageProducer := ioc.InitPaymentStatusProducer(producer)
+	paymentStatusProducer := ioc.InitPaymentMQProducer(messageProducer)
 	syncPaymentOrderJob := job.NewSyncPaymentOrderJob(syncPaymentOrderUC, paymentRepository, loggerV1)
-	cron := ioc.InitJobs(syncPaymentOrderJob, loggerV1)
+	paymentOutboxWorkerJob := job.NewPaymentOutboxWorkerJob(paymentOutboxRepository, paymentStatusProducer, loggerV1)
+	cron := ioc.InitJobs(syncPaymentOrderJob, paymentOutboxWorkerJob, loggerV1)
 	app := newApp(server, ginxServer, cron)
 	return app
 }

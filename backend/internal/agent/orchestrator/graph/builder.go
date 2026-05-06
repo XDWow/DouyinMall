@@ -39,6 +39,7 @@ type Builder struct {
 	AccessGuard   *globalnode.AccessGuardNode
 	SessionLoad   *globalnode.SessionLoadNode
 	Understanding *understandingnode.UnderstandingNode
+	CacheLookup   *globalnode.CacheLookupNode
 	Route         *globalnode.RouteNode
 	Finalize      *globalnode.FinalizeNode
 
@@ -169,19 +170,19 @@ func (b *Builder) addGlobalNodes(wf *compose.Workflow[struct{}, *domain.State]) 
 
 func (b *Builder) addSubgraphs(ctx context.Context, wf *compose.Workflow[struct{}, *domain.State]) error {
 	// 读型子图走 Agent/RAG，写型子图保持确定性流程
-	productGraph, err := productservice.Build(ctx, b.AgentModel, b.Registry, b.Skills)
+	productGraph, err := productservice.Build(ctx, b.AgentModel, b.Registry, b.Skills, b.CacheLookup)
 	if err != nil {
 		return err
 	}
-	orderGraph, err := orderservice.Build(ctx, b.AgentModel, b.Registry, b.Skills)
+	orderGraph, err := orderservice.Build(ctx, b.AgentModel, b.Registry, b.Skills, b.CacheLookup)
 	if err != nil {
 		return err
 	}
-	promotionGraph, err := promotionservice.Build(ctx, b.AgentModel, b.Registry, b.Skills, b.RAG)
+	promotionGraph, err := promotionservice.Build(ctx, b.AgentModel, b.Registry, b.Skills, b.RAG, b.CacheLookup)
 	if err != nil {
 		return err
 	}
-	policyGraph, err := aftersalespolicy.Build(ctx, b.AgentModel, b.Registry, b.Skills, b.RAG)
+	policyGraph, err := aftersalespolicy.Build(ctx, b.AgentModel, b.Registry, b.Skills, b.RAG, b.CacheLookup)
 	if err != nil {
 		return err
 	}

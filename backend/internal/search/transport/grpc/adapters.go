@@ -2,7 +2,7 @@ package grpc
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/search/domain"
-	searchv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/search/v1"
+	searchv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/search/v1"
 )
 
 // ==================== Proto 鈫?Domain ====================
@@ -89,5 +89,3 @@ func toProtoPriceRangeAggList(aggs []domain.PriceRangeAggregation) []*searchv1.P
 	}
 	return res
 }
-
-

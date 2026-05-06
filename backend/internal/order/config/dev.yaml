@@ -1,23 +1,29 @@
 db:
-  host: "localhost"
-  port: 13316
-  user: "root"
-  password: ""
-  database: "DouyinMall"
+  host: "134.175.67.79"
+  port: 3306
+  user: "app"
+  password: "0324"
+  database: "douyin_mall"
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "localhost:6379"
+  addr: "106.52.154.235:6379"
+  password: ""
+  db: 0
 
 etcd:
   endpoints:
-    - "localhost:12379"
+    - "42.193.160.221:2379"
 
 grpc:
   server:
     name: order.service
     port: 8095
     etcdTTL: 60
+
+http:
+  server:
+    port: 18095
 
 mcp:
   server:
@@ -37,14 +43,20 @@ mcp:
       description: "查询当前用户订单列表第一页，固定最多 10 条（用户来自 MCP 运行时上下文）。"
       enabled: true
 
-kafka:
-  brokers:
-    - "10.1.4.4:29092"
+rocketmq:
+  endpoint: "43.136.121.171:8081"
+  access_key: ""
+  secret_key: ""
+  producer_max_attempts: 3
+  payment_consumer_group: "order-payment-consumer"
+  await_duration_sec: 5
+  max_message_num: 16
+  invisible_duration_sec: 30
 
 canal:
   mysql:
-    host: "localhost"
-    port: 13316
-    user: "root"
+    host: "134.175.67.79"
+    port: 3306
+    user: "app"
     password: ""
   server_id: 1234

@@ -1,19 +1,39 @@
 package ioc
 
 import (
-	"strconv"
-	"sync/atomic"
-	"time"
+	"fmt"
+	"hash/crc32"
+	"os"
+
+	"github.com/bwmarrin/snowflake"
+	"github.com/spf13/viper"
 )
 
-type SnowflakeIDGenerator struct{ seq atomic.Int64 }
-
-func InitIDGenerator() *SnowflakeIDGenerator { return &SnowflakeIDGenerator{} }
-
-func (g *SnowflakeIDGenerator) GenerateID() string {
-	now := time.Now().UnixNano() / int64(time.Millisecond)
-	seq := g.seq.Add(1) % 1000
-	return strconv.FormatInt(now*1000+seq, 10)
+type SnowflakeIDGenerator struct {
+	node *snowflake.Node
 }
 
+func InitIDGenerator() *SnowflakeIDGenerator {
+	nodeID := viper.GetInt64("snowflake.node_id")
+	if !viper.IsSet("snowflake.node_id") {
+		nodeID = defaultSnowflakeNodeID()
+	}
 
+	node, err := snowflake.NewNode(nodeID)
+	if err != nil {
+		panic(fmt.Errorf("init snowflake node failed: %w", err))
+	}
+	return &SnowflakeIDGenerator{node: node}
+}
+
+func (g *SnowflakeIDGenerator) GenerateID() string {
+	return g.node.Generate().String()
+}
+
+func defaultSnowflakeNodeID() int64 {
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		return 1
+	}
+	return int64(crc32.ChecksumIEEE([]byte(hostname)) % 1024)
+}

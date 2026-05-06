@@ -7,7 +7,9 @@ import (
 	es "github.com/XDWow/DouyinMall/backend/internal/search/infra/es"
 	"github.com/XDWow/DouyinMall/backend/internal/search/ioc"
 	transportgrpc "github.com/XDWow/DouyinMall/backend/internal/search/transport/grpc"
+	transporthttp "github.com/XDWow/DouyinMall/backend/internal/search/transport/http"
 	"github.com/XDWow/DouyinMall/backend/internal/search/usecase"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
 	"github.com/cloudwego/kitex/server"
 	"github.com/google/wire"
@@ -15,34 +17,26 @@ import (
 
 func InitApp() *App {
 	wire.Build(
-		// 鍩虹璁炬柦
 		ioc.InitLogger,
 		ioc.InitES,
 		ioc.InitKafkaClient,
 		ioc.InitProductClient,
 		ioc.InitLLMClient,
 		ioc.InitEmbedder,
-
-		// 浠撳偍
 		es.NewProductRepo,
 		es.NewMerchantRepo,
-
-		// 鐢ㄤ緥
 		usecase.NewSearchProductsUseCase,
 		usecase.NewSearchMerchantsUseCase,
 		usecase.NewSuggestUseCase,
 		usecase.NewAggregationsUseCase,
 		usecase.NewAISearchUseCase,
 		usecase.NewSyncUseCase,
-
-		// 浼犺緭灞?
 		transportgrpc.NewSearchHandler,
+		transporthttp.NewHandler,
 		ioc.InitGRPCServer,
-
-		// Kafka 娑堣垂鑰?
+		ioc.InitHTTPServer,
 		events.NewProductConsumer,
 		events.NewMerchantConsumer,
-
 		newApp,
 	)
 	return nil
@@ -50,16 +44,16 @@ func InitApp() *App {
 
 func newApp(
 	svr server.Server,
+	httpServer *ginx.Server,
 	productConsumer *events.ProductConsumer,
 	merchantConsumer *events.MerchantConsumer,
 ) *App {
 	return &App{
-		Server: svr,
+		Server:     svr,
+		HTTPServer: httpServer,
 		Consumers: []saramax.Consumer{
 			productConsumer,
 			merchantConsumer,
 		},
 	}
 }
-
-

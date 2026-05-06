@@ -12,26 +12,20 @@ import (
 )
 
 type InventoryHandler struct {
-	reserveStockUC *usecase.ReserveStockUsecase
-	commitStockUC  *usecase.CommitStockUseCase
-	releaseStockUC *usecase.ReleaseStockUseCase
-	refundStockUC  *usecase.RefundStockUseCase
-	repo           domain.InventoryRepository
+	commitStockUC *usecase.CommitStockUseCase
+	refundStockUC *usecase.RefundStockUseCase
+	repo          domain.InventoryRepository
 }
 
 func NewInventoryHandler(
-	reserveStockUC *usecase.ReserveStockUsecase,
 	commitStockUC *usecase.CommitStockUseCase,
-	releaseStockUC *usecase.ReleaseStockUseCase,
 	refundStockUC *usecase.RefundStockUseCase,
 	repo domain.InventoryRepository,
 ) *InventoryHandler {
 	return &InventoryHandler{
-		reserveStockUC: reserveStockUC,
-		commitStockUC:  commitStockUC,
-		releaseStockUC: releaseStockUC,
-		refundStockUC:  refundStockUC,
-		repo:           repo,
+		commitStockUC: commitStockUC,
+		refundStockUC: refundStockUC,
+		repo:          repo,
 	}
 }
 
@@ -85,56 +79,6 @@ func (h *InventoryHandler) BatchGetInventory(ctx context.Context, req *inventory
 	return resp, nil
 }
 
-func (h *InventoryHandler) ReserveStock(ctx context.Context, req *inventoryv1.ReserveStockReq) (*inventoryv1.InventoryOpResp, error) {
-	if req.GetOperationId() == "" {
-		return nil, errors.New("operation_id is required")
-	}
-	if len(req.GetItems()) == 0 {
-		return nil, errors.New("items cannot be empty")
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	items := make([]usecase.StockItem, len(req.Items))
-	for i, item := range req.Items {
-		items[i] = usecase.StockItem{
-			ProductID: item.ProductId,
-			Quantity:  item.Quantity,
-		}
-	}
-
-	err := h.reserveStockUC.Execute(ctx, usecase.ReserveStockCommand{
-		OperationID: req.OperationId,
-		Changes:     items,
-		ExpireTime:  req.ExpireTime,
-	})
-	if err != nil {
-		var stockErr *domain.InsufficientStockError
-		if errors.As(err, &stockErr) {
-			insufficient := make([]*inventoryv1.InsufficientItem, len(stockErr.Items))
-			for i, item := range stockErr.Items {
-				insufficient[i] = &inventoryv1.InsufficientItem{
-					ProductId: item.ProductID,
-					Requested: int32(item.Requested),
-					Available: item.Available,
-				}
-			}
-			return &inventoryv1.InventoryOpResp{
-				StatusCode:        -2,
-				StatusMsg:         stockErr.Error(),
-				InsufficientItems: insufficient,
-			}, fmt.Errorf("%w", stockErr)
-		}
-		return &inventoryv1.InventoryOpResp{
-			StatusCode: -1,
-			StatusMsg:  err.Error(),
-		}, nil
-	}
-
-	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
-}
-
 func (h *InventoryHandler) CommitStock(ctx context.Context, req *inventoryv1.CommitStockReq) (*inventoryv1.InventoryOpResp, error) {
 	if req.GetOperationId() == "" {
 		return nil, errors.New("operation_id is required")
@@ -162,22 +106,6 @@ func (h *InventoryHandler) CommitStock(ctx context.Context, req *inventoryv1.Com
 		if errors.Is(err, domain.ErrDuplicateOperation) {
 			return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success (idempotent)"}, nil
 		}
-		return &inventoryv1.InventoryOpResp{StatusCode: -1, StatusMsg: err.Error()}, nil
-	}
-
-	return &inventoryv1.InventoryOpResp{StatusCode: 0, StatusMsg: "success"}, nil
-}
-
-func (h *InventoryHandler) ReleaseStock(ctx context.Context, req *inventoryv1.ReleaseStockReq) (*inventoryv1.InventoryOpResp, error) {
-	if req.GetOperationId() == "" {
-		return nil, errors.New("operation_id is required")
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	err := h.releaseStockUC.Execute(ctx, usecase.ReleaseStockCommand{OperationID: req.OperationId})
-	if err != nil {
 		return &inventoryv1.InventoryOpResp{StatusCode: -1, StatusMsg: err.Error()}, nil
 	}
 

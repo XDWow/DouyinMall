@@ -23,15 +23,12 @@ func InitApp() *App {
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitRedis,
-		ioc.InitKafkaClient,
-		ioc.InitKafkaSyncProducer,
-		ioc.InitOrderClient,
+		ioc.InitRocketMQOrderStatusConsumer,
+		ioc.InitRocketMQConsumerOptions,
 		cache.NewRedisInventoryCache,
 		repository.NewGormInventoryRepository,
-		usecase.NewReserveStockUsecase,
 		usecase.NewCommitStockUseCase,
 		usecase.NewRefundStockUseCase,
-		usecase.NewReleaseStockUseCase,
 		mq.NewOrderConsumer,
 		transportgrpc.NewInventoryHandler,
 		ioc.InitGRPCServer,
@@ -39,5 +36,3 @@ func InitApp() *App {
 	)
 	return nil
 }
-
-

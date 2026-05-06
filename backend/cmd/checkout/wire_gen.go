@@ -9,8 +9,10 @@ package main
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/checkout/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/checkout/transport/grpc"
+	"github.com/XDWow/DouyinMall/backend/internal/checkout/transport/http"
 	"github.com/XDWow/DouyinMall/backend/internal/checkout/usecase"
 	"github.com/cloudwego/kitex/server"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 )
 
 // Injectors from wire.go:
@@ -28,7 +30,9 @@ func InitApp() *App {
 	payOrderUseCase := usecase.NewPayOrderUseCase(orderserviceClient, paymentserviceClient)
 	checkoutHandler := grpc.NewCheckoutHandler(previewOrderUseCase, placeOrderUseCase, payOrderUseCase)
 	server := ioc.InitGRPCServer(checkoutHandler)
-	app := newApp(server)
+	handler := http.NewHandler(previewOrderUseCase, placeOrderUseCase, payOrderUseCase)
+	ginxServer := ioc.InitHTTPServer(handler)
+	app := newApp(server, ginxServer)
 	return app
 }
 
@@ -36,10 +40,11 @@ func InitApp() *App {
 
 type App struct {
 	GRPCServer server.Server
+	HTTPServer *ginx.Server
 }
 
-func newApp(grpcServer server.Server) *App {
-	return &App{GRPCServer: grpcServer}
+func newApp(grpcServer server.Server, httpServer *ginx.Server) *App {
+	return &App{GRPCServer: grpcServer, HTTPServer: httpServer}
 }
 
 

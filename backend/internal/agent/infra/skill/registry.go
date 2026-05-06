@@ -2,32 +2,37 @@ package skill
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	adkskill "github.com/cloudwego/eino/adk/middlewares/skill"
 	"gopkg.in/yaml.v3"
 )
 
 type Manifest struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
+	Context     string `yaml:"context"`
+	Agent       string `yaml:"agent"`
+	Model       string `yaml:"model"`
 }
 
 type Skill struct {
 	Name        string
 	Description string
+	Context     string
+	Agent       string
+	Model       string
 	Path        string
 	Body        string
 }
 
-type SkillSummary struct {
-	Name        string
-	Description string
-}
-
+// Registry is a local SKILL.md index.
+// It is intentionally small: load skills once, then build a filtered ADK backend per subgraph.
 type Registry struct {
 	skills map[string]Skill
 	order  []string
@@ -43,17 +48,20 @@ func NewRegistry(roots ...string) (*Registry, error) {
 		if root == "" {
 			continue
 		}
+
 		entries, err := os.ReadDir(root)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, fmt.Errorf("读取 skill 根目录失败 %s: %w", root, err)
+			return nil, fmt.Errorf("read skill root %s: %w", root, err)
 		}
+
 		for _, entry := range entries {
 			if !entry.IsDir() {
 				continue
 			}
+
 			skillPath := filepath.Join(root, entry.Name(), "SKILL.md")
 			skill, err := loadSkill(skillPath)
 			if err != nil {
@@ -65,6 +73,7 @@ func NewRegistry(roots ...string) (*Registry, error) {
 			if _, exists := registry.skills[skill.Name]; exists {
 				continue
 			}
+
 			registry.skills[skill.Name] = skill
 			registry.order = append(registry.order, skill.Name)
 		}
@@ -74,21 +83,11 @@ func NewRegistry(roots ...string) (*Registry, error) {
 	return registry, nil
 }
 
-func (r *Registry) Summaries() []Skill {
-	if r == nil || len(r.order) == 0 {
-		return nil
-	}
-	items := make([]Skill, 0, len(r.order))
-	for _, name := range r.order {
-		items = append(items, r.skills[name])
-	}
-	return items
-}
-
 func (r *Registry) Load(names []string) []Skill {
 	if r == nil || len(names) == 0 {
 		return nil
 	}
+
 	seen := make(map[string]struct{}, len(names))
 	items := make([]Skill, 0, len(names))
 	for _, name := range names {
@@ -99,6 +98,7 @@ func (r *Registry) Load(names []string) []Skill {
 		if _, exists := seen[name]; exists {
 			continue
 		}
+
 		item, ok := r.skills[name]
 		if !ok {
 			continue
@@ -109,47 +109,18 @@ func (r *Registry) Load(names []string) []Skill {
 	return items
 }
 
-// SummariesByNames 只返回 skill 的名称和说明
-// 当子图只需要给模型注入 metadata 时，不必把正文整段加载出来
-func (r *Registry) SummariesByNames(names []string) []SkillSummary {
-	if r == nil || len(names) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(names))
-	items := make([]SkillSummary, 0, len(names))
-	for _, name := range names {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		if _, exists := seen[name]; exists {
-			continue
-		}
-		item, ok := r.skills[name]
-		if !ok {
-			continue
-		}
-		seen[name] = struct{}{}
-		items = append(items, SkillSummary{
-			Name:        item.Name,
-			Description: item.Description,
-		})
-	}
-	return items
-}
-
 func loadSkill(path string) (Skill, error) {
 	body, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Skill{}, nil
 		}
-		return Skill{}, fmt.Errorf("读取 skill 文件失败 %s: %w", path, err)
+		return Skill{}, fmt.Errorf("read skill file %s: %w", path, err)
 	}
 
 	manifest, content, err := parseSkillFile(body)
 	if err != nil {
-		return Skill{}, fmt.Errorf("解析 skill 文件失败 %s: %w", path, err)
+		return Skill{}, fmt.Errorf("parse skill file %s: %w", path, err)
 	}
 
 	referencesText, err := loadReferences(filepath.Dir(path))
@@ -157,12 +128,15 @@ func loadSkill(path string) (Skill, error) {
 		return Skill{}, err
 	}
 	if referencesText != "" {
-		content = strings.TrimSpace(content) + "\n\n参考资料：\n" + referencesText
+		content = strings.TrimSpace(content) + "\n\nReferences:\n" + referencesText
 	}
 
 	return Skill{
 		Name:        strings.TrimSpace(manifest.Name),
 		Description: strings.TrimSpace(manifest.Description),
+		Context:     strings.TrimSpace(manifest.Context),
+		Agent:       strings.TrimSpace(manifest.Agent),
+		Model:       strings.TrimSpace(manifest.Model),
 		Path:        path,
 		Body:        strings.TrimSpace(content),
 	}, nil
@@ -173,10 +147,11 @@ func parseSkillFile(raw []byte) (Manifest, string, error) {
 	if !strings.HasPrefix(text, "---\n") {
 		return Manifest{}, strings.TrimSpace(text), nil
 	}
+
 	rest := strings.TrimPrefix(text, "---\n")
 	index := strings.Index(rest, "\n---\n")
 	if index < 0 {
-		return Manifest{}, "", fmt.Errorf("无效的 front matter")
+		return Manifest{}, "", fmt.Errorf("invalid front matter")
 	}
 
 	var manifest Manifest
@@ -194,7 +169,7 @@ func loadReferences(skillDir string) (string, error) {
 		if os.IsNotExist(err) {
 			return "", nil
 		}
-		return "", fmt.Errorf("读取 skill 参考资料目录失败 %s: %w", referencesDir, err)
+		return "", fmt.Errorf("read skill references dir %s: %w", referencesDir, err)
 	}
 
 	names := make([]string, 0, len(entries))
@@ -210,7 +185,7 @@ func loadReferences(skillDir string) (string, error) {
 	for _, name := range names {
 		content, err := os.ReadFile(filepath.Join(referencesDir, name))
 		if err != nil {
-			return "", fmt.Errorf("读取 skill 参考资料失败 %s: %w", name, err)
+			return "", fmt.Errorf("read skill reference %s: %w", name, err)
 		}
 		builder.WriteString("## ")
 		builder.WriteString(name)
@@ -221,41 +196,82 @@ func loadReferences(skillDir string) (string, error) {
 	return strings.TrimSpace(builder.String()), nil
 }
 
-func RenderSkillText(skills []Skill) string {
-	if len(skills) == 0 {
-		return "none"
+// ADKBackend returns a backend scoped to the current subgraph whitelist.
+// The agent sees only these skills.
+func (r *Registry) ADKBackend(names []string) adkskill.Backend {
+	if r == nil || len(names) == 0 {
+		return nil
 	}
-	var builder strings.Builder
-	for _, item := range skills {
-		builder.WriteString("## ")
-		builder.WriteString(item.Name)
-		builder.WriteString("\n")
-		if item.Description != "" {
-			builder.WriteString("说明：")
-			builder.WriteString(strings.TrimSpace(item.Description))
-			builder.WriteString("\n")
+
+	items := r.Load(names)
+	if len(items) == 0 {
+		return nil
+	}
+
+	allowed := make(map[string]Skill, len(items))
+	order := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.Name) == "" {
+			continue
 		}
-		builder.WriteString(item.Body)
-		builder.WriteString("\n\n")
+		allowed[item.Name] = item
+		order = append(order, item.Name)
 	}
-	return strings.TrimSpace(builder.String())
+	if len(order) == 0 {
+		return nil
+	}
+
+	return &adkBackend{
+		skills: allowed,
+		order:  order,
+	}
 }
 
-func RenderSkillSummaryText(skills []SkillSummary) string {
-	if len(skills) == 0 {
-		return "none"
+type adkBackend struct {
+	skills map[string]Skill
+	order  []string
+}
+
+func (b *adkBackend) List(context.Context) ([]adkskill.FrontMatter, error) {
+	if b == nil || len(b.order) == 0 {
+		return nil, nil
 	}
-	var builder strings.Builder
-	for _, item := range skills {
-		builder.WriteString("## ")
-		builder.WriteString(item.Name)
-		builder.WriteString("\n")
-		if item.Description != "" {
-			builder.WriteString("说明：")
-			builder.WriteString(strings.TrimSpace(item.Description))
-			builder.WriteString("\n")
+
+	out := make([]adkskill.FrontMatter, 0, len(b.order))
+	for _, name := range b.order {
+		item, ok := b.skills[name]
+		if !ok {
+			continue
 		}
-		builder.WriteString("\n")
+		out = append(out, adkskill.FrontMatter{
+			Name:        item.Name,
+			Description: item.Description,
+			Context:     adkskill.ContextMode(item.Context),
+			Agent:       item.Agent,
+			Model:       item.Model,
+		})
 	}
-	return strings.TrimSpace(builder.String())
+	return out, nil
+}
+
+func (b *adkBackend) Get(_ context.Context, name string) (adkskill.Skill, error) {
+	if b == nil {
+		return adkskill.Skill{}, fmt.Errorf("skill backend is nil")
+	}
+
+	item, ok := b.skills[strings.TrimSpace(name)]
+	if !ok {
+		return adkskill.Skill{}, fmt.Errorf("skill %q not found", name)
+	}
+	return adkskill.Skill{
+		FrontMatter: adkskill.FrontMatter{
+			Name:        item.Name,
+			Description: item.Description,
+			Context:     adkskill.ContextMode(item.Context),
+			Agent:       item.Agent,
+			Model:       item.Model,
+		},
+		Content:       item.Body,
+		BaseDirectory: filepath.Dir(item.Path),
+	}, nil
 }

@@ -6,7 +6,6 @@ package mq
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -16,21 +15,20 @@ import (
 	seckilldomain "github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
 	seckillusecase "github.com/XDWow/DouyinMall/backend/internal/seckill/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/XDWow/DouyinMall/backend/pkg/rocketmqx"
 	orderv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1"
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1/orderservice"
 	"github.com/cloudwego/kitex/client/callopt"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSeckillHappyPath(t *testing.T) {
+func TestSeckillTransactionalFlowHappyPath(t *testing.T) {
 	ctx := context.Background()
-	log := logger.NewNopLogger()
 	activityRepo := newMemoryActivityRepo()
-	requestRepo := newMemoryRequestRepo()
+	requestRepo := newMemoryRequestRepo(activityRepo)
 	cache := newMemoryCache()
-	producer := &capturingProducer{}
-	idGen := &sequenceIDGenerator{}
+	producer := &capturingProducer{tx: &capturingTx{}}
+	idGen := sequenceIDGenerator("10001")
 
 	createActivityUC := seckillusecase.NewCreateActivityUseCase(activityRepo, cache)
 	activityID, err := createActivityUC.Execute(ctx, seckillusecase.CreateActivityCmd{
@@ -52,142 +50,140 @@ func TestSeckillHappyPath(t *testing.T) {
 		UserID:     2001,
 	})
 	require.NoError(t, err)
-	require.Len(t, producer.events, 1)
-	assert.Equal(t, seckilldomain.RequestStatusProcessing, result.Status)
+	require.Equal(t, seckilldomain.RequestStatusProcessing, result.Status)
+	require.Len(t, producer.prepared, 1)
+	require.True(t, producer.tx.committed)
+	require.False(t, producer.tx.rolledBack)
 
-	orderClient := &recordingOrderClient{}
-	consumer := NewSeckillConsumer(nil, nil, orderClient, requestRepo, activityRepo, cache, log)
-	require.NoError(t, consumer.processCreateOrderWithRetry(nil, producer.events[0]))
+	processor := NewEventProcessor(&recordingOrderClient{}, requestRepo, activityRepo, cache, logger.NewNopLogger())
+	require.NoError(t, processor.Process(ctx, producer.prepared[0]))
 
 	req, err := requestRepo.FindByRequestNo(ctx, result.RequestNo)
 	require.NoError(t, err)
-	assert.Equal(t, seckilldomain.RequestStatusQualified, req.Status)
-	assert.Equal(t, int64(1), req.OrderID)
-
-	require.Len(t, orderClient.created, 1)
-	created := orderClient.created[0]
-	assert.Equal(t, orderdomain.OrderKindSeckill, created.OrderKind)
-	assert.Equal(t, activityID, created.ActivityId)
-	require.Len(t, created.Items, 1)
-	assert.Equal(t, int64(4001), created.Items[0].GetSkuId())
-	assert.Equal(t, int64(9900), created.Items[0].GetConvertedPrice())
-
-	activity, err := activityRepo.FindByID(ctx, activityID)
-	require.NoError(t, err)
-	assert.Equal(t, int32(0), activity.AvailableStock)
+	require.Equal(t, seckilldomain.RequestStatusSuccess, req.Status)
+	require.EqualValues(t, 10001, req.OrderID)
 
 	cached, err := cache.GetResult(ctx, result.RequestNo)
 	require.NoError(t, err)
 	require.NotNil(t, cached)
-	assert.Equal(t, seckilldomain.RequestStatusQualified, cached.Status)
-	assert.Equal(t, req.OrderID, cached.OrderID)
+	require.Equal(t, seckilldomain.RequestStatusSuccess, cached.Status)
+	require.EqualValues(t, 10001, cached.OrderID)
 
-	statusConsumer := NewOrderStatusConsumer(nil, requestRepo, activityRepo, cache, log)
+	activity, err := activityRepo.FindByID(ctx, activityID)
+	require.NoError(t, err)
+	require.EqualValues(t, 0, activity.AvailableStock)
+	require.True(t, activityRepo.hasQualification(activityID, 2001))
+	require.True(t, cache.hasUser(activityID, 2001, result.RequestNo))
+
+	statusConsumer := NewOrderStatusConsumer(nil, requestRepo, activityRepo, cache, logger.NewNopLogger(), rocketmqx.ConsumerOptions{})
 	require.NoError(t, statusConsumer.consume(nil, OrderStatusUpdateEvent{
 		OrderID:   req.OrderID,
 		Status:    orderv1.OrderStatus_ORDER_STATUS_CANCELED,
 		OrderKind: orderdomain.OrderKindSeckill,
 	}))
 
-	activity, err = activityRepo.FindByID(ctx, activityID)
-	require.NoError(t, err)
-	assert.Equal(t, int32(1), activity.AvailableStock)
-	assert.Equal(t, int32(1), cache.stock[activityID])
-
 	req, err = requestRepo.FindByRequestNo(ctx, result.RequestNo)
 	require.NoError(t, err)
-	assert.Equal(t, seckilldomain.RequestStatusFail, req.Status)
-	assert.Equal(t, seckilldomain.FailReasonOrderCanceled, req.FailReason)
-	assert.Equal(t, int64(0), req.OrderID)
-	_, claimed := activityRepo.successClaimKey[actUserKey(activityID, 2001)]
-	assert.False(t, claimed)
-	assert.False(t, cache.hasUser(activityID, 2001))
+	require.Equal(t, seckilldomain.RequestStatusFailed, req.Status)
+	require.Equal(t, seckilldomain.FailReasonOrderCanceled, req.FailReason)
+	require.Zero(t, req.OrderID)
+
 	cached, err = cache.GetResult(ctx, result.RequestNo)
 	require.NoError(t, err)
 	require.NotNil(t, cached)
-	assert.Equal(t, seckilldomain.RequestStatusFail, cached.Status)
-	assert.Equal(t, seckilldomain.FailReasonOrderCanceled, cached.FailReason)
+	require.Equal(t, seckilldomain.RequestStatusFailed, cached.Status)
+	require.Equal(t, seckilldomain.FailReasonOrderCanceled, cached.FailReason)
+
+	activity, err = activityRepo.FindByID(ctx, activityID)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, activity.AvailableStock)
+	require.False(t, activityRepo.hasQualification(activityID, 2001))
+	require.False(t, cache.hasUser(activityID, 2001, result.RequestNo))
 }
 
-func TestSeckillCreateOrderFailCompensates(t *testing.T) {
-	ctx := context.Background()
-	log := logger.NewNopLogger()
-	activityRepo := newMemoryActivityRepo()
-	requestRepo := newMemoryRequestRepo()
+func TestResolveTransactionRecoversProcessingFromUserMarker(t *testing.T) {
 	cache := newMemoryCache()
-	producer := &capturingProducer{}
+	cache.userMarkers[memoryActUserKey(1, 2)] = "10002"
 
-	createActivityUC := seckillusecase.NewCreateActivityUseCase(activityRepo, cache)
-	activityID, err := createActivityUC.Execute(ctx, seckillusecase.CreateActivityCmd{
-		ActivityName: "iphone seckill",
-		ProductID:    3001,
-		SKUID:        4001,
-		SeckillPrice: 9900,
-		TotalStock:   1,
-		StartTime:    time.Now().Add(-time.Minute),
-		EndTime:      time.Now().Add(10 * time.Minute),
-		Status:       seckilldomain.ActivityStatusOnline,
-		LimitPerUser: 1,
-	})
+	resolution, err := cache.ResolveTransaction(context.Background(), 1, 2, "10002")
+
 	require.NoError(t, err)
+	require.Equal(t, seckilldomain.TransactionResolutionCommit, resolution)
 
-	submitUC := seckillusecase.NewSubmitUseCase(activityRepo, requestRepo, cache, producer, &sequenceIDGenerator{})
-	result, err := submitUC.Execute(ctx, seckillusecase.SubmitCmd{
-		ActivityID: activityID,
-		UserID:     2002,
-	})
+	result, err := cache.GetResult(context.Background(), "10002")
 	require.NoError(t, err)
-	require.Len(t, producer.events, 1)
+	require.NotNil(t, result)
+	require.Equal(t, seckilldomain.RequestStatusProcessing, result.Status)
+}
 
-	consumer := NewSeckillConsumer(nil, nil, &failingOrderClientStub{}, requestRepo, activityRepo, cache, log)
-	require.NoError(t, consumer.processCreateOrderWithRetry(nil, producer.events[0]))
+func TestResolveTransactionRollsBackFailedRequest(t *testing.T) {
+	cache := newMemoryCache()
+	cache.results["10003"] = seckilldomain.Result{
+		RequestNo:  "10003",
+		Status:     seckilldomain.RequestStatusFailed,
+		FailReason: seckilldomain.FailReasonOutOfStock,
+	}
 
-	req, err := requestRepo.FindByRequestNo(ctx, result.RequestNo)
+	resolution, err := cache.ResolveTransaction(context.Background(), 1, 2, "10003")
+
 	require.NoError(t, err)
-	assert.Equal(t, seckilldomain.RequestStatusFail, req.Status)
-	assert.Equal(t, seckilldomain.FailReasonCreateOrderFail, req.FailReason)
+	require.Equal(t, seckilldomain.TransactionResolutionRollback, resolution)
+}
 
-	activity, err := activityRepo.FindByID(ctx, activityID)
-	require.NoError(t, err)
-	assert.Equal(t, int32(1), activity.AvailableStock)
-	assert.Equal(t, int32(1), cache.stock[activityID])
-	assert.False(t, cache.hasUser(activityID, 2002))
+func TestResolveTransactionCommitsWhenStateIsMissing(t *testing.T) {
+	cache := newMemoryCache()
 
-	cached, err := cache.GetResult(ctx, result.RequestNo)
+	resolution, err := cache.ResolveTransaction(context.Background(), 1, 2, "10004")
+
 	require.NoError(t, err)
-	require.NotNil(t, cached)
-	assert.Equal(t, seckilldomain.RequestStatusFail, cached.Status)
-	assert.Equal(t, seckilldomain.FailReasonCreateOrderFail, cached.FailReason)
+	require.Equal(t, seckilldomain.TransactionResolutionCommit, resolution)
+
+	result, err := cache.GetResult(context.Background(), "10004")
+	require.NoError(t, err)
+	require.Nil(t, result)
 }
 
 type capturingProducer struct {
-	mu     sync.Mutex
-	events []seckilldomain.Event
+	mu       sync.Mutex
+	tx       *capturingTx
+	prepared []seckilldomain.Event
 }
 
-func (p *capturingProducer) Publish(_ context.Context, evt seckilldomain.Event) error {
+func (p *capturingProducer) Prepare(_ context.Context, evt seckilldomain.Event) (seckilldomain.Transaction, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.events = append(p.events, evt)
+	p.prepared = append(p.prepared, evt)
+	if p.tx == nil {
+		p.tx = &capturingTx{}
+	}
+	return p.tx, nil
+}
+
+type capturingTx struct {
+	committed  bool
+	rolledBack bool
+}
+
+func (t *capturingTx) Commit() error {
+	t.committed = true
 	return nil
 }
 
-type sequenceIDGenerator struct {
-	mu  sync.Mutex
-	seq int64
+func (t *capturingTx) Rollback() error {
+	t.rolledBack = true
+	return nil
 }
 
-func (g *sequenceIDGenerator) GenerateID() string {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.seq++
-	return strconv.FormatInt(g.seq, 10)
+type sequenceIDGenerator string
+
+func (g sequenceIDGenerator) GenerateID() string {
+	return string(g)
 }
 
 type recordingOrderClient struct {
 	mu      sync.Mutex
 	created []*orderv1.CreateOrderReq
-	byID    map[int64]*orderv1.CreateOrderReq
+	byID    map[int64]*orderv1.Order
 }
 
 func (c *recordingOrderClient) CreateOrder(_ context.Context, req *orderv1.CreateOrderReq, _ ...callopt.Option) (*orderv1.CreateOrderResp, error) {
@@ -195,10 +191,17 @@ func (c *recordingOrderClient) CreateOrder(_ context.Context, req *orderv1.Creat
 	defer c.mu.Unlock()
 	c.created = append(c.created, req)
 	if c.byID == nil {
-		c.byID = make(map[int64]*orderv1.CreateOrderReq)
+		c.byID = make(map[int64]*orderv1.Order)
 	}
-	copied := *req
-	c.byID[req.GetOrderId()] = &copied
+	if _, ok := c.byID[req.GetOrderId()]; ok {
+		return &orderv1.CreateOrderResp{OrderId: req.GetOrderId()}, nil
+	}
+	c.byID[req.GetOrderId()] = &orderv1.Order{
+		OrderId:    req.GetOrderId(),
+		UserId:     req.GetUserId(),
+		OrderKind:  orderdomain.OrderKindSeckill,
+		ActivityId: req.GetActivityId(),
+	}
 	return &orderv1.CreateOrderResp{OrderId: req.GetOrderId()}, nil
 }
 
@@ -209,16 +212,14 @@ func (c *recordingOrderClient) ChangeOrderStatus(context.Context, *orderv1.Chang
 func (c *recordingOrderClient) GetOrder(_ context.Context, req *orderv1.GetOrderReq, _ ...callopt.Option) (*orderv1.GetOrderResp, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	r, ok := c.byID[req.GetOrderId()]
+	if c.byID == nil {
+		return &orderv1.GetOrderResp{}, nil
+	}
+	order, ok := c.byID[req.GetOrderId()]
 	if !ok {
 		return &orderv1.GetOrderResp{}, nil
 	}
-	return &orderv1.GetOrderResp{Order: &orderv1.Order{
-		OrderId:    r.GetOrderId(),
-		UserId:     r.GetUserId(),
-		OrderKind:  r.GetOrderKind(),
-		ActivityId: r.GetActivityId(),
-	}}, nil
+	return &orderv1.GetOrderResp{Order: order}, nil
 }
 
 func (c *recordingOrderClient) ListOrder(context.Context, *orderv1.ListOrderReq, ...callopt.Option) (*orderv1.ListOrderResp, error) {
@@ -227,39 +228,17 @@ func (c *recordingOrderClient) ListOrder(context.Context, *orderv1.ListOrderReq,
 
 var _ orderservice.Client = (*recordingOrderClient)(nil)
 
-type failingOrderClientStub struct{}
-
-func (f *failingOrderClientStub) CreateOrder(context.Context, *orderv1.CreateOrderReq, ...callopt.Option) (*orderv1.CreateOrderResp, error) {
-	return nil, errors.New("create order failed")
-}
-
-func (f *failingOrderClientStub) ChangeOrderStatus(context.Context, *orderv1.ChangeOrderStatusReq, ...callopt.Option) (*orderv1.ChangeOrderStatusResp, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (f *failingOrderClientStub) GetOrder(context.Context, *orderv1.GetOrderReq, ...callopt.Option) (*orderv1.GetOrderResp, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (f *failingOrderClientStub) ListOrder(context.Context, *orderv1.ListOrderReq, ...callopt.Option) (*orderv1.ListOrderResp, error) {
-	return nil, errors.New("not implemented")
-}
-
-var _ orderservice.Client = (*failingOrderClientStub)(nil)
-
 type memoryActivityRepo struct {
-	mu              sync.Mutex
-	nextID          int64
-	activities      map[int64]*seckilldomain.Activity
-	operations      map[string]struct{}
-	successClaimKey map[string]struct{}
+	mu             sync.Mutex
+	nextID         int64
+	activities     map[int64]*seckilldomain.Activity
+	qualifications map[string]string
 }
 
 func newMemoryActivityRepo() *memoryActivityRepo {
 	return &memoryActivityRepo{
-		activities:      make(map[int64]*seckilldomain.Activity),
-		operations:      make(map[string]struct{}),
-		successClaimKey: make(map[string]struct{}),
+		activities:     make(map[int64]*seckilldomain.Activity),
+		qualifications: make(map[string]string),
 	}
 }
 
@@ -296,84 +275,24 @@ func (r *memoryActivityRepo) UpdateStatus(_ context.Context, activityID int64, s
 	return nil
 }
 
-func (r *memoryActivityRepo) DecreaseStock(_ context.Context, activityID int64, requestNo string, quantity int32) error {
+func (r *memoryActivityRepo) hasQualification(activityID, userID int64) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	op := "deduct_" + requestNo
-	if _, ok := r.operations[op]; ok {
-		return nil
-	}
-	activity, ok := r.activities[activityID]
-	if !ok {
-		return seckilldomain.ErrActivityNotFound
-	}
-	if activity.AvailableStock < quantity {
-		return seckilldomain.ErrOutOfStock
-	}
-	activity.AvailableStock -= quantity
-	r.operations[op] = struct{}{}
-	return nil
-}
-
-func (r *memoryActivityRepo) IncreaseStock(_ context.Context, activityID int64, operationID string, quantity int32) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.operations[operationID]; ok {
-		return nil
-	}
-	activity, ok := r.activities[activityID]
-	if !ok {
-		return seckilldomain.ErrActivityNotFound
-	}
-	activity.AvailableStock += quantity
-	r.operations[operationID] = struct{}{}
-	return nil
-}
-
-func (r *memoryActivityRepo) TryDeductStockAndClaimSuccess(_ context.Context, activityID, userID int64, requestNo string, quantity int32) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	actKey := actUserKey(activityID, userID)
-	if _, ok := r.successClaimKey[actKey]; ok {
-		return seckilldomain.ErrSeckillSuccessAlreadyClaimed
-	}
-	op := "deduct_" + requestNo
-	if _, ok := r.operations[op]; ok {
-		return nil
-	}
-	activity, ok := r.activities[activityID]
-	if !ok {
-		return seckilldomain.ErrActivityNotFound
-	}
-	if activity.AvailableStock < quantity {
-		return seckilldomain.ErrOutOfStock
-	}
-	activity.AvailableStock -= quantity
-	r.operations[op] = struct{}{}
-	r.successClaimKey[actKey] = struct{}{}
-	return nil
-}
-
-func (r *memoryActivityRepo) DeleteSuccessClaim(_ context.Context, activityID, userID int64) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.successClaimKey, actUserKey(activityID, userID))
-	return nil
-}
-
-func (r *memoryActivityRepo) UpdateSuccessOrderID(context.Context, int64, int64, int64) error {
-	return nil
+	_, ok := r.qualifications[memoryActUserKey(activityID, userID)]
+	return ok
 }
 
 type memoryRequestRepo struct {
-	mu     sync.Mutex
-	nextID int64
-	byReq  map[string]*seckilldomain.Request
+	mu           sync.Mutex
+	next         int64
+	byReq        map[string]*seckilldomain.Request
+	activityRepo *memoryActivityRepo
 }
 
-func newMemoryRequestRepo() *memoryRequestRepo {
+func newMemoryRequestRepo(activityRepo *memoryActivityRepo) *memoryRequestRepo {
 	return &memoryRequestRepo{
-		byReq: make(map[string]*seckilldomain.Request),
+		byReq:        make(map[string]*seckilldomain.Request),
+		activityRepo: activityRepo,
 	}
 }
 
@@ -383,10 +302,10 @@ func (r *memoryRequestRepo) Create(_ context.Context, request *seckilldomain.Req
 	if _, ok := r.byReq[request.RequestNo]; ok {
 		return seckilldomain.ErrDuplicateSeckill
 	}
-	r.nextID++
+	r.next++
 	copied := *request
-	copied.ID = r.nextID
-	r.byReq[copied.RequestNo] = &copied
+	copied.ID = r.next
+	r.byReq[request.RequestNo] = &copied
 	request.ID = copied.ID
 	return nil
 }
@@ -399,9 +318,9 @@ func (r *memoryRequestRepo) FindByRequestNo(_ context.Context, requestNo string)
 		return nil, seckilldomain.ErrRequestNotFound
 	}
 	copied := *req
-	if copied.OrderID == 0 && copied.RequestNo != "" && copied.Status != seckilldomain.RequestStatusFail {
-		if v, err := strconv.ParseInt(copied.RequestNo, 10, 64); err == nil {
-			copied.OrderID = v
+	if copied.Status == seckilldomain.RequestStatusSuccess {
+		if orderID, ok := seckilldomain.OrderIDFromRequestNo(copied.RequestNo); ok {
+			copied.OrderID = orderID
 		}
 	}
 	return &copied, nil
@@ -410,55 +329,138 @@ func (r *memoryRequestRepo) FindByRequestNo(_ context.Context, requestNo string)
 func (r *memoryRequestRepo) FindByActivityUser(_ context.Context, activityID, userID int64) (*seckilldomain.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var best *seckilldomain.Request
 	for _, req := range r.byReq {
-		if req.ActivityID != activityID || req.UserID != userID {
-			continue
-		}
-		if best == nil || req.ID > best.ID {
-			c := *req
-			best = &c
+		if req.ActivityID == activityID && req.UserID == userID {
+			copied := *req
+			return &copied, nil
 		}
 	}
-	if best == nil {
-		return nil, nil
-	}
-	return best, nil
+	return nil, nil
 }
 
-func (r *memoryRequestRepo) MarkQualified(_ context.Context, requestNo string) error {
+func (r *memoryRequestRepo) AdvanceProcessing(_ context.Context, evt seckilldomain.Event) (*seckilldomain.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	cur, ok := r.byReq[requestNo]
+
+	req, ok := r.byReq[evt.RequestNo]
 	if !ok {
-		return seckilldomain.ErrRequestNotFound
+		return nil, seckilldomain.ErrRequestNotFound
 	}
-	if cur.Status == seckilldomain.RequestStatusQualified {
-		return nil
+	if req.Status != seckilldomain.RequestStatusProcessing {
+		copied := *req
+		return &copied, nil
 	}
-	if cur.Status != seckilldomain.RequestStatusProcessing {
-		return fmt.Errorf("seckill MarkQualified: request_no=%s 状态=%s 非 PROCESSING", requestNo, cur.Status)
+
+	r.activityRepo.mu.Lock()
+	defer r.activityRepo.mu.Unlock()
+
+	activity, exists := r.activityRepo.activities[evt.ActivityID]
+	if !exists {
+		return nil, seckilldomain.ErrActivityNotFound
 	}
-	cur.Status = seckilldomain.RequestStatusQualified
-	cur.FailReason = ""
-	return nil
+	if activity.AvailableStock < 1 {
+		req.Status = seckilldomain.RequestStatusFailed
+		req.FailReason = seckilldomain.FailReasonOutOfStock
+		copied := *req
+		return &copied, nil
+	}
+
+	key := memoryActUserKey(evt.ActivityID, evt.UserID)
+	if _, exists = r.activityRepo.qualifications[key]; exists {
+		req.Status = seckilldomain.RequestStatusFailed
+		req.FailReason = seckilldomain.FailReasonUserAlreadySucceeded
+		copied := *req
+		return &copied, nil
+	}
+
+	activity.AvailableStock--
+	r.activityRepo.qualifications[key] = evt.RequestNo
+
+	req.Status = seckilldomain.RequestStatusOrderCreating
+	req.FailReason = ""
+	copied := *req
+	return &copied, nil
 }
 
-func (r *memoryRequestRepo) MarkFailByRequestNoIfActive(_ context.Context, requestNo string, failReason string) (int64, error) {
+func (r *memoryRequestRepo) CompleteOrderCreating(_ context.Context, evt seckilldomain.Event) (*seckilldomain.Request, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	req, ok := r.byReq[evt.RequestNo]
+	if !ok {
+		return nil, seckilldomain.ErrRequestNotFound
+	}
+	if req.Status == seckilldomain.RequestStatusSuccess {
+		copied := *req
+		if orderID, ok := seckilldomain.OrderIDFromRequestNo(copied.RequestNo); ok {
+			copied.OrderID = orderID
+		}
+		return &copied, nil
+	}
+	if req.Status != seckilldomain.RequestStatusOrderCreating {
+		return nil, errors.New("request is not ORDER_CREATING")
+	}
+
+	req.Status = seckilldomain.RequestStatusSuccess
+	req.FailReason = ""
+	copied := *req
+	if orderID, ok := seckilldomain.OrderIDFromRequestNo(copied.RequestNo); ok {
+		copied.OrderID = orderID
+	}
+	return &copied, nil
+}
+
+func (r *memoryRequestRepo) RollbackOrderCreating(_ context.Context, evt seckilldomain.Event, failReason string) (*seckilldomain.Request, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	req, ok := r.byReq[evt.RequestNo]
+	if !ok {
+		return nil, seckilldomain.ErrRequestNotFound
+	}
+	if req.Status == seckilldomain.RequestStatusFailed {
+		copied := *req
+		return &copied, nil
+	}
+	if req.Status != seckilldomain.RequestStatusOrderCreating {
+		return nil, errors.New("request is not ORDER_CREATING")
+	}
+
+	r.activityRepo.mu.Lock()
+	defer r.activityRepo.mu.Unlock()
+	r.activityRepo.activities[evt.ActivityID].AvailableStock++
+	delete(r.activityRepo.qualifications, memoryActUserKey(evt.ActivityID, evt.UserID))
+
+	req.Status = seckilldomain.RequestStatusFailed
+	req.FailReason = failReason
+	copied := *req
+	return &copied, nil
+}
+
+func (r *memoryRequestRepo) CloseByOrderResult(_ context.Context, requestNo string, failReason string) (*seckilldomain.Request, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	req, ok := r.byReq[requestNo]
 	if !ok {
-		return 0, nil
+		return nil, false, seckilldomain.ErrRequestNotFound
 	}
-	if req.Status != seckilldomain.RequestStatusProcessing && req.Status != seckilldomain.RequestStatusQualified &&
-		req.Status != seckilldomain.RequestStatusLegacySuccess {
-		return 0, nil
+	if req.Status == seckilldomain.RequestStatusFailed {
+		copied := *req
+		return &copied, false, nil
 	}
-	req.Status = seckilldomain.RequestStatusFail
+
+	r.activityRepo.mu.Lock()
+	defer r.activityRepo.mu.Unlock()
+	if req.Status == seckilldomain.RequestStatusOrderCreating || req.Status == seckilldomain.RequestStatusSuccess {
+		r.activityRepo.activities[req.ActivityID].AvailableStock++
+		delete(r.activityRepo.qualifications, memoryActUserKey(req.ActivityID, req.UserID))
+	}
+
+	req.Status = seckilldomain.RequestStatusFailed
 	req.FailReason = failReason
-	req.OrderID = 0
-	return 1, nil
+	copied := *req
+	return &copied, true, nil
 }
 
 func (r *memoryRequestRepo) MarkFail(_ context.Context, requestNo string, failReason string) error {
@@ -468,26 +470,25 @@ func (r *memoryRequestRepo) MarkFail(_ context.Context, requestNo string, failRe
 	if !ok {
 		return seckilldomain.ErrRequestNotFound
 	}
-	req.Status = seckilldomain.RequestStatusFail
+	req.Status = seckilldomain.RequestStatusFailed
 	req.FailReason = failReason
-	req.OrderID = 0
 	return nil
 }
 
 type memoryCache struct {
-	mu         sync.Mutex
-	activities map[int64]*seckilldomain.Activity
-	stock      map[int64]int32
-	users      map[string]struct{}
-	results    map[string]seckilldomain.Result
+	mu          sync.Mutex
+	activities  map[int64]*seckilldomain.Activity
+	stock       map[int64]int32
+	userMarkers map[string]string
+	results     map[string]seckilldomain.Result
 }
 
 func newMemoryCache() *memoryCache {
 	return &memoryCache{
-		activities: make(map[int64]*seckilldomain.Activity),
-		stock:      make(map[int64]int32),
-		users:      make(map[string]struct{}),
-		results:    make(map[string]seckilldomain.Result),
+		activities:  make(map[int64]*seckilldomain.Activity),
+		stock:       make(map[int64]int32),
+		userMarkers: make(map[string]string),
+		results:     make(map[string]seckilldomain.Result),
 	}
 }
 
@@ -520,15 +521,17 @@ func (c *memoryCache) SetActivityStock(_ context.Context, activityID int64, stoc
 func (c *memoryCache) AtomicReserve(_ context.Context, activityID, userID int64, requestNo string, _ int64) (int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	key := actUserKey(activityID, userID)
-	if _, ok := c.users[key]; ok {
+
+	key := memoryActUserKey(activityID, userID)
+	if _, ok := c.userMarkers[key]; ok {
 		return 2, nil
 	}
 	if c.stock[activityID] <= 0 {
 		return 1, nil
 	}
+
 	c.stock[activityID]--
-	c.users[key] = struct{}{}
+	c.userMarkers[key] = requestNo
 	c.results[requestNo] = seckilldomain.Result{
 		RequestNo: requestNo,
 		Status:    seckilldomain.RequestStatusProcessing,
@@ -536,20 +539,19 @@ func (c *memoryCache) AtomicReserve(_ context.Context, activityID, userID int64,
 	return 0, nil
 }
 
-func (c *memoryCache) Compensate(_ context.Context, activityID, userID int64, quantity int32, removeUser bool) error {
+func (c *memoryCache) Compensate(_ context.Context, activityID, userID int64, requestNo string, result seckilldomain.Result) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.stock[activityID] += quantity
-	if removeUser {
-		delete(c.users, actUserKey(activityID, userID))
-	}
-	return nil
-}
 
-func (c *memoryCache) IncreaseStock(_ context.Context, activityID int64, quantity int32) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.stock[activityID] += quantity
+	if existing, ok := c.results[requestNo]; ok && existing.Status == seckilldomain.RequestStatusFailed {
+		return nil
+	}
+	key := memoryActUserKey(activityID, userID)
+	if c.userMarkers[key] == requestNo {
+		c.stock[activityID]++
+		delete(c.userMarkers, key)
+	}
+	c.results[requestNo] = result
 	return nil
 }
 
@@ -571,13 +573,36 @@ func (c *memoryCache) GetResult(_ context.Context, requestNo string) (*seckilldo
 	return &copied, nil
 }
 
-func (c *memoryCache) hasUser(activityID, userID int64) bool {
+func (c *memoryCache) ResolveTransaction(_ context.Context, activityID, userID int64, requestNo string) (seckilldomain.TransactionResolution, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	_, ok := c.users[actUserKey(activityID, userID)]
-	return ok
+
+	if result, ok := c.results[requestNo]; ok {
+		if result.Status == seckilldomain.RequestStatusFailed {
+			return seckilldomain.TransactionResolutionRollback, nil
+		}
+		return seckilldomain.TransactionResolutionCommit, nil
+	}
+
+	if c.userMarkers[memoryActUserKey(activityID, userID)] == requestNo {
+		c.results[requestNo] = seckilldomain.Result{
+			RequestNo: requestNo,
+			Status:    seckilldomain.RequestStatusProcessing,
+		}
+		return seckilldomain.TransactionResolutionCommit, nil
+	}
+	if _, ok := c.userMarkers[memoryActUserKey(activityID, userID)]; !ok {
+		return seckilldomain.TransactionResolutionCommit, nil
+	}
+	return seckilldomain.TransactionResolutionRollback, nil
 }
 
-func actUserKey(activityID, userID int64) string {
+func (c *memoryCache) hasUser(activityID, userID int64, requestNo string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.userMarkers[memoryActUserKey(activityID, userID)] == requestNo
+}
+
+func memoryActUserKey(activityID, userID int64) string {
 	return strconv.FormatInt(activityID, 10) + ":" + strconv.FormatInt(userID, 10)
 }

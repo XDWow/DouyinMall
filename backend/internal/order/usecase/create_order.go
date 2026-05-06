@@ -37,17 +37,29 @@ func NewCreateOrderUseCase(repo domain.OrderRepository, delayQueue domain.DelayQ
 
 func (uc *CreateOrderUseCase) Execute(ctx context.Context, cmd CreateOrderCmd) (int64, error) {
 	if cmd.UserID <= 0 {
-		return 0, errors.New("无效用户")
+		return 0, domain.ErrInvalidUser
 	}
 	if len(cmd.Items) == 0 {
-		return 0, errors.New("订单项为空")
+		return 0, domain.ErrEmptyOrderItems
 	}
 	if normalizeOrderKind(cmd.OrderKind) == domain.OrderKindSeckill && cmd.ActivityID <= 0 {
-		return 0, errors.New("秒杀订单的活动id为空")
+		return 0, domain.ErrSeckillActivityRequired
 	}
 
 	order := toDomainOrder(cmd)
 	if err := uc.repo.Save(ctx, &order); err != nil {
+		if errors.Is(err, domain.ErrDuplicateOrder) {
+			existing, findErr := uc.repo.FindByID(ctx, cmd.OrderID)
+			if findErr != nil {
+				uc.log.Warn("重复创建订单时查询已存在订单失败",
+					logger.Error(findErr),
+					logger.Int64("orderID", cmd.OrderID))
+				return 0, err
+			}
+			if sameCreateOrderIntent(existing, cmd) {
+				return existing.ID, nil
+			}
+		}
 		uc.log.Error("保存订单失败", logger.Error(err))
 		return 0, err
 	}
@@ -115,4 +127,11 @@ func normalizeOrderKind(orderKind string) string {
 		return domain.OrderKindDirectBuy
 	}
 	return orderKind
+}
+
+func sameCreateOrderIntent(existing domain.Order, cmd CreateOrderCmd) bool {
+	return existing.ID == cmd.OrderID &&
+		existing.UserID == cmd.UserID &&
+		existing.ActivityID == cmd.ActivityID &&
+		existing.OrderKind == normalizeOrderKind(cmd.OrderKind)
 }

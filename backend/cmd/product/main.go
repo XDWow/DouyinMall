@@ -14,8 +14,9 @@ func main() {
 
 	app := InitApp()
 
-	port := viper.GetInt("grpc.server.port")
-	log.Printf("Product service starting on port %d...", port)
+	log.Printf("product service starting, grpc port=%d http port=%d",
+		viper.GetInt("grpc.server.port"),
+		viper.GetInt("http.server.port"))
 
 	if viper.GetBool("canal.enabled") {
 		ctx := context.Background()
@@ -26,14 +27,31 @@ func main() {
 					log.Fatalf("producer %d start failed: %v", idx+1, err)
 				}
 			}(i)
-			log.Printf("Producer %d started", i+1)
+			log.Printf("producer %d started", i+1)
 		}
 	} else {
-		log.Printf("Canal producer disabled by config")
+		log.Printf("canal producer disabled by config")
 	}
 
-	if err := app.Server.Run(); err != nil {
-		log.Fatalf("server run error: %v", err)
+	grpcErr := make(chan error, 1)
+	go func() {
+		grpcErr <- app.Server.Run()
+	}()
+
+	httpErr := make(chan error, 1)
+	go func() {
+		httpErr <- app.HTTPServer.Start()
+	}()
+
+	select {
+	case err := <-grpcErr:
+		if err != nil {
+			log.Fatalf("grpc server run error: %v", err)
+		}
+	case err := <-httpErr:
+		if err != nil {
+			log.Fatalf("http server run error: %v", err)
+		}
 	}
 }
 

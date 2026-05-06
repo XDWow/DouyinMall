@@ -14,10 +14,10 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo/dao"
 	"github.com/XDWow/DouyinMall/backend/internal/product/service"
+	transporthttp "github.com/XDWow/DouyinMall/backend/internal/product/transport/http"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/cloudwego/kitex/server"
 )
-
-// Injectors from wire.go:
 
 func InitApp() *App {
 	db := ioc.InitDB()
@@ -29,23 +29,21 @@ func InitApp() *App {
 	productService := service.NewProductService(productRepo, loggerV1)
 	productHandler := handler.NewProductHandler(productService)
 	server := ioc.InitGRPCServer(productHandler)
+	httpHandler := transporthttp.NewHandler(productService)
+	httpServer := ioc.InitHTTPServer(httpHandler)
 	client := ioc.InitKafkaClient()
 	syncProducer := ioc.InitKafkaSyncProducer(client)
 	producer := ioc.InitCanalProducer(syncProducer, loggerV1, db)
-	app := newApp(server, producer)
+	app := newApp(server, httpServer, producer)
 	return app
 }
 
-// wire.go:
-
-// newApp 缁勮 App
-func newApp(svr server.Server, p producer.Producer) *App {
+func newApp(svr server.Server, httpServer *ginx.Server, p producer.Producer) *App {
 	return &App{
-		Server: svr,
+		Server:     svr,
+		HTTPServer: httpServer,
 		Producers: []ProducerComponent{
 			&producerWrapper{Producer: p},
 		},
 	}
 }
-
-

@@ -18,4 +18,16 @@ func TestToDBPaymentIncludesTxnID(t *testing.T) {
 	require.Equal(t, "wx_txn_1", dbPayment.TxnID.String)
 }
 
+func TestNextPaymentStatusSuccessCannotBeOverwrittenByFailure(t *testing.T) {
+	next, changed := nextPaymentStatus(domain.PaymentStatusSuccess, domain.PaymentStatusFailed)
 
+	require.False(t, changed)
+	require.Equal(t, domain.PaymentStatusSuccess, next)
+}
+
+func TestNextPaymentStatusFailureCanBePromotedToSuccess(t *testing.T) {
+	next, changed := nextPaymentStatus(domain.PaymentStatusFailed, domain.PaymentStatusSuccess)
+
+	require.True(t, changed)
+	require.Equal(t, domain.PaymentStatusSuccess, next)
+}

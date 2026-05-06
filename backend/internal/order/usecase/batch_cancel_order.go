@@ -12,7 +12,7 @@ import (
 type BatchCancelOrderUseCase struct {
 	orderRepo  domain.OrderRepository
 	outboxRepo domain.OutboxRepository
-	producer   mq.SaramaProducer
+	producer   mq.OrderStatusProducer
 	tx         domain.TxManager
 	log        logger.LoggerV1
 }
@@ -20,7 +20,7 @@ type BatchCancelOrderUseCase struct {
 func NewBatchCancelOrderUseCase(
 	orderRepo domain.OrderRepository,
 	outboxRepo domain.OutboxRepository,
-	producer mq.SaramaProducer,
+	producer mq.OrderStatusProducer,
 	tx domain.TxManager,
 	log logger.LoggerV1,
 ) *BatchCancelOrderUseCase {

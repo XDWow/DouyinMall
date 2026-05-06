@@ -47,7 +47,7 @@ internal/coupon/
 │   └── expire_coupon_job.go  # 过期券扫描
 ├── ioc/                # 依赖注入
 │   ├── db.go
-│   ├── kafka.go
+│   ├── rocketmq.go
 │   ├── grpc.go
 │   └── log.go
 └── config/             # 配置
@@ -63,7 +63,7 @@ cmd/coupon/
 
 - **框架**: Kitex (gRPC)
 - **数据库**: MySQL + GORM
-- **消息队列**: Kafka (Sarama)
+- **消息队列**: RocketMQ
 - **服务注册**: Etcd
 - **依赖注入**: Wire
 - **日志**: Zap
@@ -128,7 +128,7 @@ func (t *CouponTemplate) IsApplicableToOrder(items []OrderItem) (bool, string)
   - `OrderStatusRefunded` → 退还优惠券
 
 **容错机制**：
-- 本地重试3次 (saramax.Handler)
+- 本地重试3次 (rocketmqx.Handler)
 - 统一ACK，不阻塞消费
 - 幂等保证重试安全
 
@@ -191,14 +191,14 @@ go run cmd/coupon/*.go
 修改 `internal/coupon/config/dev.yaml`：
 - 数据库连接
 - Redis地址
-- Kafka地址
+- RocketMQ地址
 - Etcd地址
 - gRPC端口
 
 ## 依赖服务
 
 - MySQL (端口: 13306)
-- Kafka (端口: 19092)
+- RocketMQ Proxy (端口: 8081)
 - Etcd (端口: 12379)
 
 ## 测试
@@ -222,7 +222,7 @@ go test -tags=integration ./internal/coupon/...
 ## 注意事项
 
 1. **幂等键格式**：发券时必须传入合法的 `operation_id`
-2. **状态一致性**：优惠券状态变更依赖订单状态消息，需确保Kafka正常
+2. **状态一致性**：优惠券状态变更依赖订单状态消息，需确保RocketMQ正常
 3. **过期处理**：虽然有定时任务，但查询时仍会过滤过期时间
 4. **并发控制**：预扣使用条件更新，天然防止超卖
 

@@ -3,15 +3,14 @@ package mq
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/IBM/sarama"
 	seckilldomain "github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
+	"github.com/XDWow/DouyinMall/backend/pkg/rocketmqx"
 	orderv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1"
+	rmq_client "github.com/apache/rocketmq-clients/golang"
 )
 
 type OrderStatusUpdateEvent struct {
@@ -21,43 +20,39 @@ type OrderStatusUpdateEvent struct {
 }
 
 type OrderStatusConsumer struct {
-	client       sarama.Client
-	requestRepo  seckilldomain.RequestRepository
-	activityRepo seckilldomain.ActivityRepository
-	cache        seckilldomain.Cache
-	logger       logger.LoggerV1
-	consumerGrp  sarama.ConsumerGroup
+	requestRepo seckilldomain.RequestRepository
+	cache       seckilldomain.Cache
+	logger      logger.LoggerV1
+	consumer    *rocketmqx.Consumer
 }
 
-func NewOrderStatusConsumer(client sarama.Client, requestRepo seckilldomain.RequestRepository, activityRepo seckilldomain.ActivityRepository, cache seckilldomain.Cache, l logger.LoggerV1) *OrderStatusConsumer {
-	return &OrderStatusConsumer{
-		client:       client,
-		requestRepo:  requestRepo,
-		activityRepo: activityRepo,
-		cache:        cache,
-		logger:       l,
+func NewOrderStatusConsumer(
+	client rmq_client.SimpleConsumer,
+	requestRepo seckilldomain.RequestRepository,
+	_ seckilldomain.ActivityRepository,
+	cache seckilldomain.Cache,
+	l logger.LoggerV1,
+	options rocketmqx.ConsumerOptions,
+) *OrderStatusConsumer {
+	c := &OrderStatusConsumer{
+		requestRepo: requestRepo,
+		cache:       cache,
+		logger:      l,
 	}
+	if client != nil {
+		c.consumer = rocketmqx.NewConsumer(client, rocketmqx.NewHandler[OrderStatusUpdateEvent](l, c.consume), l, options)
+	}
+	return c
 }
 
 func (c *OrderStatusConsumer) Start() error {
-	cg, err := sarama.NewConsumerGroupFromClient("seckill-order-status-consumer", c.client)
-	if err != nil {
-		return err
+	if c.consumer == nil {
+		return nil
 	}
-	c.consumerGrp = cg
-
-	go func() {
-		for {
-			err := cg.Consume(context.Background(), []string{TopicOrderStatusUpdate}, saramax.NewHandler[OrderStatusUpdateEvent](c.logger, c.consume))
-			if err != nil {
-				c.logger.Error("seckill order status consumer exited", logger.Error(err))
-			}
-		}
-	}()
-	return nil
+	return c.consumer.Start()
 }
 
-func (c *OrderStatusConsumer) consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdateEvent) error {
+func (c *OrderStatusConsumer) consume(_ *rmq_client.MessageView, evt OrderStatusUpdateEvent) error {
 	kind := strings.ToUpper(strings.TrimSpace(evt.OrderKind))
 	if kind != "" && kind != "SECKILL" {
 		return nil
@@ -76,59 +71,34 @@ func (c *OrderStatusConsumer) consume(_ *sarama.ConsumerMessage, evt OrderStatus
 
 func (c *OrderStatusConsumer) onOrderClosed(ctx context.Context, evt OrderStatusUpdateEvent) error {
 	requestNo := strconv.FormatInt(evt.OrderID, 10)
-	req, err := c.requestRepo.FindByRequestNo(ctx, requestNo)
+	req, changed, err := c.requestRepo.CloseByOrderResult(ctx, requestNo, failReasonForOrderStatus(evt.Status))
 	if err != nil {
 		if errors.Is(err, seckilldomain.ErrRequestNotFound) {
 			return nil
 		}
 		return err
 	}
-	if req.Status != seckilldomain.RequestStatusProcessing &&
-		req.Status != seckilldomain.RequestStatusQualified &&
-		req.Status != seckilldomain.RequestStatusLegacySuccess {
+	if !changed {
 		return nil
 	}
 
-	total := req.Quantity
-	if total <= 0 {
-		total = 1
-	}
-
-	action := "cancel"
-	failReason := seckilldomain.FailReasonOrderCanceled
-	if evt.Status == orderv1.OrderStatus_ORDER_STATUS_REFUNDED {
-		action = "refund"
-		failReason = seckilldomain.FailReasonOrderRefunded
-	}
-
-	if err := c.activityRepo.IncreaseStock(ctx, req.ActivityID, fmt.Sprintf("order_%d_%s", evt.OrderID, action), total); err != nil {
-		return err
-	}
-	if err := c.activityRepo.DeleteSuccessClaim(ctx, req.ActivityID, req.UserID); err != nil {
-		return err
-	}
-
-	n, err := c.requestRepo.MarkFailByRequestNoIfActive(ctx, requestNo, failReason)
-	if err != nil {
-		return err
-	}
-	if n == 0 {
-		return nil
-	}
-
-	if err := c.cache.Compensate(ctx, req.ActivityID, req.UserID, total, true); err != nil {
-		return err
-	}
-	return c.cache.SetResult(ctx, seckilldomain.Result{
+	return c.cache.Compensate(ctx, req.ActivityID, req.UserID, req.RequestNo, seckilldomain.Result{
 		RequestNo:  req.RequestNo,
-		Status:     seckilldomain.RequestStatusFail,
-		FailReason: failReason,
+		Status:     seckilldomain.RequestStatusFailed,
+		FailReason: req.FailReason,
 	})
 }
 
-func (c *OrderStatusConsumer) Stop() error {
-	if c.consumerGrp != nil {
-		return c.consumerGrp.Close()
+func failReasonForOrderStatus(status orderv1.OrderStatus) string {
+	if status == orderv1.OrderStatus_ORDER_STATUS_REFUNDED {
+		return seckilldomain.FailReasonOrderRefunded
 	}
-	return nil
+	return seckilldomain.FailReasonOrderCanceled
+}
+
+func (c *OrderStatusConsumer) Stop() error {
+	if c.consumer == nil {
+		return nil
+	}
+	return c.consumer.Stop()
 }

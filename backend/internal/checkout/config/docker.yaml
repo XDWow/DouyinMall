@@ -7,5 +7,9 @@ grpc:
     port: 8086
     name: checkout.service
 
+http:
+  server:
+    port: 18086
+
 snowflake:
   node_id: 1

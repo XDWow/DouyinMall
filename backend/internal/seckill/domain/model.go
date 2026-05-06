@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 const (
 	ActivityStatusInit    = "INIT"
@@ -10,12 +13,10 @@ const (
 )
 
 const (
-	RequestStatusProcessing = "PROCESSING"
-	// RequestStatusQualified 已抢到资格：创单成功，待支付（轮询到此可停，转支付/订单域）。
-	RequestStatusQualified = "QUALIFIED"
-	RequestStatusFail      = "FAIL"
-	// RequestStatusLegacySuccess 历史库中可能仍为 SUCCESS，仅用于关单补偿等兼容。
-	RequestStatusLegacySuccess = "SUCCESS"
+	RequestStatusProcessing    = "PROCESSING"
+	RequestStatusOrderCreating = "ORDER_CREATING"
+	RequestStatusSuccess       = "SUCCESS"
+	RequestStatusFailed        = "FAILED"
 )
 
 const (
@@ -51,7 +52,6 @@ type Request struct {
 	RequestNo  string
 	ActivityID int64
 	UserID     int64
-	Quantity   int32
 	Status     string
 	OrderID    int64
 	FailReason string
@@ -66,15 +66,35 @@ type Result struct {
 	FailReason string `json:"failReason,omitempty"`
 }
 
+type TransactionResolution int
+
+const (
+	TransactionResolutionUnknown TransactionResolution = iota
+	TransactionResolutionCommit
+	TransactionResolutionRollback
+)
+
 type Event struct {
 	RequestNo  string `json:"request_no"`
-	ActivityID int64  `json:"activity_id"` // 秒杀活动 ID
+	ActivityID int64  `json:"activity_id"`
 	UserID     int64  `json:"user_id"`
-
-	// 用于创建订单商品明细
-	ProductID int64 `json:"product_id"`
-	SKUID     int64 `json:"sku_id"`
+	ProductID  int64  `json:"product_id"`
+	SKUID      int64  `json:"sku_id"`
 
 	SeckillPrice int64 `json:"seckill_price"`
-	Quantity     int32 `json:"quantity"`
+}
+
+type DeadLetterEvent struct {
+	Event           Event  `json:"event"`
+	Reason          string `json:"reason"`
+	SourceMessageID string `json:"source_message_id,omitempty"`
+	DeliveryAttempt int32  `json:"delivery_attempt,omitempty"`
+}
+
+func OrderIDFromRequestNo(requestNo string) (int64, bool) {
+	orderID, err := strconv.ParseInt(requestNo, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return orderID, true
 }

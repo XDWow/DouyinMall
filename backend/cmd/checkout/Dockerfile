@@ -10,5 +10,5 @@ ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/checkout .
 COPY --from=builder /app/internal/checkout/config/docker.yaml ./internal/checkout/config/dev.yaml
-EXPOSE 8086
+EXPOSE 8086 18086
 ENTRYPOINT ["./checkout"]

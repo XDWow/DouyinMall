@@ -349,7 +349,7 @@ func runSeckillBench(cfg benchConfig) (metricSummary, error) {
 	}
 
 	var successCount int
-	if err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_success WHERE activity_id = ?", activityID).Scan(&successCount); err != nil {
+	if err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_qualification WHERE activity_id = ?", activityID).Scan(&successCount); err != nil {
 		return metricSummary{}, err
 	}
 
@@ -402,8 +402,8 @@ func runSeckillDuplicate(cfg benchConfig) (metricSummary, error) {
 	if err = db.QueryRowContext(context.Background(), `
 SELECT COUNT(1) FROM (
   SELECT user_id
-  FROM seckill_request
-  WHERE activity_id = ? AND status IN ('PROCESSING','QUALIFIED','SUCCESS')
+  FROM seckill_qualification
+  WHERE activity_id = ?
   GROUP BY user_id
   HAVING COUNT(1) > 1
 ) t`, activityID).Scan(&duplicateUsers); err != nil {
@@ -487,7 +487,7 @@ func waitForSeckillSettlement(db *sql.DB, activityID int64, deadline time.Time) 
 			continue
 		}
 		var pending int
-		err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ? AND status = 'PROCESSING'", activityID).Scan(&pending)
+		err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ? AND status IN ('PROCESSING','ORDER_CREATING')", activityID).Scan(&pending)
 		if err != nil {
 			return err
 		}
@@ -496,7 +496,21 @@ func waitForSeckillSettlement(db *sql.DB, activityID int64, deadline time.Time) 
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	return fmt.Errorf("timeout waiting seckill activity %d settle", activityID)
+	rows, err := db.QueryContext(context.Background(), "SELECT status, COUNT(1) FROM seckill_request WHERE activity_id = ? GROUP BY status", activityID)
+	if err != nil {
+		return fmt.Errorf("timeout waiting seckill activity %d settle and query status summary failed: %w", activityID, err)
+	}
+	defer rows.Close()
+	statusCounts := map[string]int{}
+	for rows.Next() {
+		var status string
+		var count int
+		if scanErr := rows.Scan(&status, &count); scanErr != nil {
+			return fmt.Errorf("timeout waiting seckill activity %d settle and scan status summary failed: %w", activityID, scanErr)
+		}
+		statusCounts[status] = count
+	}
+	return fmt.Errorf("timeout waiting seckill activity %d settle, statusCounts=%v", activityID, statusCounts)
 }
 
 func runWorkers(total, concurrency int, fn func(i int) error) ([]float64, int64, int64, time.Duration) {

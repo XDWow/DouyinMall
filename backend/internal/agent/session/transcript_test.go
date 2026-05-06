@@ -18,7 +18,13 @@ func TestVisibleTranscriptSchemaMessages_keepsUserAssistantText(t *testing.T) {
 }
 
 func TestVisibleTranscriptSchemaMessages_dropsToolSystemAndToolOnlyAssistant(t *testing.T) {
-	toolStub, _ := schema.AssistantMessage("", []schema.ToolCall{{ID: "1", Name: "x", Arguments: "{}"}})
+	toolStub := schema.AssistantMessage("", []schema.ToolCall{{
+		ID: "1",
+		Function: schema.FunctionCall{
+			Name:      "x",
+			Arguments: "{}",
+		},
+	}})
 	in := []*schema.Message{
 		schema.SystemMessage("sys"),
 		schema.UserMessage("u1"),

@@ -2,10 +2,12 @@ package grpc
 
 import (
 	"context"
+	"errors"
 
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/order/usecase"
 	orderv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1"
+	"github.com/cloudwego/kitex/pkg/kerrors"
 )
 
 type OrderHandler struct {
@@ -66,7 +68,7 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 		Items:         items,
 	})
 	if err != nil {
-		return nil, err
+		return nil, toCreateOrderBizError(err)
 	}
 	return &orderv1.CreateOrderResp{OrderId: id}, nil
 }
@@ -74,6 +76,9 @@ func (h *OrderHandler) CreateOrder(ctx context.Context, req *orderv1.CreateOrder
 func (h *OrderHandler) GetOrder(ctx context.Context, req *orderv1.GetOrderReq) (*orderv1.GetOrderResp, error) {
 	order, err := h.getOrderUC.Execute(ctx, usecase.GetOrderCmd{OrderID: req.GetOrderId()})
 	if err != nil {
+		if errors.Is(err, domain.ErrRecordNotFound) {
+			return nil, kerrors.NewBizStatusError(domain.BizStatusGetOrderNotFound, err.Error())
+		}
 		return nil, err
 	}
 	return &orderv1.GetOrderResp{Order: toProtoOrder(order)}, nil
@@ -145,4 +150,15 @@ func toProtoOrder(o *domain.Order) *orderv1.Order {
 	}
 }
 
-
+func toCreateOrderBizError(err error) error {
+	switch {
+	case errors.Is(err, domain.ErrInvalidUser):
+		return kerrors.NewBizStatusError(domain.BizStatusCreateOrderInvalidUser, err.Error())
+	case errors.Is(err, domain.ErrEmptyOrderItems):
+		return kerrors.NewBizStatusError(domain.BizStatusCreateOrderEmptyItems, err.Error())
+	case errors.Is(err, domain.ErrSeckillActivityRequired):
+		return kerrors.NewBizStatusError(domain.BizStatusCreateOrderSeckillActivityRequired, err.Error())
+	default:
+		return err
+	}
+}

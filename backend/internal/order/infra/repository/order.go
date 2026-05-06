@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
@@ -60,6 +62,9 @@ func (repo *orderRepository) Save(ctx context.Context, order *domain.Order) erro
 	orderModel := toOrderModel(order)
 	// GORM 会自动设置 OrderItems 的 OrderID 外键
 	if err := conn.Create(orderModel).Error; err != nil {
+		if isDuplicate(err) {
+			return domain.ErrDuplicateOrder
+		}
 		return err
 	}
 	// 回写自增 ID 到 domain 对象
@@ -465,4 +470,13 @@ func matchStatuses(status domain.OrderStatus) []domain.OrderStatus {
 	return []domain.OrderStatus{status}
 }
 
-
+func isDuplicate(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, domain.ErrDuplicateOrder) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "1062") || strings.Contains(msg, "Duplicate entry")
+}

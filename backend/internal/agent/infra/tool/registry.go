@@ -10,10 +10,13 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// Registry 保存已注册工具，并暴露一套统一的 ToolsNode
+// Registry holds the MCP tools that are actually available to the agent service.
+// We keep only two capabilities here:
+// 1. look up tools by whitelist name
+// 2. expose one shared ToolsNode for execution
 type Registry struct {
-	toolInfos map[string]*schema.ToolInfo
-	node      *compose.ToolsNode
+	tools map[string]einotool.BaseTool
+	node  *compose.ToolsNode
 }
 
 type registeredTool struct {
@@ -23,19 +26,20 @@ type registeredTool struct {
 
 func newRegistry(ctx context.Context, registered []registeredTool) (*Registry, error) {
 	tools := make([]einotool.BaseTool, 0, len(registered))
-	toolInfos := make(map[string]*schema.ToolInfo, len(registered))
+	toolMap := make(map[string]einotool.BaseTool, len(registered))
 
 	for _, item := range registered {
 		if item.baseTool == nil || item.info == nil || strings.TrimSpace(item.info.Name) == "" {
 			continue
 		}
 		tools = append(tools, item.baseTool)
-		toolInfos[item.info.Name] = item.info
+		toolMap[item.info.Name] = item.baseTool
 	}
 
-	// 整个服务只保留一套顺序 ToolsNode：
-	// 确定性节点自己构造 tool_calls，Agent 子图由模型产出 tool_calls，
-	// 两条路径最终都统一落到这里执行
+	// The whole service shares one sequential ToolsNode.
+	// Deterministic nodes build tool_calls themselves.
+	// ADK agent nodes let the model produce tool_calls.
+	// Both paths end up executing here.
 	node, err := compose.NewToolNode(ctx, &compose.ToolsNodeConfig{
 		Tools:               tools,
 		ExecuteSequentially: true,
@@ -45,31 +49,9 @@ func newRegistry(ctx context.Context, registered []registeredTool) (*Registry, e
 	}
 
 	return &Registry{
-		toolInfos: toolInfos,
-		node:      node,
+		tools: toolMap,
+		node:  node,
 	}, nil
-}
-
-func (r *Registry) ToolInfos(names []string) []*schema.ToolInfo {
-	if r == nil || len(r.toolInfos) == 0 || len(names) == 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(names))
-	out := make([]*schema.ToolInfo, 0, len(names))
-	for _, name := range names {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		if _, ok := seen[name]; ok {
-			continue
-		}
-		seen[name] = struct{}{}
-		if info := r.toolInfos[name]; info != nil {
-			out = append(out, info)
-		}
-	}
-	return out
 }
 
 func (r *Registry) ToolsNode() (*compose.ToolsNode, error) {
@@ -82,10 +64,34 @@ func (r *Registry) ToolsNode() (*compose.ToolsNode, error) {
 	return r.node, nil
 }
 
+// Tools returns the whitelisted business tools in input order.
+func (r *Registry) Tools(names []string) []einotool.BaseTool {
+	if r == nil || len(r.tools) == 0 || len(names) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(names))
+	out := make([]einotool.BaseTool, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		if tool := r.tools[name]; tool != nil {
+			out = append(out, tool)
+		}
+	}
+	return out
+}
+
 func (r *Registry) Has(name string) bool {
-	if r == nil || r.toolInfos == nil {
+	if r == nil || r.tools == nil {
 		return false
 	}
-	_, ok := r.toolInfos[strings.TrimSpace(name)]
+	_, ok := r.tools[strings.TrimSpace(name)]
 	return ok
 }

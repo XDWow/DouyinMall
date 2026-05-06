@@ -67,6 +67,7 @@ func NewRuntime(ctx context.Context, cfg Config, deps Dependencies) (*Runtime, e
 		AccessGuard:     globalnode.NewAccessGuardNode(cfg.DefaultTenantID, cfg.RateLimitPerMinute, deps.RateLimiter),
 		SessionLoad:     globalnode.NewSessionLoadNode(deps.SessionService),
 		Understanding:   understandingnode.NewUnderstandingNode(deps.LLMs.Weak()),
+		CacheLookup:     globalnode.NewCacheLookupNode(deps.ExactCache, deps.SemanticCache, deps.Embedder, cfg.SemanticCacheScore, cfg.SemanticCacheTopK, cfg.DefaultTenantID),
 		Route:           globalnode.NewRouteNode(),
 		Finalize: globalnode.NewFinalizeNode(
 			deps.SessionService,
@@ -328,12 +329,4 @@ func interruptCtxIDFromCompose(info *compose.InterruptInfo) string {
 		}
 	}
 	return ""
-}
-
-func (s *Runtime) registryHasTool(ctx context.Context, name string) bool {
-	if s.registry == nil {
-		return false
-	}
-	_ = ctx
-	return s.registry.Has(name)
 }

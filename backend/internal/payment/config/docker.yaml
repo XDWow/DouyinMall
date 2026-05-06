@@ -7,7 +7,9 @@ db:
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "douyinmall-redis:6379"
+  addr: "106.52.154.235:6379"
+  password: "0624"
+  db: 0
 
 etcd:
   endpoints:
@@ -38,3 +40,9 @@ wechat:
 kafka:
   brokers:
     - "10.1.4.4:29092"
+
+rocketmq:
+  endpoint: "43.136.121.171:8081"
+  access_key: ""
+  secret_key: ""
+  producer_max_attempts: 3

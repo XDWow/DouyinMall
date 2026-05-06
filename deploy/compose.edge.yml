@@ -1,0 +1,185 @@
+services:
+  apisix:
+    image: apache/apisix:3.14.0-debian
+    container_name: douyinmall-apisix
+    restart: unless-stopped
+    ports:
+      - "9080:9080"
+      - "9180:9180"
+    env_file:
+      - ./.env
+    volumes:
+      - ./apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+    networks:
+      - mall-edge-net
+
+  apisix-init:
+    image: curlimages/curl:8.12.1
+    depends_on:
+      - apisix
+    env_file:
+      - ./.env
+    environment:
+      APISIX_ADMIN_URL: http://apisix:9180
+    volumes:
+      - ./apisix/init-routes.sh:/work/init-routes.sh:ro
+    command: ["sh", "/work/init-routes.sh"]
+    networks:
+      - mall-edge-net
+
+  user-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/user/Dockerfile
+    container_name: douyinmall-user
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/user/config/dev.yaml:/app/internal/user/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  bff-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/bff/Dockerfile
+    container_name: douyinmall-bff
+    restart: unless-stopped
+    depends_on:
+      - user-service
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/bff/config/dev.yaml:/app/internal/bff/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  cart-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/cart/Dockerfile
+    container_name: douyinmall-cart
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/cart/config/dev.yaml:/app/internal/cart/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  product-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/product/Dockerfile
+    container_name: douyinmall-product
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/product/config/dev.yaml:/app/internal/product/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  search-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/search/Dockerfile
+    container_name: douyinmall-search
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/search/config/dev.yaml:/app/internal/search/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  checkout-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/checkout/Dockerfile
+    container_name: douyinmall-checkout
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    depends_on:
+      - product-service
+      - inventory-service
+      - coupon-service
+      - order-service
+      - payment-service
+    volumes:
+      - ../backend/internal/checkout/config/dev.yaml:/app/internal/checkout/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  inventory-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/inventory/Dockerfile
+    container_name: douyinmall-inventory
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/inventory/config/dev.yaml:/app/internal/inventory/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  coupon-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/coupon/Dockerfile
+    container_name: douyinmall-coupon
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/coupon/config/dev.yaml:/app/internal/coupon/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  order-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/order/Dockerfile
+    container_name: douyinmall-order
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/order/config/prod.yaml:/app/internal/order/config/prod.yaml:ro
+    networks:
+      - mall-edge-net
+
+  payment-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/payment/Dockerfile
+    container_name: douyinmall-payment
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ../backend/internal/payment/config/dev.yaml:/app/internal/payment/config/dev.yaml:ro
+    networks:
+      - mall-edge-net
+
+  seckill-service:
+    build:
+      context: ../backend
+      dockerfile: cmd/seckill/Dockerfile
+    container_name: douyinmall-seckill
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    depends_on:
+      - order-service
+    volumes:
+      - ../backend/internal/seckill/config/prod.yaml:/app/internal/seckill/config/prod.yaml:ro
+    networks:
+      - mall-edge-net
+
+networks:
+  mall-edge-net:
+    driver: bridge

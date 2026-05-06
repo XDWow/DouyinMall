@@ -7,9 +7,7 @@ option go_package = "inventory/v1;inventoryv1";
 service InventoryService {
   rpc GetInventory(GetInventoryReq) returns (GetInventoryResp);
   rpc BatchGetInventory(BatchGetInventoryReq) returns (BatchGetInventoryResp);
-  rpc ReserveStock(ReserveStockReq) returns (InventoryOpResp);
   rpc CommitStock(CommitStockReq) returns (InventoryOpResp);
-  rpc ReleaseStock(ReleaseStockReq) returns (InventoryOpResp);
   rpc RefundStock(RefundStockReq) returns (InventoryOpResp);
   rpc AdjustStock(AdjustStockReq) returns (InventoryOpResp);
 }
@@ -49,18 +47,7 @@ message BatchGetInventoryResp {
   repeated GetInventoryResp inventories = 1;
 }
 
-message ReserveStockReq {
-  string operation_id = 1;
-  repeated StockItem items = 2;
-  int64 expire_time = 3;
-}
-
 message CommitStockReq {
-  string operation_id = 1;
-  repeated StockItem items = 2;
-}
-
-message ReleaseStockReq {
   string operation_id = 1;
   repeated StockItem items = 2;
 }

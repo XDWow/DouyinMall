@@ -33,7 +33,7 @@ type loginReq struct {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "请求参数错误: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "invalid login request: " + err.Error()})
 		return
 	}
 
@@ -42,7 +42,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		Password: req.Password,
 	})
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, ginx.Result{Code: 4, Msg: "邮箱或密码错误"})
+		c.JSON(http.StatusUnauthorized, ginx.Result{Code: 4, Msg: "invalid email or password"})
 		return
 	}
 
@@ -57,7 +57,7 @@ type signupReq struct {
 func (h *AuthHandler) Signup(c *gin.Context) {
 	var req signupReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "请求参数错误: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "invalid signup request: " + err.Error()})
 		return
 	}
 
@@ -66,7 +66,7 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		Password: req.Password,
 	})
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "注册失败: " + err.Error()})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "signup failed: " + err.Error()})
 		return
 	}
 
@@ -80,13 +80,13 @@ type refreshReq struct {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "请求参数错误"})
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "invalid refresh request"})
 		return
 	}
 
 	access, refresh, err := h.jwt.RefreshAccessToken(req.RefreshToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, ginx.Result{Code: 4, Msg: "refresh token 无效或已过期，请重新登录"})
+		c.JSON(http.StatusUnauthorized, ginx.Result{Code: 4, Msg: "refresh token is invalid or expired, please login again"})
 		return
 	}
 
@@ -99,7 +99,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 func (h *AuthHandler) issueTokens(c *gin.Context, userID int64) {
 	access, refresh, err := h.jwt.GenerateTokenPair(userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "生成 token 失败"})
+		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "failed to generate tokens"})
 		return
 	}
 

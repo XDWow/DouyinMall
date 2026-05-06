@@ -19,7 +19,7 @@ db:
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "114.132.75.56:16379"
+  addr: "106.52.154.235:6379"
   password: ""
   db: 0
 

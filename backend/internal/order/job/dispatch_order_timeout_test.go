@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/XDWow/DouyinMall/backend/internal/order/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/order/infra/mq"
 	"github.com/XDWow/DouyinMall/backend/internal/order/usecase"
@@ -27,7 +26,7 @@ func TestDispatchOrderTimeoutJobSkipsNonCreatedOrdersBeforeConfirmingPayment(t *
 		},
 	}
 	outboxRepo := &stubTimeoutOutboxRepo{}
-	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
+	producer := &stubTimeoutOrderStatusProducer{}
 	batchCancelUC := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
 	changeUC := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
 	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, batchCancelUC, changeUC, logger.NewNopLogger())
@@ -56,7 +55,7 @@ func TestDispatchOrderTimeoutJobLoadsCreatedOrderBeforeConfirmingPayment(t *test
 		confirmCalls: &paymentCli.confirmCalls,
 	}
 	outboxRepo := &stubTimeoutOutboxRepo{batchAddIDs: []int64{1}}
-	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
+	producer := &stubTimeoutOrderStatusProducer{}
 	batchCancelUC := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
 	changeUC := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
 	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, batchCancelUC, changeUC, logger.NewNopLogger())
@@ -89,7 +88,7 @@ func TestDispatchOrderTimeoutJobBatchCancelsAllDueCreatedOrders(t *testing.T) {
 		},
 	}
 	outboxRepo := &stubTimeoutOutboxRepo{batchAddIDs: []int64{1, 2}}
-	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
+	producer := &stubTimeoutOrderStatusProducer{}
 	batchCancelUC := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
 	changeUC := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
 	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, batchCancelUC, changeUC, logger.NewNopLogger())
@@ -116,7 +115,7 @@ func TestDispatchOrderTimeoutJobSyncsPaidOrderBeforeSkippingCancel(t *testing.T)
 			1005: {ID: 1005, UserID: 2005, Status: domain.OrderStatusCreated, OrderKind: domain.OrderKindCart, OrderItems: []domain.OrderItem{{ProductID: 88, SKUID: 99}}},
 		},
 	}
-	producer := mq.NewSaramaProducer(stubTimeoutSyncProducer{})
+	producer := &stubTimeoutOrderStatusProducer{}
 	batchCancelUC := usecase.NewBatchCancelOrderUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
 	changeUC := usecase.NewChangeOrderStatusUseCase(orderRepo, outboxRepo, producer, stubTimeoutTxManager{}, logger.NewNopLogger())
 	job := NewDispatchOrderTimeoutJob(delayQueue, paymentCli, orderRepo, batchCancelUC, changeUC, logger.NewNopLogger())
@@ -206,35 +205,21 @@ func (s *stubTimeoutOutboxRepo) IncreaseRetry(context.Context, int64) (int, erro
 	return 0, nil
 }
 
-type stubTimeoutSyncProducer struct{}
+type stubTimeoutOrderStatusProducer struct{}
 
-func (stubTimeoutSyncProducer) SendMessage(*sarama.ProducerMessage) (int32, int64, error) {
-	return 0, 0, nil
-}
-
-func (stubTimeoutSyncProducer) SendMessages([]*sarama.ProducerMessage) error {
+func (stubTimeoutOrderStatusProducer) SendMessage(context.Context, domain.OrderStatusUpdateEvent) error {
 	return nil
 }
 
-func (stubTimeoutSyncProducer) Close() error { return nil }
-
-func (stubTimeoutSyncProducer) TxnStatus() sarama.ProducerTxnStatusFlag { return 0 }
-
-func (stubTimeoutSyncProducer) IsTransactional() bool { return false }
-
-func (stubTimeoutSyncProducer) BeginTxn() error { return nil }
-
-func (stubTimeoutSyncProducer) CommitTxn() error { return nil }
-
-func (stubTimeoutSyncProducer) AbortTxn() error { return nil }
-
-func (stubTimeoutSyncProducer) AddOffsetsToTxn(map[string][]*sarama.PartitionOffsetMetadata, string) error {
-	return nil
+func (stubTimeoutOrderStatusProducer) SendMessages(_ context.Context, events []domain.OrderStatusUpdateEvent) []error {
+	if len(events) == 0 {
+		return nil
+	}
+	errs := make([]error, len(events))
+	return errs
 }
 
-func (stubTimeoutSyncProducer) AddMessageToTxn(*sarama.ConsumerMessage, string, *string) error {
-	return nil
-}
+var _ mq.OrderStatusProducer = (*stubTimeoutOrderStatusProducer)(nil)
 
 type stubTimeoutOrderRepo struct {
 	orderByID               map[int64]domain.Order

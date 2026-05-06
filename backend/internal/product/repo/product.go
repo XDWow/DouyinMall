@@ -17,37 +17,37 @@ import (
 )
 
 // =============================================================================
-// Cache-Aside 妯″紡瀹炵幇锛圴1 鐗堟湰锛?
+// Cache-Aside 濡€崇础鐎圭偟骞囬敍鍦? 閻楀牊婀伴敍?
 // =============================================================================
 //
-// 鏋舵瀯鐗圭偣锛?
-//   - 涓氬姟浠ｇ爜鐩存帴绠＄悊缂撳瓨锛堣鍐欏垹锛?
-//   - 鏇存柊/鍒犻櫎鏃朵富鍔ㄥけ鏁堢紦瀛橈紙寤惰繜鍙屽垹锛?
-//   - 閫傜敤浜庡崟 Redis銆佹棤 MQ 鐨勭畝鍗曞満鏅?
+// 閺嬭埖鐎悧鍦仯閿?
+//   - 娑撴艾濮熸禒锝囩垳閻╁瓨甯寸粻锛勬倞缂傛挸鐡ㄩ敍鍫ｎ嚢閸愭瑥鍨归敍?
+//   - 閺囧瓨鏌?閸掔娀娅庨弮鏈靛瘜閸斻劌銇戦弫鍫㈢处鐎涙﹫绱欏鎯扮箿閸欏苯鍨归敍?
+//   - 闁倻鏁ゆ禍搴″礋 Redis閵嗕焦妫?MQ 閻ㄥ嫮鐣濋崡鏇炴簚閺?
 //
-// 缂撳瓨绛栫暐锛?
-//   - 鍒楄〃缂撳瓨锛氱煭 TTL锛?鍒嗛挓锛夛紝鐑偣鏁版嵁 singleflight 闃插嚮绌?
-//   - 璇︽儏缂撳瓨锛氬熀鏈俊鎭?30 鍒嗛挓锛屼环鏍?搴撳瓨鐘舵€?1 鍒嗛挓锛堝垎绂诲瓨鍌級
-//   - 棰勭儹缂撳瓨锛? 鍒嗛挓锛堥娴嬫€ц川锛?
+// 缂傛挸鐡ㄧ粵鏍殣閿?
+//   - 閸掓銆冪紓鎾崇摠閿涙氨鐓?TTL閿?閸掑棝鎸撻敍澶涚礉閻戭厾鍋ｉ弫鐗堝祦 singleflight 闂冩彃鍤粚?
+//   - 鐠囷附鍎忕紓鎾崇摠閿涙艾鐔€閺堫兛淇婇幁?30 閸掑棝鎸撻敍灞肩幆閺?鎼存挸鐡ㄩ悩鑸碘偓?1 閸掑棝鎸撻敍鍫濆瀻缁傝鐡ㄩ崒顭掔礆
+//   - 妫板嫮鍎圭紓鎾崇摠閿? 閸掑棝鎸撻敍鍫ヮ暕濞村鈧嗗窛閿?
 //
-// 涓€鑷存€т繚闅滐細
-//   - 寤惰繜鍙屽垹锛氳В鍐冲苟鍙戣鍐欏鑷寸殑鑴忕紦瀛橀棶棰橈紙涓讳粠寤惰繜浼氬姞鍓э級
-//   - 鍒楄〃缂撳瓨涓嶄富鍔ㄥ垹闄わ紝渚濊禆鐭?TTL 鑷劧杩囨湡锛堝彉鍖栭绻侊紝鍒犻櫎鎴愭湰楂橈級
-//   - 璇︽儏缂撳瓨涓诲姩鍒犻櫎 + TTL 鍏滃簳锛堝垹闄ゅけ璐ユ椂 TTL 淇濊瘉鏈€缁堜竴鑷达級
+// 娑撯偓閼峰瓨鈧傜箽闂呮粣绱?
+//   - 瀵ゆ儼绻滈崣灞藉灩閿涙俺袙閸愬啿鑻熼崣鎴ｎ嚢閸愭瑥顕遍懛瀵告畱閼村繒绱︾€涙﹢妫舵０姗堢礄娑撹绮犲鎯扮箿娴兼艾濮為崜褝绱?
+//   - 閸掓銆冪紓鎾崇摠娑撳秳瀵岄崝銊ュ灩闂勩倧绱濇笟婵婄閻?TTL 閼奉亞鍔ф潻鍥ㄦ埂閿涘牆褰夐崠鏍暥缁讳緤绱濋崚鐘绘珟閹存劖婀版姗堢礆
+//   - 鐠囷附鍎忕紓鎾崇摠娑撹濮╅崚鐘绘珟 + TTL 閸忔粌绨抽敍鍫濆灩闂勩倕銇戠拹銉︽ TTL 娣囨繆鐦夐張鈧紒鍫滅閼疯揪绱?
 //
-// 缂虹偣锛?
-//   - 浠ｇ爜渚靛叆锛氭瘡澶勫啓鎿嶄綔閮借绠＄悊缂撳瓨
-//   - 鎵╁睍鎬у樊锛氭柊澧炵紦瀛橈紙濡?ES銆佸 Redis锛夐渶瑕佷慨鏀逛唬鐮?
-//   - 鍙潬鎬у急锛氬垹缂撳瓨澶辫触浼氬鑷翠笉涓€鑷?
+// 缂傝櫣鍋ｉ敍?
+//   - 娴狅絿鐖滄笟闈涘弳閿涙碍鐦℃径鍕晸閹垮秳缍旈柈鍊燁洣缁狅紕鎮婄紓鎾崇摠
+//   - 閹碘晛鐫嶉幀褍妯婇敍姘煀婢х偟绱︾€涙﹫绱欐俊?ES閵嗕礁顦?Redis閿涘娓剁憰浣锋叏閺€閫涘敩閻?
+//   - 閸欘垶娼幀褍鎬ラ敍姘灩缂傛挸鐡ㄦ径杈Е娴兼艾顕遍懛缈犵瑝娑撯偓閼?
 //
-// 浜偣锛?
-//	鍒嗙缂撳瓨	鍩烘湰淇℃伅 30min锛屼环鏍?搴撳瓨鐘舵€?1min锛岀嫭绔?TTL
-//	绮惧噯鏌ヨ	浠锋牸/搴撳瓨鐘舵€?miss 鏃跺彧鏌?SELECT price, in_stock锛屽噺灏戠綉缁滀紶杈?
-//	singleflight	鐑偣鏁版嵁锛堝墠3椤碉級闃茬紦瀛樺嚮绌?
-//	缂撳瓨棰勭儹	鍒楄〃鏌ヨ鍚庨鐑墠3涓晢鍝佽鎯?
-//	寤惰繜鍙屽垹	鏇存柊鍚庣珛鍗冲垹 + 寤惰繜1绉掑啀鍒狅紝瑙ｅ喅骞跺彂鑴忕紦瀛?
-//	绌块€忛槻鎶?绌烘暟缁勪篃缂撳瓨
-//	闄嶇骇绛栫暐	ctx.Value("downgrade") 鎺у埗
+// 娴滎喚鍋ｉ敍?
+//	閸掑棛顬囩紓鎾崇摠	閸╃儤婀版穱鈩冧紖 30min閿涘奔鐜弽?鎼存挸鐡ㄩ悩鑸碘偓?1min閿涘瞼瀚粩?TTL
+//	缁儳鍣弻銉嚄	娴犻攱鐗?鎼存挸鐡ㄩ悩鑸碘偓?miss 閺冭泛褰ч弻?SELECT price, in_stock閿涘苯鍣虹亸鎴犵秹缂佹粈绱舵潏?
+//	singleflight	閻戭厾鍋ｉ弫鐗堝祦閿涘牆澧?妞ょ绱氶梼鑼处鐎涙ê鍤粚?
+//	缂傛挸鐡ㄦ０鍕劰	閸掓銆冮弻銉嚄閸氬酣顣╅悜顓炲3娑擃亜鏅㈤崫浣筋嚊閹?
+//	瀵ゆ儼绻滈崣灞藉灩	閺囧瓨鏌婇崥搴ｇ彌閸楀啿鍨?+ 瀵ゆ儼绻?缁夋帒鍟€閸掔媴绱濈憴锝呭枀楠炶泛褰傞懘蹇曠处鐎?
+//	缁屽潡鈧繘妲婚幎?缁岀儤鏆熺紒鍕瘍缂傛挸鐡?
+//	闂勫秶楠囩粵鏍殣	ctx.Value("downgrade") 閹貉冨煑
 
 // =============================================================================
 
@@ -56,7 +56,7 @@ type CacheAsideProductRepo struct {
 	cache  cache.ProductCache
 	logger logger.LoggerV1
 
-	// TTL 閰嶇疆
+	// TTL 闁板秶鐤?
 	listCacheTTL        time.Duration
 	detailBasicTTL      time.Duration
 	detailPriceStockTTL time.Duration
@@ -71,10 +71,10 @@ func NewCachedProductRepo(dao dao.ProductDao, cache cache.ProductCache, l logger
 		cache:  cache,
 		logger: l,
 
-		listCacheTTL:        3 * time.Minute,  // 鍒楄〃锛?鍒嗛挓锛堜笉涓诲姩鍒犻櫎锛屼緷璧栬嚜鐒惰繃鏈燂級
-		detailBasicTTL:      30 * time.Minute, // 鍩烘湰淇℃伅锛?0鍒嗛挓锛堜富鍔ㄥ垹闄?+ TTL 鍏滃簳锛?
-		detailPriceStockTTL: 1 * time.Minute,  // 浠锋牸/搴撳瓨鐘舵€侊細1鍒嗛挓锛堜富鍔ㄥ垹闄?+ TTL 鍏滃簳锛屾渶澶?1 鍒嗛挓鎭㈠涓€鑷达級
-		preloadTTL:          2 * time.Minute,  // 棰勭儹锛?鍒嗛挓锛堥娴嬪け璐ュ揩閫熻繃鏈燂級
+		listCacheTTL:        3 * time.Minute,  // 閸掓銆冮敍?閸掑棝鎸撻敍鍫滅瑝娑撹濮╅崚鐘绘珟閿涘奔绶风挧鏍殰閻掓儼绻冮張鐕傜礆
+		detailBasicTTL:      30 * time.Minute, // 閸╃儤婀版穱鈩冧紖閿?0閸掑棝鎸撻敍鍫滃瘜閸斻劌鍨归梽?+ TTL 閸忔粌绨抽敍?
+		detailPriceStockTTL: 1 * time.Minute,  // 娴犻攱鐗?鎼存挸鐡ㄩ悩鑸碘偓渚婄窗1閸掑棝鎸撻敍鍫滃瘜閸斻劌鍨归梽?+ TTL 閸忔粌绨抽敍灞炬付婢?1 閸掑棝鎸撻幁銏狀槻娑撯偓閼疯揪绱?
+		preloadTTL:          2 * time.Minute,  // 妫板嫮鍎归敍?閸掑棝鎸撻敍鍫ヮ暕濞村銇戠拹銉ユ彥闁喕绻冮張鐕傜礆
 	}
 }
 
@@ -91,7 +91,7 @@ func PriceInStockKey(id int64) string {
 }
 
 func (r *CacheAsideProductRepo) ListProducts(ctx context.Context, page, pageSize int64, category string) (products []domain.Product, err error) {
-	// 鐑偣鏁版嵁锛堝墠3椤碉級浣跨敤 singleflight 闃叉缂撳瓨鍑荤┛
+	// 閻戭厾鍋ｉ弫鐗堝祦閿涘牆澧?妞ょ绱氭担璺ㄦ暏 singleflight 闂冨弶顒涚紓鎾崇摠閸戣崵鈹?
 	if page <= 3 {
 		key := ListKey(category, page)
 		data, err := r.cache.Get(ctx, key)
@@ -108,7 +108,7 @@ func (r *CacheAsideProductRepo) ListProducts(ctx context.Context, page, pageSize
 			}
 		}
 
-		// singleflight锛氬悎骞剁浉鍚?key 鐨勫苟鍙戣姹傦紝鍙湁涓€涓姹傛煡鏁版嵁搴?
+		// singleflight閿涙艾鎮庨獮鍓佹祲閸?key 閻ㄥ嫬鑻熼崣鎴ｎ嚞濮瑰偊绱濋崣顏呮箒娑撯偓娑擃亣顕Ч鍌涚叀閺佺増宓佹惔?
 		val, err, _ := r.sf.Do(key, func() (interface{}, error) {
 			ps, err := r.dao.ListProducts(ctx, page, pageSize, category)
 			if err != nil {
@@ -119,13 +119,13 @@ func (r *CacheAsideProductRepo) ListProducts(ctx context.Context, page, pageSize
 			for _, p := range ps {
 				domainProduct, err := r.entityToDomain(p)
 				if err != nil {
-					r.logger.Error("杞崲鍟嗗搧鏁版嵁澶辫触", logger.Error(err))
+					r.logger.Error("鏉烆剚宕查崯鍡楁惂閺佺増宓佹径杈Е", logger.Error(err))
 					continue
 				}
 				res = append(res, domainProduct)
 			}
 
-			// 缂撳瓨缁撴灉锛堢┖鏁扮粍涔熺紦瀛橈紝闃叉绌块€忥級
+			// 缂傛挸鐡ㄧ紒鎾寸亯閿涘牏鈹栭弫鎵矋娑旂喓绱︾€涙﹫绱濋梼鍙夘剾缁屽潡鈧骏绱?
 			_ = r.cache.SetWithTTL(ctx, key, res, r.listCacheTTL)
 			return res, nil
 		})
@@ -144,7 +144,7 @@ func (r *CacheAsideProductRepo) ListProducts(ctx context.Context, page, pageSize
 		return res, nil
 	}
 
-	// 闈炵儹鐐规暟鎹紝鐩存帴鏌ユ暟鎹簱
+	// 闂堢偟鍎归悙瑙勬殶閹诡噯绱濋惄瀛樺复閺屻儲鏆熼幑顔肩氨
 	ps, err := r.dao.ListProducts(ctx, page, pageSize, category)
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ func (r *CacheAsideProductRepo) ListProducts(ctx context.Context, page, pageSize
 	for _, p := range ps {
 		domainProduct, err := r.entityToDomain(p)
 		if err != nil {
-			r.logger.Error("杞崲鍟嗗搧鏁版嵁澶辫触", logger.Error(err))
+			r.logger.Error("鏉烆剚宕查崯鍡楁惂閺佺増宓佹径杈Е", logger.Error(err))
 			continue
 		}
 		products = append(products, domainProduct)
@@ -160,7 +160,7 @@ func (r *CacheAsideProductRepo) ListProducts(ctx context.Context, page, pageSize
 	return products, nil
 }
 
-// 鐢ㄦ埛娴忚鍒楄〃鍚庡ぇ姒傜巼鐐瑰嚮鍓嶅嚑涓晢鍝侊紝鎻愬墠缂撳瓨鍑忓皯寤惰繜
+// 閻劍鍩涘ù蹇氼潔閸掓銆冮崥搴°亣濮掑倻宸奸悙鐟板毊閸撳秴鍤戞稉顏勬櫌閸濅緤绱濋幓鎰缂傛挸鐡ㄩ崙蹇撶毌瀵ゆ儼绻?
 func (r *CacheAsideProductRepo) preloadProductDetails(ctx context.Context, products []domain.Product) {
 	preloadCount := 3
 	if len(products) < preloadCount {
@@ -174,7 +174,7 @@ func (r *CacheAsideProductRepo) preloadProductDetails(ctx context.Context, produ
 		basicKey := DetailBasicKey(product.ID)
 		priceInStockKey := PriceInStockKey(product.ID)
 
-		// 妫€鏌ュ熀鏈俊鎭紦瀛橈紝涓嶅瓨鍦ㄦ垨蹇繃鏈熷垯棰勭儹
+		// 濡偓閺屻儱鐔€閺堫兛淇婇幁顖滅处鐎涙﹫绱濇稉宥呯摠閸︺劍鍨ㄨ箛顐ョ箖閺堢喎鍨０鍕劰
 		needBasic := false
 		_, err := r.cache.Get(ctx, basicKey)
 		if err != nil {
@@ -202,7 +202,7 @@ func (r *CacheAsideProductRepo) preloadProductDetails(ctx context.Context, produ
 			})
 		}
 
-		// 妫€鏌ヤ环鏍?搴撳瓨鐘舵€佺紦瀛橈紝涓嶅瓨鍦ㄦ垨蹇繃鏈熷垯棰勭儹
+		// 濡偓閺屻儰鐜弽?鎼存挸鐡ㄩ悩鑸碘偓浣虹处鐎涙﹫绱濇稉宥呯摠閸︺劍鍨ㄨ箛顐ョ箖閺堢喎鍨０鍕劰
 		needPriceInStock := false
 		_, err = r.cache.Get(ctx, priceInStockKey)
 		if err != nil {
@@ -224,7 +224,7 @@ func (r *CacheAsideProductRepo) preloadProductDetails(ctx context.Context, produ
 
 	if len(items) > 0 {
 		if err := r.cache.BatchSetWithTTL(ctx, items); err != nil {
-			r.logger.Error("鎵归噺棰勭紦瀛樺晢鍝佸け璐?, logger.Error(err))
+			r.logger.Error("batch cache preload failed", logger.Error(err))
 		}
 	}
 }
@@ -233,11 +233,11 @@ func (r *CacheAsideProductRepo) GetProduct(ctx context.Context, id int64) (produ
 	basicKey := DetailBasicKey(id)
 	priceInStockKey := PriceInStockKey(id)
 
-	// 1. 灏濊瘯浠庣紦瀛樿幏鍙?
+	// 1. 鐏忔繆鐦禒搴ｇ处鐎涙骞忛崣?
 	basicData, basicErr := r.cache.Get(ctx, basicKey)
 	priceInStockData, priceInStockErr := r.cache.Get(ctx, priceInStockKey)
 
-	// 鎯呭喌1锛氶兘鍛戒腑锛岀洿鎺ヨ繑鍥?
+	// 閹懎鍠?閿涙岸鍏橀崨鎴掕厬閿涘瞼娲块幒銉ㄧ箲閸?
 	if basicErr == nil && priceInStockErr == nil {
 		if err := json.Unmarshal(basicData, &product); err == nil {
 			var ps PriceInStock
@@ -249,13 +249,13 @@ func (r *CacheAsideProductRepo) GetProduct(ctx context.Context, id int64) (produ
 		}
 	}
 
-	// 鎯呭喌2锛氬熀鏈俊鎭懡涓紝浠锋牸/搴撳瓨鐘舵€佹湭鍛戒腑锛堝垎绂诲瓨鍌ㄧ殑浼樺娍锛?
-	// 浼樺寲鐐癸細鍙煡 price, in_stock 涓や釜瀛楁锛屼笉鏌ュ畬鏁村晢鍝?
+	// 閹懎鍠?閿涙艾鐔€閺堫兛淇婇幁顖氭嚒娑擃叏绱濇禒閿嬬壐/鎼存挸鐡ㄩ悩鑸碘偓浣规弓閸涙垝鑵戦敍鍫濆瀻缁傝鐡ㄩ崒銊ф畱娴兼ê濞嶉敍?
+	// 娴兼ê瀵查悙鐧哥窗閸欘亝鐓?price, in_stock 娑撱倓閲滅€涙顔岄敍灞肩瑝閺屻儱鐣弫鏉戞櫌閸?
 	if basicErr == nil && priceInStockErr != nil {
 		if err := json.Unmarshal(basicData, &product); err == nil {
 			price, inStock, err := r.dao.FindPriceInStock(ctx, id)
 			if err != nil {
-				r.logger.Error("鏌ヨ浠锋牸/搴撳瓨鐘舵€佸け璐ワ紝浣跨敤闄嶇骇鏁版嵁",
+				r.logger.Error("閺屻儴顕楁禒閿嬬壐/鎼存挸鐡ㄩ悩鑸碘偓浣搞亼鐠愩儻绱濇担璺ㄦ暏闂勫秶楠囬弫鐗堝祦",
 					logger.Int64("product_id", id),
 					logger.Error(err))
 				product.Price = 0
@@ -270,10 +270,10 @@ func (r *CacheAsideProductRepo) GetProduct(ctx context.Context, id int64) (produ
 		}
 	}
 
-	// 鎯呭喌3锛氶兘鏈懡涓紝鎴栧熀鏈俊鎭病涓紝鍙腑浜嗕环鏍硷紝鐩存帴鏌ュ簱
-	// 闄嶇骇
+	// 閹懎鍠?閿涙岸鍏橀張顏勬嚒娑擃叏绱濋幋鏍х唨閺堫兛淇婇幁顖涚梾娑擃叏绱濋崣顏冭厬娴滃棔鐜弽纭风礉閻╁瓨甯撮弻銉ョ氨
+	// 闂勫秶楠?
 	if ctx.Value("downgrade") == "true" {
-		return domain.Product{}, errors.New("闄嶇骇绛栫暐锛氱紦瀛樻湭鍛戒腑锛岃烦杩囨暟鎹簱鏌ヨ")
+		return domain.Product{}, errors.New("闂勫秶楠囩粵鏍殣閿涙氨绱︾€涙ɑ婀崨鎴掕厬閿涘矁鐑︽潻鍥ㄦ殶閹诡喖绨遍弻銉嚄")
 	}
 	pe, err := r.dao.FindByID(ctx, id)
 	if err != nil {
@@ -291,8 +291,8 @@ func (r *CacheAsideProductRepo) GetProduct(ctx context.Context, id int64) (produ
 }
 
 type PriceInStock struct {
-	Price   int64 `json:"price"`    // 鍗曚綅锛氬垎
-	InStock bool  `json:"in_stock"` // 鏄惁鏈夎揣
+	Price   int64 `json:"price"`    // 閸楁洑缍呴敍姘瀻
+	InStock bool  `json:"in_stock"` // 閺勵垰鎯侀張澶庢彛
 }
 
 func (r *CacheAsideProductRepo) cacheProductBasicDetail(ctx context.Context, product domain.Product, ttl time.Duration) {
@@ -308,7 +308,7 @@ func (r *CacheAsideProductRepo) cacheProductBasicDetail(ctx context.Context, pro
 		MerchantName: product.MerchantName,
 	}
 	if err := r.cache.SetWithTTL(ctx, key, basicProduct, ttl); err != nil {
-		r.logger.Error("缂撳瓨鍟嗗搧鍩烘湰淇℃伅澶辫触", logger.Int64("product_id", product.ID), logger.Error(err))
+		r.logger.Error("cache product basic detail failed", logger.Int64("product_id", product.ID), logger.Error(err))
 	}
 }
 
@@ -316,7 +316,7 @@ func (r *CacheAsideProductRepo) cachePriceInStock(ctx context.Context, id int64,
 	key := PriceInStockKey(id)
 	ps := PriceInStock{Price: price, InStock: inStock}
 	if err := r.cache.SetWithTTL(ctx, key, ps, ttl); err != nil {
-		r.logger.Error("缂撳瓨浠锋牸/搴撳瓨鐘舵€佸け璐?, logger.Int64("product_id", id), logger.Error(err))
+		r.logger.Error("cache product price and stock failed", logger.Int64("product_id", id), logger.Error(err))
 	}
 }
 
@@ -336,31 +336,31 @@ func (r *CacheAsideProductRepo) CreateProduct(ctx context.Context, product domai
 	return id, nil
 }
 
-// 寤惰繜鍙屽垹锛岃В鍐冲苟鍙戣鍐欏鑷寸殑鑴忕紦瀛橀棶棰?
+// 瀵ゆ儼绻滈崣灞藉灩閿涘矁袙閸愬啿鑻熼崣鎴ｎ嚢閸愭瑥顕遍懛瀵告畱閼村繒绱︾€涙﹢妫舵０?
 func (r *CacheAsideProductRepo) UpdateProduct(ctx context.Context, product domain.Product) (productID int64, err error) {
 	entity, err := r.domainToEntity(product)
 	if err != nil {
 		return 0, err
 	}
 
-	// 1. 鏇存柊鏁版嵁搴?
+	// 1. 閺囧瓨鏌婇弫鐗堝祦鎼?
 	err = r.dao.Update(ctx, entity)
 	if err != nil {
 		return 0, err
 	}
 
-	// 2. 绔嬪嵆鍒犻櫎缂撳瓨锛堢涓€娆★級锛氳鍚庣画璇锋眰鏌ュ簱鑾峰彇鏂版暟鎹?
+	// 2. 缁斿宓嗛崚鐘绘珟缂傛挸鐡ㄩ敍鍫㈩儑娑撯偓濞嗏槄绱氶敍姘愁唨閸氬海鐢荤拠閿嬬湴閺屻儱绨遍懢宄板絿閺傜増鏆熼幑?
 	r.deleteProductCache(ctx, product.ID)
 
-	// 3. 寤惰繜鍚庡啀鍒犻櫎锛堢浜屾锛夛細娓呴櫎骞跺彂璇诲啓浜х敓鐨勮剰缂撳瓨
-	// 鍦烘櫙锛氳姹?鏌ョ紦瀛楳iss,鏌ユ暟鎹簱锛堟棫锛?璇锋眰2鏇存柊鏁版嵁搴擄紙鏂帮級锛岃姹?鍒犵紦瀛橈紝璇锋眰1鍐欐棫鏁版嵁鍒扮紦瀛?
-	// 绗簩娆″欢杩熷垹闄ゅ彲浠ユ竻绌鸿繖涓棫鏁版嵁
+	// 3. 瀵ゆ儼绻滈崥搴″晙閸掔娀娅庨敍鍫㈩儑娴滃本顐奸敍澶涚窗濞撳懘娅庨獮璺哄絺鐠囪鍟撴禍褏鏁撻惃鍕壈缂傛挸鐡?
+	// 閸︾儤娅欓敍姘愁嚞濮?閺屻儳绱︾€涙コiss,閺屻儲鏆熼幑顔肩氨閿涘牊妫敍?鐠囬攱鐪?閺囧瓨鏌婇弫鐗堝祦鎼存搫绱欓弬甯礆閿涘矁顕Ч?閸掔姷绱︾€涙﹫绱濈拠閿嬬湴1閸愭瑦妫弫鐗堝祦閸掓壆绱︾€?
+	// 缁楊兛绨╁▎鈥虫鏉╃喎鍨归梽銈呭讲娴犮儲绔荤粚楦跨箹娑擃亝妫弫鐗堝祦
 	go r.delayedDelete(product.ID)
 
 	return product.ID, nil
 }
 
-// 杩欓噷鐢ㄧ殑鏄蒋鍒犻櫎锛氬疄闄呬篃鏄洿鏂板瓧娈碉紝涓€鏍疯寤惰繜鍙屽垹
+// 鏉╂瑩鍣烽悽銊ф畱閺勵垵钂嬮崚鐘绘珟閿涙艾鐤勯梽鍛瘍閺勵垱娲块弬鏉跨摟濞堢绱濇稉鈧弽鐤洣瀵ゆ儼绻滈崣灞藉灩
 func (r *CacheAsideProductRepo) DeleteProduct(ctx context.Context, id, userID int64) (err error) {
 	err = r.dao.Delete(ctx, id, userID)
 	if err != nil {
@@ -374,19 +374,19 @@ func (r *CacheAsideProductRepo) DeleteProduct(ctx context.Context, id, userID in
 	return nil
 }
 
-// deleteProductCache 鍒犻櫎鍟嗗搧璇︽儏缂撳瓨锛屼笉鍒犻櫎鍒楄〃缂撳瓨
-// 鍘熷洜锛?
-//  1. 鍒楄〃缂撳瓨鍙樺寲棰戠箒锛堟柊寤?鏇存柊/鍒犻櫎鍟嗗搧閮戒細褰卞搷澶氫釜鍒楄〃椤碉級锛屽紑閿€澶?
-//  2. 鍒楄〃鐩稿鍟嗗搧璇︽儏瀹炴椂鎬ц姹傝緝浣庯紝閫氳繃鐭?TTL锛?鍒嗛挓锛夎嚜鐒惰繃鏈熷嵆鍙紝涓诲姩鍒犳敹鐩婂皬
+// deleteProductCache 閸掔娀娅庨崯鍡楁惂鐠囷附鍎忕紓鎾崇摠閿涘奔绗夐崚鐘绘珟閸掓銆冪紓鎾崇摠
+// 閸樼喎娲滈敍?
+//  1. 閸掓銆冪紓鎾崇摠閸欐ê瀵叉０鎴犵畳閿涘牊鏌婂?閺囧瓨鏌?閸掔娀娅庨崯鍡楁惂闁垝绱拌ぐ鍗炴惙婢舵矮閲滈崚妤勩€冩い纰夌礆閿涘苯绱戦柨鈧径?
+//  2. 閸掓銆冮惄绋款嚠閸熷棗鎼х拠锔藉剰鐎圭偞妞傞幀褑顩﹀Ч鍌濈窛娴ｅ函绱濋柅姘崇箖閻?TTL閿?閸掑棝鎸撻敍澶庡殰閻掓儼绻冮張鐔峰祮閸欘垽绱濇稉璇插З閸掔姵鏁归惄濠傜毈
 func (r *CacheAsideProductRepo) deleteProductCache(ctx context.Context, id int64) {
 	basicKey := DetailBasicKey(id)
 	priceInStockKey := PriceInStockKey(id)
 
 	if err := r.cache.Delete(ctx, basicKey); err != nil {
-		r.logger.Error("鍒犻櫎鍩烘湰淇℃伅缂撳瓨澶辫触", logger.Int64("product_id", id), logger.Error(err))
+		r.logger.Error("delete basic cache failed", logger.Int64("product_id", id), logger.Error(err))
 	}
 	if err := r.cache.Delete(ctx, priceInStockKey); err != nil {
-		r.logger.Error("鍒犻櫎浠锋牸/搴撳瓨鐘舵€佺紦瀛樺け璐?, logger.Int64("product_id", id), logger.Error(err))
+		r.logger.Error("delete price and stock cache failed", logger.Int64("product_id", id), logger.Error(err))
 	}
 }
 
@@ -397,7 +397,7 @@ func (r *CacheAsideProductRepo) delayedDelete(id int64) {
 	defer cancel()
 
 	r.deleteProductCache(ctx, id)
-	r.logger.Info("寤惰繜鍙屽垹瀹屾垚", logger.Int64("product_id", id))
+	r.logger.Info("delayed cache delete completed", logger.Int64("product_id", id))
 }
 
 func (r *CacheAsideProductRepo) domainToEntity(d domain.Product) (dao.Product, error) {
@@ -476,5 +476,3 @@ func (r *CacheAsideProductRepo) entityToDomain(e dao.Product) (domain.Product, e
 
 	return domainProduct, nil
 }
-
-

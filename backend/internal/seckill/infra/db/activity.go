@@ -26,27 +26,10 @@ type SeckillRequest struct {
 	RequestNo  string `gorm:"type:varchar(64);uniqueIndex"`
 	ActivityID int64  `gorm:"index:idx_seckill_request_activity_user"`
 	UserID     int64  `gorm:"index:idx_seckill_request_activity_user"`
-	Quantity   int32
 	Status     string `gorm:"type:varchar(32);index"`
-	OrderID    int64
 	FailReason string `gorm:"type:varchar(64)"`
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
 
 func (SeckillRequest) TableName() string { return "seckill_request" }
-
-type SeckillOperation struct {
-	ID          int64  `gorm:"primaryKey;autoIncrement"`
-	OperationID string `gorm:"type:varchar(128);uniqueIndex"`
-	ActivityID  int64
-	RequestNo   string `gorm:"type:varchar(64);index"`
-	OrderID     int64
-	Delta       int32
-	Type        string `gorm:"type:varchar(32)"`
-	CreatedAt   time.Time
-}
-
-func (SeckillOperation) TableName() string { return "seckill_operation" }
-
-

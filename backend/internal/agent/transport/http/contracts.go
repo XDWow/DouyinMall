@@ -153,9 +153,24 @@ func toChatResponse(out *agentusecase.ChatOutput) *chatResponse {
 		})
 	}
 
-	execs := make([]toolExecution, 0, len(out.UsedToolNames))
-	for _, name := range out.UsedToolNames {
-		execs = append(execs, toolExecution{Name: name, Success: true})
+	execs := make([]toolExecution, 0, len(out.ToolExecutions))
+	for _, item := range out.ToolExecutions {
+		execs = append(execs, toolExecution{
+			Name:       item.Name,
+			Arguments:  item.Arguments,
+			Reason:     item.Reason,
+			Success:    item.Success,
+			Result:     item.Result,
+			Error:      item.Error,
+			LatencyMs:  item.LatencyMs,
+			OccurredAt: item.OccurredAt,
+			Metadata:   item.Metadata,
+		})
+	}
+	if len(execs) == 0 {
+		for _, name := range out.UsedToolNames {
+			execs = append(execs, toolExecution{Name: name, Success: true})
+		}
 	}
 
 	steps := make([]traceStep, 0, len(out.Trace.Steps))

@@ -16,18 +16,19 @@ func main() {
 
 	app := InitApp()
 
-	grpcPort := viper.GetInt("grpc.server.port")
-	log.Printf("订单服务启动，gRPC 端口 %d", grpcPort)
+	log.Printf("order service starting, gRPC port=%d http port=%d",
+		viper.GetInt("grpc.server.port"),
+		viper.GetInt("http.server.port"))
 
 	app.Cron.Start()
-	log.Printf("定时任务已启动")
+	log.Printf("order cron started")
 
 	for _, consumer := range app.Consumers {
 		if err := consumer.Start(); err != nil {
 			log.Fatalf("consumer start failed: %v", err)
 		}
 	}
-	log.Printf("异步消费者已启动")
+	log.Printf("order consumers started")
 
 	var mcpCfg ordermcp.Config
 	mcpOK := viper.UnmarshalKey("mcp", &mcpCfg) == nil && strings.TrimSpace(mcpCfg.Server.Addr) != ""
@@ -37,10 +38,15 @@ func main() {
 		grpcErr <- app.Server.Run()
 	}()
 
+	httpErr := make(chan error, 1)
+	go func() {
+		httpErr <- app.HTTPServer.Start()
+	}()
+
 	if mcpOK {
 		mcpHandler, err := app.OrderMCPHandler(mcpCfg)
 		if err != nil {
-			log.Fatalf("初始化 MCP 失败: %v", err)
+			log.Fatalf("init MCP failed: %v", err)
 		}
 		mux := http.NewServeMux()
 		mux.Handle("/mcp", mcpHandler)
@@ -49,26 +55,33 @@ func main() {
 			_, _ = w.Write([]byte("ok"))
 		})
 		go func() {
-			log.Printf("订单 MCP 已启动，监听 %s（路径 /mcp）", mcpCfg.Server.Addr)
+			log.Printf("order MCP listening on %s", mcpCfg.Server.Addr)
 			if err := http.ListenAndServe(mcpCfg.Server.Addr, mux); err != nil {
-				log.Fatalf("MCP HTTP 服务异常退出: %v", err)
+				log.Fatalf("MCP HTTP server exited: %v", err)
 			}
 		}()
 	}
 
-	if err := <-grpcErr; err != nil {
-		log.Fatalf("gRPC 服务退出: %v", err)
+	select {
+	case err := <-grpcErr:
+		if err != nil {
+			log.Fatalf("gRPC server exited: %v", err)
+		}
+	case err := <-httpErr:
+		if err != nil {
+			log.Fatalf("HTTP server exited: %v", err)
+		}
 	}
 }
 
 func initViperWatch() {
-	cfile := pflag.String("config",
-		"internal/order/config/dev.yaml", "配置文件路径")
+	cfile := pflag.String("config", "internal/order/config/dev.yaml", "config file path")
 	pflag.Parse()
+
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("读取配置文件失败: %w", err))
+		panic(fmt.Errorf("read config failed: %w", err))
 	}
 
 	viper.AutomaticEnv()
@@ -76,7 +89,9 @@ func initViperWatch() {
 	_ = viper.BindEnv("db.password", "DB_PASSWORD")
 	_ = viper.BindEnv("redis.addr", "REDIS_ADDR")
 	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
-	_ = viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
+	_ = viper.BindEnv("rocketmq.endpoint", "ROCKETMQ_ENDPOINT")
+	_ = viper.BindEnv("rocketmq.access_key", "ROCKETMQ_ACCESS_KEY")
+	_ = viper.BindEnv("rocketmq.secret_key", "ROCKETMQ_SECRET_KEY")
 	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")
 	_ = viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")

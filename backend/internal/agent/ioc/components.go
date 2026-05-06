@@ -56,7 +56,7 @@ func InitComponents(
 		}
 	}
 
-	registry, err := agenttool.NewMCPRegistry(ctx, cfg.MCP.Servers, skills)
+	registry, err := agenttool.NewMCPRegistry(ctx, cfg.MCP.Servers)
 	if err != nil {
 		return nil, fmt.Errorf("init tool registry failed: %w", err)
 	}

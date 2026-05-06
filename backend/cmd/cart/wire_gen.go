@@ -14,10 +14,10 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/cart/repository/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/repository/dao"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/service"
+	transporthttp "github.com/XDWow/DouyinMall/backend/internal/cart/transport/http"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/cloudwego/kitex/server"
 )
-
-// Injectors from wire.go:
 
 func InitApp() *App {
 	loggerV1 := ioc.InitLogger()
@@ -29,17 +29,15 @@ func InitApp() *App {
 	cartService := service.NewCartService(cartRepository)
 	cartHandler := handler.NewCartHandler(cartService)
 	grpcServer := ioc.InitGRPCServer(cartHandler)
-	kafkaClient := ioc.InitKafkaClient()
-	orderConsumer := mq.NewOrderConsumer(kafkaClient, cartService, loggerV1)
-	app := newApp(grpcServer, orderConsumer)
+	httpHandler := transporthttp.NewHandler(cartService)
+	httpServer := ioc.InitHTTPServer(httpHandler)
+	simpleConsumer := ioc.InitRocketMQOrderStatusConsumer()
+	consumerOptions := ioc.InitRocketMQConsumerOptions()
+	orderConsumer := mq.NewOrderConsumer(simpleConsumer, cartService, loggerV1, consumerOptions)
+	app := newApp(grpcServer, httpServer, orderConsumer)
 	return app
 }
 
-// wire.go:
-
-// newApp 缁勮 App
-func newApp(svr server.Server, consumer *mq.OrderConsumer) *App {
-	return &App{Server: svr, OrderConsumer: consumer}
+func newApp(svr server.Server, httpServer *ginx.Server, consumer *mq.OrderConsumer) *App {
+	return &App{Server: svr, HTTPServer: httpServer, OrderConsumer: consumer}
 }
-
-

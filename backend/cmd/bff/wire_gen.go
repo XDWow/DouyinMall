@@ -17,17 +17,11 @@ func InitApp() *App {
 	streamClient := ioc.InitAgentStreamClient()
 	agentHandler := handler.NewAgentHandler(client, streamClient)
 	userserviceClient := ioc.InitUserClient()
-	checkoutserviceClient := ioc.InitCheckoutClient()
-	seckillserviceClient := ioc.InitSeckillClient()
-	orderserviceClient := ioc.InitOrderClient()
-	productserviceClient := ioc.InitProductClient()
-	inventoryserviceClient := ioc.InitInventoryClient()
 	jwtManager := ioc.InitJWTManager()
 	authHandler := handler.NewAuthHandler(userserviceClient, jwtManager)
-	tradeHandler := handler.NewTradeHandler(checkoutserviceClient, seckillserviceClient, orderserviceClient, productserviceClient, inventoryserviceClient)
 	cmdable := ioc.InitRedis()
 	limiter := ioc.InitRateLimiter(cmdable)
-	server := ioc.InitGinServer(agentHandler, authHandler, tradeHandler, jwtManager, limiter)
+	server := ioc.InitGinServer(agentHandler, authHandler, limiter)
 	app := newApp(server)
 	return app
 }

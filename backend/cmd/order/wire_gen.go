@@ -15,7 +15,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/order/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/order/job"
 	"github.com/XDWow/DouyinMall/backend/internal/order/transport/grpc"
+	"github.com/XDWow/DouyinMall/backend/internal/order/transport/http"
 	"github.com/XDWow/DouyinMall/backend/internal/order/usecase"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/cloudwego/kitex/server"
 	"github.com/robfig/cron/v3"
 )
@@ -33,20 +35,25 @@ func InitApp() *App {
 	getOrderUseCase := usecase.NewGetOrderUseCase(orderRepository, loggerV1)
 	listUserOrderUseCase := usecase.NewListUserOrderUseCase(orderRepository, loggerV1)
 	outboxRepository := repository.NewOutboxRepository(gormDB)
-	client := ioc.InitKafkaClient()
-	syncProducer := ioc.InitKafkaSyncProducer(client)
-	saramaProducer := mq.NewSaramaProducer(syncProducer)
+	producer := ioc.InitRocketMQProducerClient()
+	messageProducer := ioc.InitOrderStatusProducer(producer)
+	orderStatusProducer := ioc.InitOrderMQProducer(messageProducer)
 	txManager := db.NewGormTxManager(gormDB)
-	changeOrderStatusUseCase := usecase.NewChangeOrderStatusUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1)
+	changeOrderStatusUseCase := usecase.NewChangeOrderStatusUseCase(orderRepository, outboxRepository, orderStatusProducer, txManager, loggerV1)
 	orderHandler := grpc.NewOrderHandler(createOrderUseCase, getOrderUseCase, listUserOrderUseCase, changeOrderStatusUseCase)
 	server := ioc.InitGRPCServer(orderHandler)
-	paymentserviceClient := ioc.InitPaymentClient()
-	batchCancelOrderUseCase := usecase.NewBatchCancelOrderUseCase(orderRepository, outboxRepository, saramaProducer, txManager, loggerV1)
-	dispatchOrderTimeoutJob := job.NewDispatchOrderTimeoutJob(delayQueue, paymentserviceClient, orderRepository, batchCancelOrderUseCase, changeOrderStatusUseCase, loggerV1)
-	checkExpiredJob := job.NewCheckExpiredJob(orderRepository, paymentserviceClient, batchCancelOrderUseCase, loggerV1)
-	outboxWorkerJob := job.NewOutboxWorkerJob(outboxRepository, saramaProducer, loggerV1)
+	handler := http.NewHandler(getOrderUseCase, listUserOrderUseCase)
+	ginxServer := ioc.InitHTTPServer(handler)
+	client := ioc.InitPaymentClient()
+	batchCancelOrderUseCase := usecase.NewBatchCancelOrderUseCase(orderRepository, outboxRepository, orderStatusProducer, txManager, loggerV1)
+	dispatchOrderTimeoutJob := job.NewDispatchOrderTimeoutJob(delayQueue, client, orderRepository, batchCancelOrderUseCase, changeOrderStatusUseCase, loggerV1)
+	checkExpiredJob := job.NewCheckExpiredJob(orderRepository, client, batchCancelOrderUseCase, loggerV1)
+	outboxWorkerJob := job.NewOutboxWorkerJob(outboxRepository, orderStatusProducer, loggerV1)
 	cron := ioc.InitJobs(dispatchOrderTimeoutJob, checkExpiredJob, outboxWorkerJob, loggerV1)
-	app := newApp(server, cron, getOrderUseCase, listUserOrderUseCase)
+	simpleConsumer := ioc.InitPaymentStatusConsumerClient()
+	consumerOptions := ioc.InitRocketMQConsumerOptions()
+	paymentStatusConsumer := mq.NewPaymentStatusConsumer(simpleConsumer, changeOrderStatusUseCase, loggerV1, consumerOptions)
+	app := newApp(server, ginxServer, cron, paymentStatusConsumer, getOrderUseCase, listUserOrderUseCase)
 	return app
 }
 
@@ -57,23 +64,27 @@ type ConsumerComponent interface {
 }
 
 type App struct {
-	Server    server.Server
-	Cron      *cron.Cron
-	Consumers []ConsumerComponent
+	Server     server.Server
+	HTTPServer *ginx.Server
+	Cron       *cron.Cron
+	Consumers  []ConsumerComponent
 
 	getOrderUC      *usecase.GetOrderUseCase
 	listUserOrderUC *usecase.ListUserOrderUseCase
 }
 
 func newApp(
-	srv server.Server, cron2 *cron.Cron,
+	srv server.Server,
+	httpServer *ginx.Server, cron2 *cron.Cron,
+	paymentStatusConsumer *mq.PaymentStatusConsumer,
 	getOrderUC *usecase.GetOrderUseCase,
 	listUserOrderUC *usecase.ListUserOrderUseCase,
 ) *App {
 	return &App{
 		Server:          srv,
+		HTTPServer:      httpServer,
 		Cron:            cron2,
-		Consumers:       nil,
+		Consumers:       []ConsumerComponent{paymentStatusConsumer},
 		getOrderUC:      getOrderUC,
 		listUserOrderUC: listUserOrderUC,
 	}

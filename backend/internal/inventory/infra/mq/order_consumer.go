@@ -2,27 +2,23 @@ package mq
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/IBM/sarama"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/inventory/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/pkg/saramax"
+	"github.com/XDWow/DouyinMall/backend/pkg/rocketmqx"
 	orderv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1"
-	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1/orderservice"
+	rmq_client "github.com/apache/rocketmq-clients/golang"
 )
 
 const TopicOrderStatusUpdate = "order_status_update"
 
 const (
-	TopicDeadLetterStock = "inventory_dead_letter_stock"
-	TopicDeadLetterOrder = "inventory_dead_letter_order"
-	maxRetries           = 3
+	maxRetries = 3
 )
 
 type OrderStatusUpdateEvent struct {
@@ -44,60 +40,41 @@ const (
 )
 
 type OrderConsumer struct {
-	client         sarama.Client
-	producer       sarama.SyncProducer
-	refundStockUC  *usecase.RefundStockUseCase
-	releaseStockUC *usecase.ReleaseStockUseCase
-	orderCli       orderservice.Client
-	logger         logger.LoggerV1
-	consumerGrp    sarama.ConsumerGroup
+	refundStockUC *usecase.RefundStockUseCase
+	logger        logger.LoggerV1
+	consumer      *rocketmqx.Consumer
 }
 
 func NewOrderConsumer(
-	client sarama.Client,
-	producer sarama.SyncProducer,
-	releaseUC *usecase.ReleaseStockUseCase,
+	client rmq_client.SimpleConsumer,
 	refundUC *usecase.RefundStockUseCase,
-	orderCli orderservice.Client,
 	l logger.LoggerV1,
+	options rocketmqx.ConsumerOptions,
 ) *OrderConsumer {
-	return &OrderConsumer{
-		client:         client,
-		producer:       producer,
-		releaseStockUC: releaseUC,
-		refundStockUC:  refundUC,
-		orderCli:       orderCli,
-		logger:         l,
+	c := &OrderConsumer{
+		refundStockUC: refundUC,
+		logger:        l,
 	}
+	if client != nil {
+		c.consumer = rocketmqx.NewConsumer(client, rocketmqx.NewHandler[OrderStatusUpdateEvent](l, c.Consume), l, options)
+	}
+	return c
 }
 
 func (c *OrderConsumer) Start() error {
-	cg, err := sarama.NewConsumerGroupFromClient("inventory-consumer", c.client)
-	if err != nil {
+	if c.consumer == nil {
+		return nil
+	}
+	if err := c.consumer.Start(); err != nil {
 		return err
 	}
-	c.consumerGrp = cg
-
-	go func() {
-		for {
-			err := cg.Consume(
-				context.Background(),
-				[]string{TopicOrderStatusUpdate},
-				saramax.NewHandler[OrderStatusUpdateEvent](c.logger, c.Consume),
-			)
-			if err != nil {
-				c.logger.Error("order consumer exited", logger.Error(err))
-			}
-		}
-	}()
-
-	c.logger.Info("OrderConsumer started",
+	c.logger.Info("inventory order consumer started",
 		logger.String("topic", TopicOrderStatusUpdate),
 		logger.String("consumerGroup", "inventory-consumer"))
 	return nil
 }
 
-func (c *OrderConsumer) Consume(_ *sarama.ConsumerMessage, evt OrderStatusUpdateEvent) error {
+func (c *OrderConsumer) Consume(_ *rmq_client.MessageView, evt OrderStatusUpdateEvent) error {
 	kind := normalizeOrderKind(evt.OrderKind)
 	switch kind {
 	case "SECKILL":
@@ -196,84 +173,12 @@ func (c *OrderConsumer) executeWithRetry(ctx context.Context, opName string, evt
 	}
 
 	c.logger.Error(opName+" retries exhausted", logger.Int64("orderID", evt.OrderID), logger.Error(lastErr))
-	c.sendToStockDeadLetter(evt, opName, lastErr)
 	return lastErr
 }
 
-func (c *OrderConsumer) asyncUpdateOrderStatus(ctx context.Context, evt OrderStatusUpdateEvent, action orderv1.ChangeOrderAction) {
-	go func() {
-		var lastErr error
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			if attempt > 0 {
-				time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
-			}
-
-			_, lastErr = c.orderCli.ChangeOrderStatus(ctx, &orderv1.ChangeOrderStatusReq{
-				OrderId: evt.OrderID,
-				Action:  action,
-			})
-			if lastErr == nil {
-				return
-			}
-
-			c.logger.Warn("retry order status update",
-				logger.Int64("orderID", evt.OrderID),
-				logger.Int("attempt", attempt+1),
-				logger.Error(lastErr))
-		}
-
-		c.logger.Error("order status update retries exhausted", logger.Int64("orderID", evt.OrderID), logger.Error(lastErr))
-		c.sendToOrderDeadLetter(evt, action, lastErr)
-	}()
-}
-
-func (c *OrderConsumer) sendToStockDeadLetter(evt OrderStatusUpdateEvent, opName string, lastErr error) {
-	if c.producer == nil || lastErr == nil {
-		return
-	}
-
-	msg := map[string]interface{}{
-		"event":     evt,
-		"operation": opName,
-		"error":     lastErr.Error(),
-		"time":      time.Now(),
-	}
-	msgBytes, _ := json.Marshal(msg)
-	_, _, err := c.producer.SendMessage(&sarama.ProducerMessage{
-		Topic: TopicDeadLetterStock,
-		Key:   sarama.StringEncoder(fmt.Sprintf("%d", evt.OrderID)),
-		Value: sarama.ByteEncoder(msgBytes),
-	})
-	if err != nil {
-		c.logger.Error("send stock dead letter failed", logger.Int64("orderID", evt.OrderID), logger.Error(err))
-	}
-}
-
-func (c *OrderConsumer) sendToOrderDeadLetter(evt OrderStatusUpdateEvent, action orderv1.ChangeOrderAction, lastErr error) {
-	if c.producer == nil || lastErr == nil {
-		return
-	}
-
-	msg := map[string]interface{}{
-		"event":  evt,
-		"action": action,
-		"error":  lastErr.Error(),
-		"time":   time.Now(),
-	}
-	msgBytes, _ := json.Marshal(msg)
-	_, _, err := c.producer.SendMessage(&sarama.ProducerMessage{
-		Topic: TopicDeadLetterOrder,
-		Key:   sarama.StringEncoder(fmt.Sprintf("%d", evt.OrderID)),
-		Value: sarama.ByteEncoder(msgBytes),
-	})
-	if err != nil {
-		c.logger.Error("send order dead letter failed", logger.Int64("orderID", evt.OrderID), logger.Error(err))
-	}
-}
-
 func (c *OrderConsumer) Stop() error {
-	if c.consumerGrp != nil {
-		return c.consumerGrp.Close()
+	if c.consumer == nil {
+		return nil
 	}
-	return nil
+	return c.consumer.Stop()
 }

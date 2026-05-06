@@ -31,8 +31,12 @@ func (h *AgentHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 type chatReq struct {
-	SessionID string `json:"session_id" binding:"required"`
-	Message   string `json:"message" binding:"required"`
+	SessionID      string `json:"session_id" binding:"required"`
+	Message        string `json:"message" binding:"required"`
+	ResumeToken    string `json:"resume_token,omitempty"`
+	CheckpointID   string `json:"checkpoint_id,omitempty"`
+	InterruptID    string `json:"interrupt_id,omitempty"`
+	ResumeDataJSON string `json:"resume_data_json,omitempty"`
 }
 
 func (h *AgentHandler) SendMessage(c *gin.Context) {
@@ -43,9 +47,12 @@ func (h *AgentHandler) SendMessage(c *gin.Context) {
 	}
 
 	resp, err := h.agentClient.SendMessage(c.Request.Context(), &agentv1.ChatRequest{
-		SessionId: req.SessionID,
-		UserId:    getUserID(c),
-		Message:   req.Message,
+		SessionId:      req.SessionID,
+		UserId:         getUserID(c),
+		Message:        req.Message,
+		ResumeToken:    firstNonEmpty(req.ResumeToken, req.CheckpointID),
+		InterruptId:    req.InterruptID,
+		ResumeDataJson: req.ResumeDataJSON,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "发送消息失败"})
@@ -63,9 +70,12 @@ func (h *AgentHandler) SendMessageStream(c *gin.Context) {
 	}
 
 	stream, err := h.streamClient.SendMessageStream(c.Request.Context(), &agentv1.ChatRequest{
-		SessionId: req.SessionID,
-		UserId:    getUserID(c),
-		Message:   req.Message,
+		SessionId:      req.SessionID,
+		UserId:         getUserID(c),
+		Message:        req.Message,
+		ResumeToken:    firstNonEmpty(req.ResumeToken, req.CheckpointID),
+		InterruptId:    req.InterruptID,
+		ResumeDataJson: req.ResumeDataJSON,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ginx.Result{Code: 5, Msg: "建立流式连接失败"})
@@ -230,14 +240,7 @@ func (h *AgentHandler) ClearSession(c *gin.Context) {
 }
 
 func getUserID(c *gin.Context) int64 {
-	claims, exists := c.Get("claims")
-	if !exists {
-		return 0
-	}
-	if uc, ok := claims.(*ginx.UserClaims); ok {
-		return uc.Id
-	}
-	return 0
+	return ginx.GatewayUserID(c)
 }
 
 func parseInt32Query(c *gin.Context, key string) (int32, error) {
@@ -256,6 +259,15 @@ func writeSSE(w http.ResponseWriter, flusher http.Flusher, event string, data an
 	flusher.Flush()
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func toChatResp(resp *agentv1.ChatResponse) gin.H {
 	if resp == nil {
 		return gin.H{}
@@ -265,6 +277,16 @@ func toChatResp(resp *agentv1.ChatResponse) gin.H {
 		"reply":               resp.GetReply(),
 		"intent":              resp.GetIntent().String(),
 		"suggested_questions": resp.GetSuggestedQuestions(),
+		"session_id":          resp.GetSessionId(),
+		"trace_id":            resp.GetTraceId(),
+		"checkpoint_id":       resp.GetCheckpointId(),
+	}
+	if resp.GetInterruptId() != "" {
+		result["interrupt_id"] = resp.GetInterruptId()
+		result["interrupted"] = true
+	}
+	if nodes := resp.GetRerunNodes(); len(nodes) > 0 {
+		result["rerun_nodes"] = nodes
 	}
 
 	if refs := resp.GetKnowledge(); len(refs) > 0 {
@@ -279,6 +301,21 @@ func toChatResp(resp *agentv1.ChatResponse) gin.H {
 			})
 		}
 		result["knowledge"] = knowledge
+	}
+	if execs := resp.GetToolExecs(); len(execs) > 0 {
+		toolExecs := make([]gin.H, 0, len(execs))
+		for _, exec := range execs {
+			toolExecs = append(toolExecs, gin.H{
+				"tool_name":  exec.GetToolName(),
+				"params":     exec.GetParams(),
+				"reasoning":  exec.GetReasoning(),
+				"success":    exec.GetSuccess(),
+				"result":     exec.GetResult(),
+				"error":      exec.GetError(),
+				"latency_ms": exec.GetLatencyMs(),
+			})
+		}
+		result["tool_execs"] = toolExecs
 	}
 
 	if h := resp.GetHandoff(); h != nil {

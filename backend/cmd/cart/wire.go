@@ -10,48 +10,33 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/cart/repository/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/repository/dao"
 	"github.com/XDWow/DouyinMall/backend/internal/cart/service"
+	transporthttp "github.com/XDWow/DouyinMall/backend/internal/cart/transport/http"
+	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
 	"github.com/cloudwego/kitex/server"
 	"github.com/google/wire"
 )
 
 func InitApp() *App {
 	wire.Build(
-		// 鍩虹璁炬柦
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitRedis,
-		ioc.InitKafkaClient,
-
-		// DAO
+		ioc.InitRocketMQOrderStatusConsumer,
+		ioc.InitRocketMQConsumerOptions,
 		dao.NewGORMCartDAO,
-
-		// Cache
 		cache.NewRedisCache,
-
-		// Repository
 		repository.NewCachedCartRepository,
-
-		// Service
 		service.NewCartService,
-
-		// handler
 		handler.NewCartHandler,
-
-		// MQ Consumer
+		transporthttp.NewHandler,
 		mq.NewOrderConsumer,
-
-		// gRPC Server
 		ioc.InitGRPCServer,
-
-		// App
+		ioc.InitHTTPServer,
 		newApp,
 	)
 	return nil
 }
 
-// newApp 缁勮 App
-func newApp(svr server.Server, consumer *mq.OrderConsumer) *App {
-	return &App{Server: svr, OrderConsumer: consumer}
+func newApp(svr server.Server, httpServer *ginx.Server, consumer *mq.OrderConsumer) *App {
+	return &App{Server: svr, HTTPServer: httpServer, OrderConsumer: consumer}
 }
-
-

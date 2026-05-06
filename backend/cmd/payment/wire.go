@@ -3,6 +3,7 @@
 package main
 
 import (
+	"github.com/XDWow/DouyinMall/backend/internal/payment/infra/db"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/job"
@@ -26,13 +27,17 @@ func InitApp() *App {
 	wire.Build(
 		ioc.InitLogger,
 		ioc.InitDB,
-		ioc.InitOrderClient,
+		ioc.InitRocketMQProducerClient,
+		ioc.InitPaymentStatusProducer,
+		ioc.InitPaymentMQProducer,
 		ioc.InitNativePayService,
 		ioc.InitPaymentProvider,
 		ioc.InitAlipayClient,
 		ioc.InitWechatNotifyHandler,
 
 		repository.NewPaymentRepository,
+		repository.NewPaymentOutboxRepository,
+		db.NewGormTxManager,
 
 		usecase.NewPayCallbackUC,
 		ioc.InitNativePrePaymentUC,
@@ -43,6 +48,7 @@ func InitApp() *App {
 		grpc.NewPaymentHandler,
 
 		job.NewSyncPaymentOrderJob,
+		job.NewPaymentOutboxWorkerJob,
 		ioc.InitJobs,
 
 		ioc.InitGRPCServer,

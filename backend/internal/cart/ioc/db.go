@@ -24,6 +24,7 @@ func InitDB() *gorm.DB {
 		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲璇诲彇閰嶇疆澶辫触: %w", err))
 	}
 
+	c.Password = viper.GetString("db.password")
 	dsn, err := mysqlconfig.BuildDSN(mysqlconfig.Config{
 		Host:     c.Host,
 		Port:     c.Port,

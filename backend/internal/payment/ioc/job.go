@@ -8,6 +8,7 @@ import (
 
 func InitJobs(
 	syncPaymentOrderJob *job.SyncPaymentOrderJob,
+	paymentOutboxWorkerJob *job.PaymentOutboxWorkerJob,
 	l logger.LoggerV1,
 ) *cron.Cron {
 	c := cron.New(cron.WithSeconds())
@@ -15,6 +16,15 @@ func InitJobs(
 	_, err := c.AddFunc("0 */2 * * * ?", func() {
 		if err := syncPaymentOrderJob.Run(); err != nil {
 			l.Error("sync payment order job failed", logger.Error(err))
+		}
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = c.AddFunc("*/10 * * * * ?", func() {
+		if err := paymentOutboxWorkerJob.Run(); err != nil {
+			l.Error("payment outbox worker job failed", logger.Error(err))
 		}
 	})
 	if err != nil {

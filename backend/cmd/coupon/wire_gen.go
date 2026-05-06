@@ -32,8 +32,9 @@ func InitApp() *App {
 	issueCouponUseCase := usecase.NewIssueCouponUseCase(couponTemplateRepository, couponRepository, couponOperationRepository)
 	couponHandler := grpc.NewCouponHandler(listUserCouponsUseCase, evaluateOrderCouponsUseCase, reserveCouponUseCase, commitCouponUseCase, releaseCouponUseCase, refundCouponUseCase, issueCouponUseCase)
 	server := ioc.InitGRPCServer(couponHandler)
-	client := ioc.InitKafkaClient()
-	orderConsumer := mq.NewOrderConsumer(client, commitCouponUseCase, releaseCouponUseCase, refundCouponUseCase, loggerV1)
+	simpleConsumer := ioc.InitRocketMQOrderStatusConsumer()
+	consumerOptions := ioc.InitRocketMQConsumerOptions()
+	orderConsumer := mq.NewOrderConsumer(simpleConsumer, commitCouponUseCase, releaseCouponUseCase, refundCouponUseCase, loggerV1, consumerOptions)
 	app := newApp(server, orderConsumer)
 	return app
 }
@@ -54,5 +55,3 @@ func newApp(
 		OrderConsumer: orderConsumer,
 	}
 }
-
-

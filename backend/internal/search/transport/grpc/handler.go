@@ -10,10 +10,10 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/search/usecase"
 	productv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1"
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1/productservice"
-	searchv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/search/v1"
+	searchv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/search/v1"
 )
 
-// SearchHandler 鎼滅储鏈嶅姟 gRPC handler
+// SearchHandler 閹兼粎鍌ㄩ張宥呭 gRPC handler
 type SearchHandler struct {
 	searchProductsUC  *usecase.SearchProductsUseCase
 	searchMerchantsUC *usecase.SearchMerchantsUseCase
@@ -141,13 +141,13 @@ func (h *SearchHandler) AISearchProducts(ctx context.Context, req *searchv1.AISe
 }
 
 func (h *SearchHandler) InitES(ctx context.Context, req *searchv1.InitESReq) (*searchv1.InitESResp, error) {
-	resp := &searchv1.InitESResp{Success: true, Message: "鎿嶄綔鎴愬姛", IndicesCreated: true}
+	resp := &searchv1.InitESResp{Success: true, Message: "init es completed", IndicesCreated: true}
 
 	if req.GetRecreateIndices() {
 		if err := es.InitIndices(h.esClient); err != nil {
-			return &searchv1.InitESResp{Success: false, Message: fmt.Sprintf("閲嶅缓绱㈠紩澶辫触: %v", err)}, nil
+			return &searchv1.InitESResp{Success: false, Message: fmt.Sprintf("init indices failed: %v", err)}, nil
 		}
-		resp.Message = "绱㈠紩宸查噸寤?
+		resp.Message = "indices recreated"
 	}
 
 	if req.GetSyncProducts() {
@@ -155,25 +155,25 @@ func (h *SearchHandler) InitES(ctx context.Context, req *searchv1.InitESReq) (*s
 		if batchSize <= 0 {
 			batchSize = 1000
 		}
-		log.Printf("寮€濮嬪悓姝ュ晢鍝佹暟鎹紝鎵规澶у皬: %d", batchSize)
+		log.Printf("sync products to es with batch size: %d", batchSize)
 		s, f, errs := h.syncProductsFromRPC(ctx, batchSize)
 		resp.ProductsSynced = s
 		resp.ProductsFailed = f
 		resp.Errors = append(resp.Errors, errs...)
 		if f > 0 {
 			resp.Success = false
-			resp.Message = fmt.Sprintf("閮ㄥ垎鍚屾澶辫触锛堟垚鍔? %d, 澶辫触: %d锛?, s, f)
+			resp.Message = fmt.Sprintf("sync products finished with failures: success %d, failed %d", s, f)
 		}
 	}
 
 	if req.GetSyncMerchants() {
-		resp.Errors = append(resp.Errors, "鍟嗗鏁版嵁鍚屾鏆傛湭瀹炵幇")
+		resp.Errors = append(resp.Errors, "merchant sync is not implemented yet")
 	}
 
 	return resp, nil
 }
 
-// syncProductsFromRPC 浠?Product Service 鎷夊彇鍏ㄩ噺鏁版嵁鍚屾鍒?ES
+// syncProductsFromRPC 娴?Product Service 閹峰褰囬崗銊╁櫤閺佺増宓侀崥灞绢劄閸?ES
 func (h *SearchHandler) syncProductsFromRPC(ctx context.Context, batchSize int64) (success, failed int64, errors []string) {
 	page := int64(1)
 	for {
@@ -181,7 +181,7 @@ func (h *SearchHandler) syncProductsFromRPC(ctx context.Context, batchSize int64
 			Page: page, PageSize: batchSize,
 		})
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("鎷夊彇绗?%d 椤靛け璐? %v", page, err))
+			errors = append(errors, fmt.Sprintf("閹峰褰囩粭?%d 妞ら潧銇戠拹? %v", page, err))
 			break
 		}
 		products := resp.GetProducts()
@@ -220,5 +220,3 @@ func productProtoToDoc(p *productv1.Product) domain.ProductDocument {
 		MerchantName: p.GetMerchantName(),
 	}
 }
-
-

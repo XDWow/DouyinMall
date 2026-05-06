@@ -9,12 +9,12 @@ import (
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
 )
 
-// OutboxWorkerJob 定时扫描 pending 的 outbox 记录并尝试发送到 Kafka
+// OutboxWorkerJob 定时扫描 pending 的 outbox 记录并尝试发送到 RocketMQ
 // 这是慢路径兜底：即使同步发送失败，消息仍有机会最终被发出（最终与 DB 一致）
 // Outbox 记录待发送内容、重试次数与下次重试时间；本任务持续扫描，把仍可重试的消息继续投递
 type OutboxWorkerJob struct {
 	outboxRepo domain.OutboxRepository
-	producer   mq.SaramaProducer
+	producer   mq.OrderStatusProducer
 	l          logger.LoggerV1
 	batchSize  int
 	maxRetry   int
@@ -22,7 +22,7 @@ type OutboxWorkerJob struct {
 
 func NewOutboxWorkerJob(
 	outboxRepo domain.OutboxRepository,
-	producer mq.SaramaProducer,
+	producer mq.OrderStatusProducer,
 	l logger.LoggerV1,
 ) *OutboxWorkerJob {
 	return &OutboxWorkerJob{

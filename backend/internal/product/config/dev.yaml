@@ -1,23 +1,27 @@
 db:
-  host: "localhost"
-  port: 13316
+  host: "134.175.67.79"
+  port: 3306
   user: "root"
   password: ""
-  database: "DouyinMall"
+  database: "douyinmall"
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
-  addr: "localhost:6379"
+  addr: "106.52.154.235:6379"
 
 etcd:
   endpoints:
-    - "localhost:12379"
+    - "42.193.160.221:2379"
 
 grpc:
   server:
     name: product.service
     port: 8096
     etcdTTL: 60
+
+http:
+  server:
+    port: 18096
 
 mcp:
   server:
@@ -39,8 +43,8 @@ kafka:
 
 canal:
   mysql:
-    host: "localhost"
-    port: 13316
+    host: "134.175.67.79"
+    port: 3306
     user: "root"
     password: ""
   server_id: 1234

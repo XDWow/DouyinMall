@@ -46,4 +46,5 @@ func initViper() {
 	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	viper.BindEnv("http.addr", "HTTP_ADDR")
 	viper.BindEnv("jwt.access_secret", "JWT_ACCESS_SECRET")
+	viper.BindEnv("jwt.refresh_secret", "JWT_REFRESH_SECRET")
 }

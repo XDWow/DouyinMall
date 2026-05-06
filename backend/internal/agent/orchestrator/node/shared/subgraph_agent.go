@@ -2,24 +2,26 @@ package shared
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"strings"
 
+	"github.com/cloudwego/eino/adk"
+	adkskill "github.com/cloudwego/eino/adk/middlewares/skill"
 	"github.com/cloudwego/eino/components/model"
+	einotool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
-	"github.com/XDWow/DouyinMall/backend/internal/agent/domain"
 	agentskill "github.com/XDWow/DouyinMall/backend/internal/agent/infra/skill"
 	agenttool "github.com/XDWow/DouyinMall/backend/internal/agent/infra/tool"
-	orchestratorobserve "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/observe"
+	subgraphcommon "github.com/XDWow/DouyinMall/backend/internal/agent/orchestrator/subgraph/common"
 )
 
 const defaultSubgraphAgentRounds = 8
 
-// SubgraphAgent 子图内「模型 + 白名单工具多轮」；业务工具与 fetch_skill（拉技能全文）一并绑定，由模型在允许范围内选用。
+// SubgraphAgent is the shared ADK-based agent wrapper used by read-only or ambiguous subgraphs.
+// The outer orchestration still stays in compose workflow.
+// Only the inner model/tool/skill loop is delegated to ADK.
 type SubgraphAgent struct {
 	Model     model.ToolCallingChatModel
 	Registry  *agenttool.Registry
@@ -38,23 +40,15 @@ func NewSubgraphAgent(m model.ToolCallingChatModel, reg *agenttool.Registry, ski
 	}
 }
 
-func (a *SubgraphAgent) enabled() bool {
+func (a *SubgraphAgent) Enabled() bool {
 	return a != nil && a.Model != nil
 }
 
-// Enabled 是否可走子图内模型 + 工具多轮流程。
-func (a *SubgraphAgent) Enabled() bool {
-	return a.enabled()
-}
-
-// SubgraphAgentInput 单次子图对话入口。
-// ToolNames：绑定到模型的业务工具白名单（由 Registry.ToolInfos 解析 schema）。
-// SkillNames：技能白名单；摘要注入系统提示，并传入 WithSkillWhitelist；若 Registry 含全文拉取能力则自动并入工具列表。
-// SkillText 可选：若非空则额外注入已预加载正文（兼容少数无 Registry 场景）。
+// SubgraphAgentInput is the only context an agent subgraph may pass into the ADK agent.
+// ToolNames and SkillNames are explicit business whitelists.
 type SubgraphAgentInput struct {
 	ToolNames     []string
 	SkillNames    []string
-	SkillText     string
 	DocumentsText string
 	SlotsContext  string
 	UserQuery     string
@@ -62,87 +56,109 @@ type SubgraphAgentInput struct {
 	SystemHint    string
 }
 
-// subgraphGenerate 先收齐本轮 Stream，再 Concat；仅当合并后无 ToolCalls 时才向前端推 token（工具轮不泄漏中间文本）。
-func subgraphGenerate(ctx context.Context, m model.ToolCallingChatModel, messages []*schema.Message, opts []model.Option) (*schema.Message, error) {
-	writer := agenttool.StreamWriterFrom(ctx)
-	var traceID string
-	_ = domain.ProcessState(ctx, func(s *domain.State) error {
-		if s != nil {
-			traceID = s.TraceID
-		}
-		return nil
-	})
-	if writer == nil {
-		return m.Generate(ctx, messages, opts...)
-	}
-
-	reader, err := m.Stream(ctx, messages, opts...)
-	if err != nil {
-		return m.Generate(ctx, messages, opts...)
-	}
-	defer reader.Close()
-
-	var chunks []*schema.Message
-	for {
-		chunk, re := reader.Recv()
-		if errors.Is(re, io.EOF) {
-			break
-		}
-		if re != nil {
-			return nil, re
-		}
-		if chunk == nil {
-			continue
-		}
-		chunks = append(chunks, chunk)
-	}
-	if len(chunks) == 0 {
-		return m.Generate(ctx, messages, opts...)
-	}
-	out, cErr := schema.ConcatMessages(chunks)
-	if cErr != nil {
-		return nil, cErr
-	}
-	if len(out.ToolCalls) == 0 && strings.TrimSpace(out.Content) != "" {
-		orchestratorobserve.SendEvent(ctx, writer, "token", map[string]any{
-			"trace_id": traceID,
-			"text":     out.Content,
-		})
-		_ = domain.ProcessState(ctx, func(s *domain.State) error {
-			if s != nil {
-				s.EnsureResponse().Streamed = true
-			}
-			return nil
-		})
-	}
-	return out, nil
-}
-
-func (a *SubgraphAgent) effectiveToolNames(in SubgraphAgentInput) []string {
-	names := append([]string(nil), in.ToolNames...)
-	if len(in.SkillNames) == 0 || a.Skills == nil || a.Registry == nil || !a.Registry.Has("fetch_skill") {
-		return names
-	}
-	names = append(names, "fetch_skill")
-	return names
-}
-
-// Run 返回模型最终自然语言与本轮产生的 tool 消息（供主图 Hydrate）。
-func (a *SubgraphAgent) Run(ctx context.Context, in SubgraphAgentInput) (final string, toolMsgs []*schema.Message, err error) {
-	if !a.enabled() {
+func (a *SubgraphAgent) Run(ctx context.Context, in SubgraphAgentInput) (string, []*schema.Message, error) {
+	if !a.Enabled() {
 		return "", nil, nil
 	}
-	toolNames := a.effectiveToolNames(in)
-	if len(toolNames) > 0 && a.Registry == nil {
-		return "", nil, fmt.Errorf("tool registry required when tools are non-empty")
-	}
-	ctx = agenttool.WithSkillWhitelist(ctx, in.SkillNames)
 
+	tools, err := a.lookupTools(in.ToolNames)
+	if err != nil {
+		return "", nil, err
+	}
+	middlewares, err := a.buildSkillMiddlewares(ctx, in.SkillNames)
+	if err != nil {
+		return "", nil, err
+	}
+
+	agent, err := a.buildChatAgent(ctx, buildInstruction(in), tools, middlewares)
+	if err != nil {
+		return "", nil, err
+	}
+	runner := adk.NewRunner(ctx, adk.RunnerConfig{
+		Agent:           agent,
+		EnableStreaming: false,
+	})
+
+	iter := runner.Run(ctx, buildInputMessages(in), a.modelRunOptions()...)
+	return collectRunnerOutput(ctx, iter)
+}
+
+func (a *SubgraphAgent) lookupTools(names []string) ([]einotool.BaseTool, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	if a.Registry == nil {
+		return nil, fmt.Errorf("tool registry required when tools are non-empty")
+	}
+	return a.Registry.Tools(names), nil
+}
+
+func (a *SubgraphAgent) buildSkillMiddlewares(ctx context.Context, skillNames []string) ([]adk.ChatModelAgentMiddleware, error) {
+	if len(skillNames) == 0 {
+		return nil, nil
+	}
+	if a.Skills == nil {
+		return nil, fmt.Errorf("skill registry required when skills are non-empty")
+	}
+
+	backend := a.Skills.ADKBackend(skillNames)
+	if backend == nil {
+		return nil, fmt.Errorf("skill backend is empty for %v", skillNames)
+	}
+
+	handler, err := adkskill.NewMiddleware(ctx, &adkskill.Config{
+		Backend: backend,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build skill middleware: %w", err)
+	}
+	return []adk.ChatModelAgentMiddleware{handler}, nil
+}
+
+func (a *SubgraphAgent) buildChatAgent(
+	ctx context.Context,
+	instruction string,
+	tools []einotool.BaseTool,
+	middlewares []adk.ChatModelAgentMiddleware,
+) (*adk.ChatModelAgent, error) {
 	rounds := a.MaxRounds
 	if rounds <= 0 {
 		rounds = defaultSubgraphAgentRounds
 	}
 
+	return adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
+		Name:          "SubgraphAgentNode",
+		Description:   "Agent node inside customer-service subgraph.",
+		Instruction:   instruction,
+		Model:         a.Model,
+		MaxIterations: rounds,
+		GenModelInput: func(_ context.Context, instruction string, input *adk.AgentInput) ([]adk.Message, error) {
+			msgs := make([]adk.Message, 0, len(input.Messages)+1)
+			if text := strings.TrimSpace(instruction); text != "" {
+				msgs = append(msgs, schema.SystemMessage(text))
+			}
+			msgs = append(msgs, input.Messages...)
+			return msgs, nil
+		},
+		ToolsConfig: adk.ToolsConfig{
+			ToolsNodeConfig: compose.ToolsNodeConfig{
+				Tools:               tools,
+				ExecuteSequentially: true,
+			},
+		},
+		Handlers: middlewares,
+	})
+}
+
+func (a *SubgraphAgent) modelRunOptions() []adk.AgentRunOption {
+	opts := []model.Option{model.WithTemperature(0.2)}
+	if a.MaxTokens > 0 {
+		opts = append(opts, model.WithMaxTokens(a.MaxTokens))
+	}
+	return []adk.AgentRunOption{adk.WithChatModelOptions(opts)}
+}
+
+func buildInstruction(in SubgraphAgentInput) string {
 	var sys strings.Builder
 	if strings.TrimSpace(in.SystemHint) != "" {
 		sys.WriteString(strings.TrimSpace(in.SystemHint))
@@ -158,90 +174,110 @@ func (a *SubgraphAgent) Run(ctx context.Context, in SubgraphAgentInput) (final s
 		sys.WriteString(strings.TrimSpace(in.DocumentsText))
 		sys.WriteString("\n</retrieved_documents>\n\n")
 	}
-	if len(in.SkillNames) > 0 && a.Skills != nil {
-		sums := a.Skills.SummariesByNames(in.SkillNames)
-		if cat := agentskill.RenderSkillSummaryText(sums); cat != "" && cat != "none" {
-			sys.WriteString("<available_skills>\n")
-			sys.WriteString("以下为当前场景可用的技能条目（名称与摘要）。需要完整条文时，仅可从下列名称中选取并按规定方式获取全文；参数须与名称一致：\n")
-			sys.WriteString(cat)
-			sys.WriteString("\n</available_skills>\n\n")
-		}
-	}
-	if strings.TrimSpace(in.SkillText) != "" && strings.TrimSpace(in.SkillText) != "none" {
-		sys.WriteString("<preloaded_skill_text>\n")
-		sys.WriteString(strings.TrimSpace(in.SkillText))
-		sys.WriteString("\n</preloaded_skill_text>\n\n")
-	}
+
 	system := strings.TrimSpace(sys.String())
 	if system == "" {
 		system = strings.TrimSpace(defaultSubgraphSystemPrompt)
 	}
+	return system
+}
 
-	// 最终发给模型的不是单个大字符串，
-	// 而是 system + history + 当前 query 组成的一组 chat messages。
-	messages := []*schema.Message{schema.SystemMessage(system)}
+func buildInputMessages(in SubgraphAgentInput) []adk.Message {
+	messages := make([]adk.Message, 0, len(in.History)+1)
 	messages = append(messages, append([]*schema.Message(nil), in.History...)...)
 	if q := strings.TrimSpace(in.UserQuery); q != "" {
 		messages = append(messages, schema.UserMessage("<user_query>\n"+q+"\n</user_query>"))
 	}
+	return messages
+}
 
-	var toolInfos []*schema.ToolInfo
-	if len(toolNames) > 0 {
-		toolInfos = a.Registry.ToolInfos(toolNames)
-	}
-	activeModel := a.Model
-	if len(toolInfos) > 0 {
-		bound, werr := a.Model.WithTools(toolInfos)
-		if werr != nil {
-			return "", nil, werr
+func collectRunnerOutput(ctx context.Context, iter *adk.AsyncIterator[*adk.AgentEvent]) (string, []*schema.Message, error) {
+	var final string
+	var toolMsgs []*schema.Message
+
+	for {
+		event, ok := iter.Next()
+		if !ok {
+			break
 		}
-		activeModel = bound
+		if event.Err != nil {
+			return "", toolMsgs, event.Err
+		}
+		if event.Action != nil && event.Action.Interrupted != nil {
+			return "", toolMsgs, subgraphcommon.InterruptForDecision(ctx, extractInterruptDecision(event.Action.Interrupted))
+		}
+		if event.Output == nil || event.Output.MessageOutput == nil {
+			continue
+		}
+
+		msg, err := event.Output.MessageOutput.GetMessage()
+		if err != nil {
+			return "", toolMsgs, err
+		}
+		if msg == nil {
+			continue
+		}
+		if event.Output.MessageOutput.Role == schema.Tool {
+			toolMsgs = append(toolMsgs, msg)
+			continue
+		}
+		if text := strings.TrimSpace(msg.Content); text != "" {
+			final = text
+		}
 	}
 
-	var toolsNode *compose.ToolsNode
-	if len(toolInfos) > 0 {
-		var terr error
-		toolsNode, terr = a.Registry.ToolsNode()
-		if terr != nil {
-			return "", nil, terr
+	return final, toolMsgs, nil
+}
+
+var defaultInterruptDecision = subgraphcommon.AgentDecision{
+	Type:     "clarification",
+	Question: "Please provide more detail.",
+}
+
+func extractInterruptDecision(info *adk.InterruptInfo) subgraphcommon.AgentDecision {
+	if info == nil {
+		return defaultInterruptDecision
+	}
+	for _, ic := range info.InterruptContexts {
+		if ic != nil && ic.IsRootCause {
+			if decision := parseInterruptDetail(ic.Info); decision.Type != "" {
+				return decision
+			}
 		}
+	}
+	for _, ic := range info.InterruptContexts {
+		if ic != nil {
+			if decision := parseInterruptDetail(ic.Info); decision.Type != "" {
+				return decision
+			}
+		}
+	}
+	return defaultInterruptDecision
+}
+
+func parseInterruptDetail(raw any) subgraphcommon.AgentDecision {
+	detail, ok := raw.(map[string]any)
+	if !ok {
+		return subgraphcommon.AgentDecision{}
 	}
 
-	opts := []model.Option{model.WithTemperature(0.2)}
-	if a.MaxTokens > 0 {
-		opts = append(opts, model.WithMaxTokens(a.MaxTokens))
+	decision := subgraphcommon.AgentDecision{
+		Type:     strings.TrimSpace(fmt.Sprint(detail["type"])),
+		Reply:    strings.TrimSpace(fmt.Sprint(detail["reply"])),
+		Question: strings.TrimSpace(fmt.Sprint(detail["question"])),
 	}
-	if len(toolInfos) == 0 {
-		opts = append(opts, model.WithToolChoice(schema.ToolChoiceForbidden))
+	if fields, ok := detail["missing_fields"].([]string); ok {
+		decision.MissingFields = append([]string(nil), fields...)
+		return decision
 	}
-
-	var allTool []*schema.Message
-	for range rounds {
-		out, genErr := subgraphGenerate(ctx, activeModel, messages, opts)
-		if genErr != nil {
-			return "", allTool, genErr
+	if values, ok := detail["missing_fields"].([]any); ok {
+		decision.MissingFields = make([]string, 0, len(values))
+		for _, value := range values {
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text != "" {
+				decision.MissingFields = append(decision.MissingFields, text)
+			}
 		}
-		if out == nil {
-			return "", allTool, fmt.Errorf("model returned nil message")
-		}
-		if out.Role == "" {
-			out.Role = schema.Assistant
-		}
-		messages = append(messages, out)
-		if len(out.ToolCalls) == 0 {
-			return strings.TrimSpace(out.Content), allTool, nil
-		}
-		if toolsNode == nil {
-			return "", allTool, fmt.Errorf("model requested tools but tools node is nil")
-		}
-		// 读型 Agent 子图允许模型多轮决定是否继续调工具；
-		// 每次工具结果都会回填到消息历史，再继续下一轮推理。
-		tOut, invErr := toolsNode.Invoke(ctx, out)
-		if invErr != nil {
-			return "", allTool, invErr
-		}
-		allTool = append(allTool, tOut...)
-		messages = append(messages, tOut...)
 	}
-	return "", allTool, fmt.Errorf("subgraph agent exceeded max rounds (%d)", rounds)
+	return decision
 }

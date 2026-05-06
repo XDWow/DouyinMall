@@ -19,9 +19,7 @@ var errInvalidMessageType = errors.New("invalid message type for service method 
 var serviceMethods = map[string]kitex.MethodInfo{
 	"GetInventory":      kitex.NewMethodInfo(getInventoryHandler, newGetInventoryArgs, newGetInventoryResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
 	"BatchGetInventory": kitex.NewMethodInfo(batchGetInventoryHandler, newBatchGetInventoryArgs, newBatchGetInventoryResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
-	"ReserveStock":      kitex.NewMethodInfo(reserveStockHandler, newReserveStockArgs, newReserveStockResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
 	"CommitStock":       kitex.NewMethodInfo(commitStockHandler, newCommitStockArgs, newCommitStockResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
-	"ReleaseStock":      kitex.NewMethodInfo(releaseStockHandler, newReleaseStockArgs, newReleaseStockResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
 	"RefundStock":       kitex.NewMethodInfo(refundStockHandler, newRefundStockArgs, newRefundStockResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
 	"AdjustStock":       kitex.NewMethodInfo(adjustStockHandler, newAdjustStockArgs, newAdjustStockResult, false, kitex.WithStreamingMode(kitex.StreamingUnary)),
 }
@@ -109,21 +107,9 @@ func batchGetInventoryHandler(ctx context.Context, handler interface{}, arg, res
 	})
 }
 
-func reserveStockHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	return handleUnary(ctx, handler, arg, result, func(ctx context.Context, h inventoryv1.InventoryService, req *v1.ReserveStockReq) (*v1.InventoryOpResp, error) {
-		return h.ReserveStock(ctx, req)
-	}, func(result interface{}, success *v1.InventoryOpResp) { result.(*InventoryOpResult).Success = success })
-}
-
 func commitStockHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	return handleUnary(ctx, handler, arg, result, func(ctx context.Context, h inventoryv1.InventoryService, req *v1.CommitStockReq) (*v1.InventoryOpResp, error) {
 		return h.CommitStock(ctx, req)
-	}, func(result interface{}, success *v1.InventoryOpResp) { result.(*InventoryOpResult).Success = success })
-}
-
-func releaseStockHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	return handleUnary(ctx, handler, arg, result, func(ctx context.Context, h inventoryv1.InventoryService, req *v1.ReleaseStockReq) (*v1.InventoryOpResp, error) {
-		return h.ReleaseStock(ctx, req)
 	}, func(result interface{}, success *v1.InventoryOpResp) { result.(*InventoryOpResult).Success = success })
 }
 
@@ -141,41 +127,31 @@ func adjustStockHandler(ctx context.Context, handler interface{}, arg, result in
 
 type GetInventoryArgs struct{ Req *v1.GetInventoryReq }
 type BatchGetInventoryArgs struct{ Req *v1.BatchGetInventoryReq }
-type ReserveStockArgs struct{ Req *v1.ReserveStockReq }
 type CommitStockArgs struct{ Req *v1.CommitStockReq }
-type ReleaseStockArgs struct{ Req *v1.ReleaseStockReq }
 type RefundStockArgs struct{ Req *v1.RefundStockReq }
 type AdjustStockArgs struct{ Req *v1.AdjustStockReq }
 
 func (p *GetInventoryArgs) Marshal(out []byte) ([]byte, error)      { return marshalReq(out, p.Req) }
 func (p *BatchGetInventoryArgs) Marshal(out []byte) ([]byte, error) { return marshalReq(out, p.Req) }
-func (p *ReserveStockArgs) Marshal(out []byte) ([]byte, error)      { return marshalReq(out, p.Req) }
 func (p *CommitStockArgs) Marshal(out []byte) ([]byte, error)       { return marshalReq(out, p.Req) }
-func (p *ReleaseStockArgs) Marshal(out []byte) ([]byte, error)      { return marshalReq(out, p.Req) }
 func (p *RefundStockArgs) Marshal(out []byte) ([]byte, error)       { return marshalReq(out, p.Req) }
 func (p *AdjustStockArgs) Marshal(out []byte) ([]byte, error)       { return marshalReq(out, p.Req) }
 
 func (p *GetInventoryArgs) Unmarshal(in []byte) error      { return unmarshalReq(in, &p.Req) }
 func (p *BatchGetInventoryArgs) Unmarshal(in []byte) error { return unmarshalReq(in, &p.Req) }
-func (p *ReserveStockArgs) Unmarshal(in []byte) error      { return unmarshalReq(in, &p.Req) }
 func (p *CommitStockArgs) Unmarshal(in []byte) error       { return unmarshalReq(in, &p.Req) }
-func (p *ReleaseStockArgs) Unmarshal(in []byte) error      { return unmarshalReq(in, &p.Req) }
 func (p *RefundStockArgs) Unmarshal(in []byte) error       { return unmarshalReq(in, &p.Req) }
 func (p *AdjustStockArgs) Unmarshal(in []byte) error       { return unmarshalReq(in, &p.Req) }
 
 func (p *GetInventoryArgs) GetReq() *v1.GetInventoryReq           { return p.Req }
 func (p *BatchGetInventoryArgs) GetReq() *v1.BatchGetInventoryReq { return p.Req }
-func (p *ReserveStockArgs) GetReq() *v1.ReserveStockReq           { return p.Req }
 func (p *CommitStockArgs) GetReq() *v1.CommitStockReq             { return p.Req }
-func (p *ReleaseStockArgs) GetReq() *v1.ReleaseStockReq           { return p.Req }
 func (p *RefundStockArgs) GetReq() *v1.RefundStockReq             { return p.Req }
 func (p *AdjustStockArgs) GetReq() *v1.AdjustStockReq             { return p.Req }
 
 func (p *GetInventoryArgs) GetFirstArgument() interface{}      { return p.Req }
 func (p *BatchGetInventoryArgs) GetFirstArgument() interface{} { return p.Req }
-func (p *ReserveStockArgs) GetFirstArgument() interface{}      { return p.Req }
 func (p *CommitStockArgs) GetFirstArgument() interface{}       { return p.Req }
-func (p *ReleaseStockArgs) GetFirstArgument() interface{}      { return p.Req }
 func (p *RefundStockArgs) GetFirstArgument() interface{}       { return p.Req }
 func (p *AdjustStockArgs) GetFirstArgument() interface{}       { return p.Req }
 
@@ -210,17 +186,13 @@ func (p *InventoryOpResult) GetResult() interface{}       { return p.Success }
 
 func newGetInventoryArgs() interface{}      { return &GetInventoryArgs{} }
 func newBatchGetInventoryArgs() interface{} { return &BatchGetInventoryArgs{} }
-func newReserveStockArgs() interface{}      { return &ReserveStockArgs{} }
 func newCommitStockArgs() interface{}       { return &CommitStockArgs{} }
-func newReleaseStockArgs() interface{}      { return &ReleaseStockArgs{} }
 func newRefundStockArgs() interface{}       { return &RefundStockArgs{} }
 func newAdjustStockArgs() interface{}       { return &AdjustStockArgs{} }
 
 func newGetInventoryResult() interface{}      { return &GetInventoryResult{} }
 func newBatchGetInventoryResult() interface{} { return &BatchGetInventoryResult{} }
-func newReserveStockResult() interface{}      { return &InventoryOpResult{} }
 func newCommitStockResult() interface{}       { return &InventoryOpResult{} }
-func newReleaseStockResult() interface{}      { return &InventoryOpResult{} }
 func newRefundStockResult() interface{}       { return &InventoryOpResult{} }
 func newAdjustStockResult() interface{}       { return &InventoryOpResult{} }
 
@@ -264,16 +236,8 @@ func (p *kClient) BatchGetInventory(ctx context.Context, req *v1.BatchGetInvento
 	return result.GetSuccess(), nil
 }
 
-func (p *kClient) ReserveStock(ctx context.Context, req *v1.ReserveStockReq) (r *v1.InventoryOpResp, err error) {
-	return p.callInventoryOp(ctx, "ReserveStock", &ReserveStockArgs{Req: req})
-}
-
 func (p *kClient) CommitStock(ctx context.Context, req *v1.CommitStockReq) (r *v1.InventoryOpResp, err error) {
 	return p.callInventoryOp(ctx, "CommitStock", &CommitStockArgs{Req: req})
-}
-
-func (p *kClient) ReleaseStock(ctx context.Context, req *v1.ReleaseStockReq) (r *v1.InventoryOpResp, err error) {
-	return p.callInventoryOp(ctx, "ReleaseStock", &ReleaseStockArgs{Req: req})
 }
 
 func (p *kClient) RefundStock(ctx context.Context, req *v1.RefundStockReq) (r *v1.InventoryOpResp, err error) {
@@ -291,5 +255,3 @@ func (p *kClient) callInventoryOp(ctx context.Context, method string, args inter
 	}
 	return result.GetSuccess(), nil
 }
-
-
