@@ -86,7 +86,7 @@ func (h *Handler) SubmitSeckill(ctx context.Context, req *seckillv1.SubmitSeckil
 		RequestNo: result.RequestNo,
 		Status:    result.Status,
 		Message:   result.FailReason,
-	}, err
+	}, nil
 }
 
 func (h *Handler) GetSeckillResult(ctx context.Context, req *seckillv1.GetSeckillResultReq) (*seckillv1.GetSeckillResultResp, error) {
@@ -101,5 +101,3 @@ func (h *Handler) GetSeckillResult(ctx context.Context, req *seckillv1.GetSeckil
 		FailReason: result.FailReason,
 	}, nil
 }
-
-

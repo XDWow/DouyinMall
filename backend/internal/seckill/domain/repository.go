@@ -30,11 +30,6 @@ type Cache interface {
 	ResolveTransaction(ctx context.Context, activityID, userID int64, requestNo string) (TransactionResolution, error)
 }
 
-type Transaction interface {
-	Commit() error
-	Rollback() error
-}
-
 type Producer interface {
-	Prepare(ctx context.Context, evt Event) (Transaction, error)
+	Submit(ctx context.Context, evt Event, userTTLSeconds int64) (*Result, error)
 }

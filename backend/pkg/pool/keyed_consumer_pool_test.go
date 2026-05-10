@@ -88,6 +88,30 @@ func TestKeyedConsumerPoolAllowsDifferentActivitiesToRunConcurrently(t *testing.
 	require.Eventually(t, func() bool { return running.Load() == 0 }, time.Second, 10*time.Millisecond)
 }
 
+func TestKeyedConsumerPoolAllowsDisablingPerActivityConcurrency(t *testing.T) {
+	p, err := NewKeyedConsumerPool(KeyedConsumerPoolOptions{
+		GlobalWorkerNum:        4,
+		PerActivityConcurrency: -1,
+	}, logger.NewNopLogger())
+	require.NoError(t, err)
+	defer p.Close()
+
+	release := make(chan struct{})
+	var running atomic.Int64
+
+	for i := 0; i < 4; i++ {
+		require.NoError(t, p.Submit(context.Background(), "activity-1", func(context.Context) error {
+			running.Add(1)
+			defer running.Add(-1)
+			<-release
+			return nil
+		}))
+	}
+
+	require.Eventually(t, func() bool { return running.Load() == 4 }, time.Second, 10*time.Millisecond)
+	close(release)
+}
+
 func TestKeyedConsumerPoolDoesNotSubmitWhenActivityBusy(t *testing.T) {
 	p, err := NewKeyedConsumerPool(KeyedConsumerPoolOptions{
 		GlobalWorkerNum:        4,

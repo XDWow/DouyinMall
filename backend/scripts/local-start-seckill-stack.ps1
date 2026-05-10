@@ -1,9 +1,12 @@
 param(
     [string]$ConfigMode = "dev",
     [string]$RocketMQEndpoint = "43.136.121.171:8081",
+    [string]$RocketMQNameServer = "43.136.121.171:9876",
     [string]$DbPassword = "0324",
     [string]$RedisPassword = "0624",
-    [string]$SnowflakeNodeId = "1"
+    [string]$SnowflakeNodeId = "1",
+    [string]$SeckillGlobalWorkerNum = "",
+    [string]$SeckillHandleTimeoutSec = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,6 +48,15 @@ foreach ($service in $services) {
     }
     if ($RocketMQEndpoint -ne "") {
         $command += '$env:ROCKETMQ_ENDPOINT=''' + $RocketMQEndpoint + ''''
+    }
+    if ($service.Name -eq "seckill" -and $RocketMQNameServer -ne "") {
+        $command += '$env:ROCKETMQ_NAME_SERVER=''' + $RocketMQNameServer + ''''
+    }
+    if ($service.Name -eq "seckill" -and $SeckillGlobalWorkerNum -ne "") {
+        $command += '$env:ROCKETMQ_GLOBAL_WORKER_NUM=''' + $SeckillGlobalWorkerNum + ''''
+    }
+    if ($service.Name -eq "seckill" -and $SeckillHandleTimeoutSec -ne "") {
+        $command += '$env:ROCKETMQ_HANDLE_TIMEOUT_SEC=''' + $SeckillHandleTimeoutSec + ''''
     }
     $command += 'Set-Location ''' + $repoRoot + ''''
     $command += 'go run ./cmd/' + $service.Name + ' --config ' + $service.Config + ' *>> ''' + $logPath + ''''

@@ -12,7 +12,8 @@ func InitRedis() redis.Cmdable {
 	}
 	viper.UnmarshalKey("redis", &c)
 	return redis.NewClient(&redis.Options{
-		Addr: c.Addr,
+		Addr:     c.Addr,
+		Password: c.Password,
 	})
 }
 

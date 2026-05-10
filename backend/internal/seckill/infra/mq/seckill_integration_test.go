@@ -15,7 +15,6 @@ import (
 	seckilldomain "github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
 	seckillusecase "github.com/XDWow/DouyinMall/backend/internal/seckill/usecase"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/pkg/rocketmqx"
 	orderv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1"
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/order/v1/orderservice"
 	"github.com/cloudwego/kitex/client/callopt"
@@ -27,10 +26,11 @@ func TestSeckillTransactionalFlowHappyPath(t *testing.T) {
 	activityRepo := newMemoryActivityRepo()
 	requestRepo := newMemoryRequestRepo(activityRepo)
 	cache := newMemoryCache()
-	producer := &capturingProducer{tx: &capturingTx{}}
+	producer := &capturingProducer{}
+	soldOut := seckilldomain.NewNopSoldOutMarker()
 	idGen := sequenceIDGenerator("10001")
 
-	createActivityUC := seckillusecase.NewCreateActivityUseCase(activityRepo, cache)
+	createActivityUC := seckillusecase.NewCreateActivityUseCase(activityRepo, cache, soldOut)
 	activityID, err := createActivityUC.Execute(ctx, seckillusecase.CreateActivityCmd{
 		ActivityName: "iphone seckill",
 		ProductID:    3001,
@@ -44,7 +44,7 @@ func TestSeckillTransactionalFlowHappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	submitUC := seckillusecase.NewSubmitUseCase(activityRepo, requestRepo, cache, producer, idGen)
+	submitUC := seckillusecase.NewSubmitUseCase(activityRepo, requestRepo, cache, soldOut, producer, idGen)
 	result, err := submitUC.Execute(ctx, seckillusecase.SubmitCmd{
 		ActivityID: activityID,
 		UserID:     2001,
@@ -52,10 +52,8 @@ func TestSeckillTransactionalFlowHappyPath(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, seckilldomain.RequestStatusProcessing, result.Status)
 	require.Len(t, producer.prepared, 1)
-	require.True(t, producer.tx.committed)
-	require.False(t, producer.tx.rolledBack)
 
-	processor := NewEventProcessor(&recordingOrderClient{}, requestRepo, activityRepo, cache, logger.NewNopLogger())
+	processor := NewEventProcessor(&recordingOrderClient{}, requestRepo, activityRepo, cache, soldOut, logger.NewNopLogger())
 	require.NoError(t, processor.Process(ctx, producer.prepared[0]))
 
 	req, err := requestRepo.FindByRequestNo(ctx, result.RequestNo)
@@ -75,8 +73,8 @@ func TestSeckillTransactionalFlowHappyPath(t *testing.T) {
 	require.True(t, activityRepo.hasQualification(activityID, 2001))
 	require.True(t, cache.hasUser(activityID, 2001, result.RequestNo))
 
-	statusConsumer := NewOrderStatusConsumer(nil, requestRepo, activityRepo, cache, logger.NewNopLogger(), rocketmqx.ConsumerOptions{})
-	require.NoError(t, statusConsumer.consume(nil, OrderStatusUpdateEvent{
+	statusConsumer := NewOrderStatusConsumer(nil, requestRepo, activityRepo, cache, soldOut, logger.NewNopLogger(), SeckillConsumerOptions{})
+	require.NoError(t, statusConsumer.consume(context.Background(), OrderStatusUpdateEvent{
 		OrderID:   req.OrderID,
 		Status:    orderv1.OrderStatus_ORDER_STATUS_CANCELED,
 		OrderKind: orderdomain.OrderKindSeckill,
@@ -145,33 +143,17 @@ func TestResolveTransactionCommitsWhenStateIsMissing(t *testing.T) {
 
 type capturingProducer struct {
 	mu       sync.Mutex
-	tx       *capturingTx
 	prepared []seckilldomain.Event
 }
 
-func (p *capturingProducer) Prepare(_ context.Context, evt seckilldomain.Event) (seckilldomain.Transaction, error) {
+func (p *capturingProducer) Submit(_ context.Context, evt seckilldomain.Event, _ int64) (*seckilldomain.Result, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.prepared = append(p.prepared, evt)
-	if p.tx == nil {
-		p.tx = &capturingTx{}
-	}
-	return p.tx, nil
-}
-
-type capturingTx struct {
-	committed  bool
-	rolledBack bool
-}
-
-func (t *capturingTx) Commit() error {
-	t.committed = true
-	return nil
-}
-
-func (t *capturingTx) Rollback() error {
-	t.rolledBack = true
-	return nil
+	return &seckilldomain.Result{
+		RequestNo: evt.RequestNo,
+		Status:    seckilldomain.RequestStatusProcessing,
+	}, nil
 }
 
 type sequenceIDGenerator string

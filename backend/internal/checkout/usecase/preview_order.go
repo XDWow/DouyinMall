@@ -53,7 +53,7 @@ func (uc *PreviewOrderUseCase) Execute(ctx context.Context, input PreviewOrderIn
 	}
 
 	// 1. 鏌ヨ鍟嗗搧
-	resp, err := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Id: extractProductIDs(input.Items)})
+	resp, err := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Items: extractProductQueries(input.Items)})
 	if err != nil {
 		return nil, fmt.Errorf("get products: %w", err)
 	}

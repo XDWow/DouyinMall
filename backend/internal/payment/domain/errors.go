@@ -7,4 +7,5 @@ var (
 	ErrPaymentAlreadyPaid   = errors.New("payment already succeeded")
 	ErrPaymentAmountChanged = errors.New("payment amount changed")
 	ErrPaymentStatusRace    = errors.New("payment status changed concurrently")
+	ErrPaymentTxnIDRequired = errors.New("payment transaction id is required")
 )

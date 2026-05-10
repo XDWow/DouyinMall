@@ -17,7 +17,7 @@ etcd:
 
 grpc:
   server:
-    name: product.service
+    name: payment.service
     port: 8092
     etcdTTL: 60
 

@@ -12,7 +12,7 @@ import (
 
 type ProductService interface {
 	ListProducts(ctx context.Context, page, pageSize int64, category string) (products []domain.Product, err error)
-	GetProduct(ctx context.Context, id int64) (product domain.Product, err error)
+	GetProduct(ctx context.Context, query domain.ProductQuery) (product domain.Product, err error)
 	CreateProduct(ctx context.Context, product domain.Product) (productID int64, err error)
 	UpdateProduct(ctx context.Context, product domain.Product) (productID int64, err error)
 	DeleteProduct(ctx context.Context, id, userID int64) (err error)
@@ -30,47 +30,87 @@ func NewProductService(repo repo.ProductRepo, logger logger.LoggerV1) ProductSer
 	}
 }
 
-func (svc *productService) ListProducts(ctx context.Context, page, pageSize int64, category string) (products []domain.Product, err error) {
+func (svc *productService) ListProducts(ctx context.Context, page, pageSize int64, category string) ([]domain.Product, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
 	return svc.repo.ListProducts(ctx, page, pageSize, category)
 }
 
-func (svc *productService) GetProduct(ctx context.Context, id int64) (product domain.Product, err error) {
-	return svc.repo.GetProduct(ctx, id)
+func (svc *productService) GetProduct(ctx context.Context, query domain.ProductQuery) (domain.Product, error) {
+	if err := validateProductQuery(query); err != nil {
+		return domain.Product{}, err
+	}
+	return svc.repo.GetProduct(ctx, query)
 }
 
-func (svc *productService) CreateProduct(ctx context.Context, product domain.Product) (productID int64, err error) {
-	// 闁轰礁绻戦崝鍛嫚瀹ュ棛澧″Δ?
+func (svc *productService) CreateProduct(ctx context.Context, product domain.Product) (int64, error) {
+	if err := validateProductForWrite(product, false); err != nil {
+		return 0, err
+	}
 	if err := svc.checkSensitiveWords(ctx, product.Name, product.Description); err != nil {
 		svc.logger.Error("sensitive word validation failed", logger.Error(err))
 		return 0, err
-	}
-	if len(product.Picture) != 0 || len(product.SlideImgs) != 0 {
-		// 濞戞挸锕ｇ槐鑸电▔閳ь剚绋?闁绘挆鍛暬闁挎稑鐭侀悿鍡涘箻椤撶偞绂?
 	}
 	return svc.repo.CreateProduct(ctx, product)
 }
 
-func (svc *productService) UpdateProduct(ctx context.Context, product domain.Product) (productID int64, err error) {
-	// 闁轰礁绻戦崝鍛嫚瀹ュ棛澧″Δ鐘茬焿缁辨瑩宕ｉ鍛ⅰ濡ょ姴鐭傚顏嗙矚閸濆嫮鎽熸繛鍫㈩暜缁?
+func (svc *productService) UpdateProduct(ctx context.Context, product domain.Product) (int64, error) {
+	if err := validateProductForWrite(product, true); err != nil {
+		return 0, err
+	}
 	if err := svc.checkSensitiveWords(ctx, product.Name, product.Description); err != nil {
 		svc.logger.Error("sensitive word validation failed", logger.Error(err))
 		return 0, err
 	}
-
-	if len(product.Picture) != 0 || len(product.SlideImgs) != 0 {
-		// 闁哄洤鐡ㄩ弻濠囨偂瑜忔晶鏍晬瀹€鍐瀭闁圭虎鍘煎ù?
-	}
 	return svc.repo.UpdateProduct(ctx, product)
 }
 
-func (svc *productService) DeleteProduct(ctx context.Context, id, userID int64) (err error) {
+func (svc *productService) DeleteProduct(ctx context.Context, id, userID int64) error {
+	if id <= 0 {
+		return fmt.Errorf("product_id is required")
+	}
+	if userID <= 0 {
+		return fmt.Errorf("user_id is required")
+	}
 	return svc.repo.DeleteProduct(ctx, id, userID)
 }
 
 func (svc *productService) checkSensitiveWords(ctx context.Context, productName string, productDescription string) error {
-	// 闁告艾閰ｅ浼村箹?ai 婵☆偀鍋撴繛?
 	if strings.Contains(productName, "blocked") || strings.Contains(productDescription, "blocked") {
 		return fmt.Errorf("product contains sensitive words")
+	}
+	return nil
+}
+
+func validateProductQuery(query domain.ProductQuery) error {
+	if query.ID <= 0 {
+		return fmt.Errorf("product_id is required")
+	}
+	if query.SKUID <= 0 {
+		return fmt.Errorf("sku_id is required")
+	}
+	return nil
+}
+
+func validateProductForWrite(product domain.Product, requireID bool) error {
+	if requireID && product.ID <= 0 {
+		return fmt.Errorf("product_id is required")
+	}
+	if strings.TrimSpace(product.Name) == "" {
+		return fmt.Errorf("product name is required")
+	}
+	if product.SKUID <= 0 {
+		return fmt.Errorf("sku_id is required")
+	}
+	if product.Price < 0 {
+		return fmt.Errorf("price must be non-negative")
+	}
+	if product.MerchantID <= 0 {
+		return fmt.Errorf("merchant_id is required")
 	}
 	return nil
 }

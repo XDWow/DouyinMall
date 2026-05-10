@@ -19,7 +19,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1/paymentservice"
 	seckillv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/seckill/v1"
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/seckill/v1/seckillservice"
-	"github.com/apache/rocketmq-clients/golang"
+	rocketmq "github.com/apache/rocketmq-client-go/v2"
+	"github.com/apache/rocketmq-client-go/v2/primitive"
+	pushproducer "github.com/apache/rocketmq-client-go/v2/producer"
 	"github.com/cloudwego/kitex/client"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/redis/go-redis/v9"
@@ -27,13 +29,13 @@ import (
 )
 
 const (
-	seckillHostPort  = "127.0.0.1:8098"
-	orderHostPort    = "127.0.0.1:8095"
-	paymentHostPort  = "127.0.0.1:8092"
-	mockWechatURL    = "http://127.0.0.1:8888"
-	mysqlDSN         = "root:root@tcp(127.0.0.1:13306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
-	redisAddr        = "127.0.0.1:16379"
-	rocketMQEndpoint = "127.0.0.1:8081"
+	seckillHostPort = "127.0.0.1:8098"
+	orderHostPort   = "127.0.0.1:8095"
+	paymentHostPort = "127.0.0.1:8092"
+	mockWechatURL   = "http://127.0.0.1:8888"
+	mysqlDSN        = "root:root@tcp(127.0.0.1:13306)/douyinmall?charset=utf8mb4&parseTime=True&loc=Local"
+	redisAddr       = "127.0.0.1:16379"
+	rocketMQNameSrv = "127.0.0.1:9876"
 )
 
 func TestSeckillComposeEndToEnd(t *testing.T) {
@@ -205,14 +207,11 @@ func TestSeckillCreateOrderFailureCompensates(t *testing.T) {
 	require.NoError(t, err)
 
 	producer := openRocketMQProducer(t)
-	defer func() { _ = producer.GracefulStop() }()
+	defer func() { _ = producer.Shutdown() }()
 
-	msg := &golang.Message{
-				Topic: "seckill_request",
-		Body:  payload,
-	}
-	msg.SetKeys(requestNo)
-	_, err = producer.Send(ctx, msg)
+	msg := primitive.NewMessage("seckill_request", payload)
+	msg.WithKeys([]string{requestNo})
+	_, err = producer.SendSync(ctx, msg)
 	require.NoError(t, err)
 
 	var resultResp *seckillv1.GetSeckillResultResp
@@ -314,15 +313,15 @@ func openRedis(t *testing.T) *redis.Client {
 	return rdb
 }
 
-func openRocketMQProducer(t *testing.T) golang.Producer {
+func openRocketMQProducer(t *testing.T) rocketmq.Producer {
 	t.Helper()
 
-	var producer golang.Producer
+	var producer rocketmq.Producer
 	require.Eventually(t, func() bool {
 		var err error
-		producer, err = golang.NewProducer(
-			&golang.Config{Endpoint: rocketMQEndpoint},
-		golang.WithTopics("seckill_request"),
+		producer, err = rocketmq.NewProducer(
+			pushproducer.WithNameServer(primitive.NamesrvAddr{rocketMQNameSrv}),
+			pushproducer.WithGroupName("compose-e2e-seckill-test-producer"),
 		)
 		if err != nil {
 			return false

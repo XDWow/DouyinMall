@@ -61,6 +61,7 @@ func NewServer(cfg Config, client productservice.Client) (http.Handler, error) {
 				tool.Name,
 				mcpproto.WithDescription(tool.Description),
 				mcpproto.WithNumber("product_id", mcpproto.Description("Product ID"), mcpproto.Required()),
+				mcpproto.WithNumber("sku_id", mcpproto.Description("SKU ID"), mcpproto.Required()),
 			), adapter.GetProduct)
 		}
 	}
@@ -71,6 +72,7 @@ func NewServer(cfg Config, client productservice.Client) (http.Handler, error) {
 func (a *Adapter) GetProduct(ctx context.Context, req mcpproto.CallToolRequest) (*mcpproto.CallToolResult, error) {
 	var args struct {
 		ProductID int64 `json:"product_id"`
+		SKUID     int64 `json:"sku_id"`
 	}
 	if err := req.BindArguments(&args); err != nil {
 		return mcpproto.NewToolResultError("invalid arguments: " + err.Error()), nil
@@ -78,8 +80,16 @@ func (a *Adapter) GetProduct(ctx context.Context, req mcpproto.CallToolRequest) 
 	if args.ProductID <= 0 {
 		return mcpproto.NewToolResultError("product_id is required"), nil
 	}
+	if args.SKUID <= 0 {
+		return mcpproto.NewToolResultError("sku_id is required"), nil
+	}
 
-	resp, err := a.client.GetProducts(ctx, &productv1.GetProductsReq{Id: []int64{args.ProductID}})
+	resp, err := a.client.GetProducts(ctx, &productv1.GetProductsReq{
+		Items: []*productv1.ProductQuery{{
+			ProductId: args.ProductID,
+			SkuId:     args.SKUID,
+		}},
+	})
 	if err != nil {
 		return mcpproto.NewToolResultError("get product failed: " + err.Error()), nil
 	}
@@ -92,6 +102,7 @@ func (a *Adapter) GetProduct(ctx context.Context, req mcpproto.CallToolRequest) 
 	return mcpproto.NewToolResultText(toJSON(map[string]any{
 		"product": map[string]any{
 			"id":            product.GetId(),
+			"sku_id":        product.GetSkuId(),
 			"name":          product.GetName(),
 			"description":   product.GetDescription(),
 			"picture":       product.GetPicture(),
@@ -126,5 +137,3 @@ func toJSON(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
-
-

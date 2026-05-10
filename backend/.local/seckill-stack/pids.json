@@ -1,37 +1,37 @@
 [
     {
         "Name":  "order",
-        "Pid":  27760,
+        "Pid":  25472,
         "Log":  "D:\\workspace\\go\\DouyinMall\\backend\\.local\\seckill-stack\\logs\\order.log",
         "Config":  "internal/order/config/dev.yaml"
     },
     {
         "Name":  "payment",
-        "Pid":  15636,
+        "Pid":  19688,
         "Log":  "D:\\workspace\\go\\DouyinMall\\backend\\.local\\seckill-stack\\logs\\payment.log",
         "Config":  "internal/payment/config/dev.yaml"
     },
     {
         "Name":  "inventory",
-        "Pid":  19028,
+        "Pid":  41128,
         "Log":  "D:\\workspace\\go\\DouyinMall\\backend\\.local\\seckill-stack\\logs\\inventory.log",
         "Config":  "internal/inventory/config/dev.yaml"
     },
     {
         "Name":  "coupon",
-        "Pid":  22244,
+        "Pid":  19072,
         "Log":  "D:\\workspace\\go\\DouyinMall\\backend\\.local\\seckill-stack\\logs\\coupon.log",
         "Config":  "internal/coupon/config/dev.yaml"
     },
     {
         "Name":  "cart",
-        "Pid":  32056,
+        "Pid":  34996,
         "Log":  "D:\\workspace\\go\\DouyinMall\\backend\\.local\\seckill-stack\\logs\\cart.log",
         "Config":  "internal/cart/config/dev.yaml"
     },
     {
         "Name":  "seckill",
-        "Pid":  14636,
+        "Pid":  24992,
         "Log":  "D:\\workspace\\go\\DouyinMall\\backend\\.local\\seckill-stack\\logs\\seckill.log",
         "Config":  "internal/seckill/config/dev.yaml"
     }

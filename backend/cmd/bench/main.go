@@ -43,29 +43,55 @@ type benchConfig struct {
 	mockWechatURL string
 	requests      int
 	concurrency   int
+	stock         int
+	users         int
+	targetQPS     int
+	duplicatePct  int
+	hotPct        int
 	duplicateFan  int
+	settleTimeout time.Duration
 }
 
 type metricSummary struct {
-	Scenario          string  `json:"scenario"`
-	Requests          int     `json:"requests"`
-	Concurrency       int     `json:"concurrency"`
-	Success           int64   `json:"success"`
-	Failure           int64   `json:"failure"`
-	SuccessRate       float64 `json:"success_rate"`
-	RPS               float64 `json:"rps"`
-	P50Millis         float64 `json:"p50_ms"`
-	P90Millis         float64 `json:"p90_ms"`
-	P99Millis         float64 `json:"p99_ms"`
-	TotalDurationMS   float64 `json:"total_duration_ms"`
-	ExtraDescription  string  `json:"extra_description,omitempty"`
-	CorrectedRate     float64 `json:"corrected_rate"`
-	MisclosedOrders   int     `json:"misclosed_orders"`
-	OversoldCount     int     `json:"oversold_count"`
-	DuplicateUsers    int     `json:"duplicate_users"`
-	DuplicateRate     float64 `json:"duplicate_rate"`
-	ExpectedStock     int     `json:"expected_stock"`
-	FinalSuccessCount int     `json:"final_success_count"`
+	Scenario            string         `json:"scenario"`
+	Requests            int            `json:"requests"`
+	Concurrency         int            `json:"concurrency"`
+	Success             int64          `json:"success"`
+	Failure             int64          `json:"failure"`
+	SuccessRate         float64        `json:"success_rate"`
+	RPS                 float64        `json:"rps"`
+	P50Millis           float64        `json:"p50_ms"`
+	P90Millis           float64        `json:"p90_ms"`
+	P99Millis           float64        `json:"p99_ms"`
+	TotalDurationMS     float64        `json:"total_duration_ms"`
+	SubmitDurationMS    float64        `json:"submit_duration_ms,omitempty"`
+	SettleDurationMS    float64        `json:"settle_duration_ms,omitempty"`
+	EndToEndDurationMS  float64        `json:"end_to_end_duration_ms,omitempty"`
+	ExtraDescription    string         `json:"extra_description,omitempty"`
+	CorrectedRate       float64        `json:"corrected_rate"`
+	MisclosedOrders     int            `json:"misclosed_orders"`
+	OversoldCount       int            `json:"oversold_count"`
+	DuplicateUsers      int            `json:"duplicate_users"`
+	DuplicateRate       float64        `json:"duplicate_rate"`
+	ExpectedStock       int            `json:"expected_stock"`
+	FinalSuccessCount   int            `json:"final_success_count"`
+	FinalAvailableStock int            `json:"final_available_stock"`
+	ActivityID          int64          `json:"activity_id,omitempty"`
+	UserPool            int            `json:"user_pool,omitempty"`
+	TargetQPS           int            `json:"target_qps,omitempty"`
+	RequestedDuplicate  int            `json:"requested_duplicate_percent,omitempty"`
+	EffectiveDuplicate  float64        `json:"effective_duplicate_percent,omitempty"`
+	DuplicateRequests   int            `json:"duplicate_requests,omitempty"`
+	RequestedHot        int            `json:"requested_hot_percent,omitempty"`
+	HotRequests         int            `json:"hot_requests,omitempty"`
+	ColdRequests        int            `json:"cold_requests,omitempty"`
+	HotActivityID       int64          `json:"hot_activity_id,omitempty"`
+	ColdActivityID      int64          `json:"cold_activity_id,omitempty"`
+	HotExpectedStock    int            `json:"hot_expected_stock,omitempty"`
+	ColdExpectedStock   int            `json:"cold_expected_stock,omitempty"`
+	HotSuccessCount     int            `json:"hot_final_success_count,omitempty"`
+	ColdSuccessCount    int            `json:"cold_final_success_count,omitempty"`
+	StatusCounts        map[string]int `json:"status_counts,omitempty"`
 }
 
 func main() {
@@ -112,8 +138,18 @@ func parseFlags() benchConfig {
 	flag.StringVar(&cfg.mockWechatURL, "mock_wechat_url", "http://127.0.0.1:8888", "mock wechat base url")
 	flag.IntVar(&cfg.requests, "requests", 200, "total requests")
 	flag.IntVar(&cfg.concurrency, "concurrency", 20, "worker count")
+	flag.IntVar(&cfg.stock, "stock", 0, "seckill stock; defaults to requests/4 with a minimum of 50")
+	flag.IntVar(&cfg.users, "users", 0, "available user pool for seckill traffic; defaults to requests")
+	flag.IntVar(&cfg.targetQPS, "target_qps", 0, "target request rate for paced submission; 0 means no rate limit")
+	flag.IntVar(&cfg.duplicatePct, "duplicate_percent", 0, "duplicate request percent for seckill traffic")
+	flag.IntVar(&cfg.hotPct, "hot_percent", 100, "hot activity traffic percent for seckill traffic")
 	flag.IntVar(&cfg.duplicateFan, "duplicate_fan", 5, "duplicate requests per user")
+	settleTimeoutSec := flag.Int("settle_timeout_sec", 300, "max seconds to wait for async seckill settlement")
 	flag.Parse()
+	cfg.settleTimeout = time.Duration(*settleTimeoutSec) * time.Second
+	if cfg.users <= 0 {
+		cfg.users = cfg.requests
+	}
 	return cfg
 }
 
@@ -131,13 +167,12 @@ func runCheckoutBench(cfg benchConfig) (metricSummary, error) {
 		return metricSummary{}, err
 	}
 
-	productID, err := seedProductAndStock(productClient, inventoryClient, cfg.requests+20, 299)
+	productID, skuID, err := seedProductAndStock(productClient, inventoryClient, cfg.requests+20, 299)
 	if err != nil {
 		return metricSummary{}, err
 	}
-	skuID := productID + 1_000_000_000
 
-	durations, success, failure, elapsed := runWorkers(cfg.requests, cfg.concurrency, func(i int) error {
+	durations, success, failure, elapsed := runWorkers(cfg.requests, cfg.concurrency, 0, func(i int) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		userID := int64(1_000_000 + i)
@@ -194,11 +229,10 @@ func runPaymentConsistency(cfg benchConfig) (metricSummary, error) {
 	rdb := redis.NewClient(&redis.Options{Addr: cfg.redisAddr})
 	defer func() { _ = rdb.Close() }()
 
-	productID, err := seedProductAndStock(productClient, inventoryClient, cfg.requests+20, 399)
+	productID, skuID, err := seedProductAndStock(productClient, inventoryClient, cfg.requests+20, 399)
 	if err != nil {
 		return metricSummary{}, err
 	}
-	skuID := productID + 2_000_000_000
 
 	orderIDs := make([]int64, 0, cfg.requests)
 	for i := 0; i < cfg.requests; i++ {
@@ -324,45 +358,125 @@ func runSeckillBench(cfg benchConfig) (metricSummary, error) {
 	}
 	defer db.Close()
 
-	stock := cfg.requests / 4
-	if stock < 50 {
-		stock = 50
-	}
-	activityID, err := createSeckillActivity(seckillClient, stock, 99)
+	stock := seckillStock(cfg)
+	workload, err := buildSeckillWorkload(cfg.requests, cfg.users, cfg.duplicatePct, cfg.hotPct)
 	if err != nil {
 		return metricSummary{}, err
 	}
 
-	durations, success, failure, elapsed := runWorkers(cfg.requests, cfg.concurrency, func(i int) error {
+	hotStock, coldStock := splitStockByTraffic(stock, cfg.hotPct)
+	if hotStock <= 0 {
+		hotStock = stock
+	}
+
+	hotActivityID, err := createSeckillActivity(seckillClient, hotStock, 99)
+	if err != nil {
+		return metricSummary{}, err
+	}
+	activityIDs := []int64{hotActivityID}
+	coldActivityID := int64(0)
+	if coldStock > 0 {
+		coldActivityID, err = createSeckillActivity(seckillClient, coldStock, 109)
+		if err != nil {
+			return metricSummary{}, err
+		}
+		activityIDs = append(activityIDs, coldActivityID)
+	}
+
+	workStart := time.Now()
+	durations, success, failure, elapsed := runWorkers(len(workload.Requests), cfg.concurrency, cfg.targetQPS, func(i int) error {
+		spec := workload.Requests[i]
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_, err := seckillClient.SubmitSeckill(ctx, &seckillv1.SubmitSeckillReq{
+		activityID := hotActivityID
+		if spec.ActivityIndex == 1 && coldActivityID != 0 {
+			activityID = coldActivityID
+		}
+		resp, err := seckillClient.SubmitSeckill(ctx, &seckillv1.SubmitSeckillReq{
 			ActivityId: activityID,
-			UserId:     int64(3_000_000 + i),
+			UserId:     spec.UserID,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		if resp.GetStatus() == "FAILED" {
+			return fmt.Errorf("submit rejected: %s", resp.GetMessage())
+		}
+		return nil
 	})
 
-	waitErr := waitForSeckillSettlement(db, activityID, time.Now().Add(60*time.Second))
+	settleStart := time.Now()
+	waitErr := waitForSeckillSettlement(db, activityIDs, int(success), time.Now().Add(cfg.settleTimeout))
+	settleElapsed := time.Since(settleStart)
 	if waitErr != nil {
 		return metricSummary{}, waitErr
 	}
 
-	var successCount int
-	if err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_qualification WHERE activity_id = ?", activityID).Scan(&successCount); err != nil {
+	hotSuccessCount, hotAvailableStock, err := querySeckillActivityOutcome(db, hotActivityID)
+	if err != nil {
+		return metricSummary{}, err
+	}
+	coldSuccessCount := 0
+	coldAvailableStock := 0
+	if coldActivityID != 0 {
+		coldSuccessCount, coldAvailableStock, err = querySeckillActivityOutcome(db, coldActivityID)
+		if err != nil {
+			return metricSummary{}, err
+		}
+	}
+	statusCounts, err := querySeckillStatusCounts(db, activityIDs)
+	if err != nil {
 		return metricSummary{}, err
 	}
 
+	successCount := hotSuccessCount + coldSuccessCount
+	finalAvailableStock := hotAvailableStock + coldAvailableStock
 	oversold := 0
 	if successCount > stock {
 		oversold = successCount - stock
 	}
 
-	summary := buildSummary("seckill_submit", cfg.requests, cfg.concurrency, success, failure, durations, elapsed, "")
+	extra := ""
+	if workload.EffectiveDuplicatePct != float64(workload.RequestedDuplicatePct) {
+		extra = fmt.Sprintf("effective duplicate percent adjusted to %.2f%% because user pool=%d is smaller than requested unique demand", workload.EffectiveDuplicatePct, cfg.users)
+	}
+
+	summary := buildSummary("seckill_submit", cfg.requests, cfg.concurrency, success, failure, durations, elapsed, extra)
+	summary.ActivityID = hotActivityID
+	summary.SubmitDurationMS = elapsed.Seconds() * 1000
+	summary.SettleDurationMS = settleElapsed.Seconds() * 1000
+	summary.EndToEndDurationMS = time.Since(workStart).Seconds() * 1000
 	summary.ExpectedStock = stock
 	summary.FinalSuccessCount = successCount
+	summary.FinalAvailableStock = finalAvailableStock
 	summary.OversoldCount = oversold
+	summary.StatusCounts = statusCounts
+	summary.UserPool = cfg.users
+	summary.TargetQPS = cfg.targetQPS
+	summary.RequestedDuplicate = workload.RequestedDuplicatePct
+	summary.EffectiveDuplicate = workload.EffectiveDuplicatePct
+	summary.DuplicateRequests = workload.DuplicateRequests
+	summary.RequestedHot = workload.RequestedHotTrafficPct
+	summary.HotRequests = workload.HotRequests
+	summary.ColdRequests = workload.ColdRequests
+	summary.HotActivityID = hotActivityID
+	summary.ColdActivityID = coldActivityID
+	summary.HotExpectedStock = hotStock
+	summary.ColdExpectedStock = coldStock
+	summary.HotSuccessCount = hotSuccessCount
+	summary.ColdSuccessCount = coldSuccessCount
 	return summary, nil
+}
+
+func seckillStock(cfg benchConfig) int {
+	if cfg.stock > 0 {
+		return cfg.stock
+	}
+	stock := cfg.requests / 4
+	if stock < 50 {
+		stock = 50
+	}
+	return stock
 }
 
 func runSeckillDuplicate(cfg benchConfig) (metricSummary, error) {
@@ -383,20 +497,29 @@ func runSeckillDuplicate(cfg benchConfig) (metricSummary, error) {
 	}
 
 	totalRequests := userCount * cfg.duplicateFan
-	durations, success, failure, elapsed := runWorkers(totalRequests, cfg.concurrency, func(i int) error {
+	workStart := time.Now()
+	durations, success, failure, elapsed := runWorkers(totalRequests, cfg.concurrency, 0, func(i int) error {
 		userID := int64(4_000_000 + (i % userCount))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_, err := seckillClient.SubmitSeckill(ctx, &seckillv1.SubmitSeckillReq{
+		resp, err := seckillClient.SubmitSeckill(ctx, &seckillv1.SubmitSeckillReq{
 			ActivityId: activityID,
 			UserId:     userID,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		if resp.GetStatus() == "FAILED" {
+			return fmt.Errorf("submit rejected: %s", resp.GetMessage())
+		}
+		return nil
 	})
 
-	if err = waitForSeckillSettlement(db, activityID, time.Now().Add(60*time.Second)); err != nil {
+	settleStart := time.Now()
+	if err = waitForSeckillSettlement(db, []int64{activityID}, int(success), time.Now().Add(cfg.settleTimeout)); err != nil {
 		return metricSummary{}, err
 	}
+	settleElapsed := time.Since(settleStart)
 
 	var duplicateUsers int
 	if err = db.QueryRowContext(context.Background(), `
@@ -409,23 +532,40 @@ SELECT COUNT(1) FROM (
 ) t`, activityID).Scan(&duplicateUsers); err != nil {
 		return metricSummary{}, err
 	}
+	var finalAvailableStock int
+	if err = db.QueryRowContext(context.Background(), "SELECT available_stock FROM seckill_activity WHERE id = ?", activityID).Scan(&finalAvailableStock); err != nil {
+		return metricSummary{}, err
+	}
+	statusCounts, err := querySeckillStatusCounts(db, []int64{activityID})
+	if err != nil {
+		return metricSummary{}, err
+	}
 
 	summary := buildSummary("seckill_duplicate_guard", totalRequests, cfg.concurrency, success, failure, durations, elapsed, "")
+	summary.ActivityID = activityID
+	summary.SubmitDurationMS = elapsed.Seconds() * 1000
+	summary.SettleDurationMS = settleElapsed.Seconds() * 1000
+	summary.EndToEndDurationMS = time.Since(workStart).Seconds() * 1000
+	summary.ExpectedStock = userCount
 	summary.DuplicateUsers = duplicateUsers
 	summary.DuplicateRate = float64(duplicateUsers) / float64(userCount)
 	summary.FinalSuccessCount = userCount - duplicateUsers
+	summary.FinalAvailableStock = finalAvailableStock
+	summary.StatusCounts = statusCounts
 	return summary, nil
 }
 
-func seedProductAndStock(productClient productservice.Client, inventoryClient inventoryservice.Client, stock int, price int64) (int64, error) {
+func seedProductAndStock(productClient productservice.Client, inventoryClient inventoryservice.Client, stock int, price int64) (int64, int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	runSuffix := time.Now().UnixNano()
+	skuID := runSuffix%1_000_000_000 + 1_000_000_000
 	createResp, err := productClient.CreateProduct(ctx, &productv1.CreateProductReq{
 		Product: &productv1.Product{
 			Name:         fmt.Sprintf("bench-product-%d", runSuffix),
 			Description:  "benchmark product",
 			Picture:      "https://example.com/bench.png",
+			SkuId:        skuID,
 			Price:        price,
 			Currency:     "CNY",
 			Categories:   []string{"benchmark"},
@@ -435,7 +575,7 @@ func seedProductAndStock(productClient productservice.Client, inventoryClient in
 		},
 	})
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	adjustResp, err := inventoryClient.AdjustStock(ctx, &inventoryv1.AdjustStockReq{
@@ -446,12 +586,12 @@ func seedProductAndStock(productClient productservice.Client, inventoryClient in
 		}},
 	})
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if adjustResp.GetStatusCode() != 0 {
-		return 0, fmt.Errorf("adjust stock failed: code=%d msg=%s", adjustResp.GetStatusCode(), adjustResp.GetStatusMsg())
+		return 0, 0, fmt.Errorf("adjust stock failed: code=%d msg=%s", adjustResp.GetStatusCode(), adjustResp.GetStatusMsg())
 	}
-	return createResp.GetId(), nil
+	return createResp.GetId(), skuID, nil
 }
 
 func createSeckillActivity(client seckillservice.Client, stock int, price int64) (int64, error) {
@@ -475,19 +615,17 @@ func createSeckillActivity(client seckillservice.Client, stock int, price int64)
 	return resp.GetActivityId(), nil
 }
 
-func waitForSeckillSettlement(db *sql.DB, activityID int64, deadline time.Time) error {
+func waitForSeckillSettlement(db *sql.DB, activityIDs []int64, expectedRequests int, deadline time.Time) error {
 	for time.Now().Before(deadline) {
-		var total int
-		err := db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ?", activityID).Scan(&total)
+		total, err := querySeckillRequestCount(db, activityIDs, "")
 		if err != nil {
 			return err
 		}
-		if total == 0 {
+		if total < expectedRequests {
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
-		var pending int
-		err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ? AND status IN ('PROCESSING','ORDER_CREATING')", activityID).Scan(&pending)
+		pending, err := querySeckillRequestCount(db, activityIDs, "AND status IN ('PROCESSING','ORDER_CREATING')")
 		if err != nil {
 			return err
 		}
@@ -496,24 +634,63 @@ func waitForSeckillSettlement(db *sql.DB, activityID int64, deadline time.Time) 
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	rows, err := db.QueryContext(context.Background(), "SELECT status, COUNT(1) FROM seckill_request WHERE activity_id = ? GROUP BY status", activityID)
+	statusCounts, err := querySeckillStatusCounts(db, activityIDs)
 	if err != nil {
-		return fmt.Errorf("timeout waiting seckill activity %d settle and query status summary failed: %w", activityID, err)
+		return fmt.Errorf("timeout waiting seckill activities %v settle and query status summary failed: %w", activityIDs, err)
 	}
-	defer rows.Close()
-	statusCounts := map[string]int{}
-	for rows.Next() {
-		var status string
-		var count int
-		if scanErr := rows.Scan(&status, &count); scanErr != nil {
-			return fmt.Errorf("timeout waiting seckill activity %d settle and scan status summary failed: %w", activityID, scanErr)
-		}
-		statusCounts[status] = count
-	}
-	return fmt.Errorf("timeout waiting seckill activity %d settle, statusCounts=%v", activityID, statusCounts)
+	return fmt.Errorf("timeout waiting seckill activities %v settle, expectedRequests=%d statusCounts=%v", activityIDs, expectedRequests, statusCounts)
 }
 
-func runWorkers(total, concurrency int, fn func(i int) error) ([]float64, int64, int64, time.Duration) {
+func querySeckillStatusCounts(db *sql.DB, activityIDs []int64) (map[string]int, error) {
+	statusCounts := map[string]int{}
+	for _, activityID := range activityIDs {
+		rows, err := db.QueryContext(context.Background(), "SELECT status, COUNT(1) FROM seckill_request WHERE activity_id = ? GROUP BY status", activityID)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var status string
+			var count int
+			if scanErr := rows.Scan(&status, &count); scanErr != nil {
+				_ = rows.Close()
+				return nil, scanErr
+			}
+			statusCounts[status] += count
+		}
+		if err = rows.Close(); err != nil {
+			return nil, err
+		}
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return statusCounts, nil
+}
+
+func querySeckillActivityOutcome(db *sql.DB, activityID int64) (successCount int, availableStock int, err error) {
+	if err = db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM seckill_qualification WHERE activity_id = ?", activityID).Scan(&successCount); err != nil {
+		return 0, 0, err
+	}
+	if err = db.QueryRowContext(context.Background(), "SELECT available_stock FROM seckill_activity WHERE id = ?", activityID).Scan(&availableStock); err != nil {
+		return 0, 0, err
+	}
+	return successCount, availableStock, nil
+}
+
+func querySeckillRequestCount(db *sql.DB, activityIDs []int64, extraCondition string) (int, error) {
+	total := 0
+	for _, activityID := range activityIDs {
+		var count int
+		query := "SELECT COUNT(1) FROM seckill_request WHERE activity_id = ? " + extraCondition
+		if err := db.QueryRowContext(context.Background(), query, activityID).Scan(&count); err != nil {
+			return 0, err
+		}
+		total += count
+	}
+	return total, nil
+}
+
+func runWorkers(total, concurrency, targetQPS int, fn func(i int) error) ([]float64, int64, int64, time.Duration) {
 	var success int64
 	var failure int64
 	durations := make([]float64, 0, total)
@@ -542,7 +719,14 @@ func runWorkers(total, concurrency int, fn func(i int) error) ([]float64, int64,
 		}()
 	}
 
+	dispatchStart := time.Now()
 	for i := 0; i < total; i++ {
+		if targetQPS > 0 {
+			scheduledAt := dispatchStart.Add(time.Duration(i) * time.Second / time.Duration(targetQPS))
+			if sleep := time.Until(scheduledAt); sleep > 0 {
+				time.Sleep(sleep)
+			}
+		}
 		jobs <- i
 	}
 	close(jobs)

@@ -1,13 +1,14 @@
 db:
   host: "134.175.67.79"
   port: 3306
-  user: "root"
-  password: ""
-  database: "douyinmall"
+  user: "app"
+  password: "0324"
+  database: "douyin_mall"
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
   addr: "106.52.154.235:6379"
+  password: "0624"
 
 etcd:
   endpoints:
@@ -34,7 +35,7 @@ mcp:
   tools:
     - key: "get_product"
       name: "get_product"
-      description: "Get product base information by product id."
+      description: "Get product information by product id and sku id."
       enabled: true
 
 kafka:

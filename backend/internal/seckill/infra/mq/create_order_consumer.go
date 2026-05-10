@@ -4,201 +4,135 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"time"
 
 	seckilldomain "github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/pkg/pool"
-	rmq_client "github.com/apache/rocketmq-clients/golang"
+	pushconsumer "github.com/apache/rocketmq-client-go/v2/consumer"
+	pushprimitive "github.com/apache/rocketmq-client-go/v2/primitive"
 )
 
 const (
-	TopicSeckillRequest     = "seckill_request"
-	TopicOrderStatusUpdate  = "order_status_update"
+	TopicSeckillRequest    = "seckill_request"
+	TopicOrderStatusUpdate = "order_status_update"
 
-	defaultGlobalWorkerNum   = 32
-	defaultPerActivityLimit  = 8
-	defaultReceiveMaxMessage = 16
-	defaultShutdownTimeout   = 10 * time.Second
+	defaultGlobalWorkerNum = 32
+	defaultHandleTimeout   = 25 * time.Second
 )
 
 func NativeDeadLetterTopic(consumerGroup string) string {
 	return "%DLQ%" + consumerGroup
 }
 
-type simpleConsumer interface {
+type pushConsumer interface {
 	Start() error
-	GracefulStop() error
-	Receive(ctx context.Context, maxMessageNum int32, invisibleDuration time.Duration) ([]*rmq_client.MessageView, error)
-	Ack(ctx context.Context, messageView *rmq_client.MessageView) error
+	Shutdown() error
+	Subscribe(topic string, selector pushconsumer.MessageSelector,
+		f func(context.Context, ...*pushprimitive.MessageExt) (pushconsumer.ConsumeResult, error)) error
 }
 
 type SeckillConsumerOptions struct {
-	InvisibleDuration      time.Duration
-	HandleTimeout          time.Duration
-	ShutdownTimeout        time.Duration
-	MaxMessageNum          int32
-	GlobalWorkerNum        int
-	PerActivityConcurrency int
+	HandleTimeout   time.Duration
+	GlobalWorkerNum int
 }
 
 func (o SeckillConsumerOptions) withDefaults() SeckillConsumerOptions {
-	if o.InvisibleDuration <= 0 {
-		o.InvisibleDuration = 30 * time.Second
-	}
 	if o.HandleTimeout <= 0 {
-		o.HandleTimeout = o.InvisibleDuration - 5*time.Second
-		if o.HandleTimeout <= 0 {
-			o.HandleTimeout = o.InvisibleDuration / 2
-		}
-		if o.HandleTimeout <= 0 {
-			o.HandleTimeout = time.Second
-		}
-	}
-	if o.ShutdownTimeout <= 0 {
-		o.ShutdownTimeout = defaultShutdownTimeout
-	}
-	if o.MaxMessageNum <= 0 {
-		o.MaxMessageNum = defaultReceiveMaxMessage
+		o.HandleTimeout = defaultHandleTimeout
 	}
 	if o.GlobalWorkerNum <= 0 {
 		o.GlobalWorkerNum = defaultGlobalWorkerNum
-	}
-	if o.PerActivityConcurrency <= 0 {
-		o.PerActivityConcurrency = defaultPerActivityLimit
 	}
 	return o
 }
 
 type SeckillConsumer struct {
-	consumer  simpleConsumer
-	processor *EventProcessor
-	logger    logger.LoggerV1
-	options   SeckillConsumerOptions
-
-	taskPool *pool.KeyedConsumerPool
-	stopCh   chan struct{}
-	cancel   context.CancelFunc
+	consumer pushConsumer
+	logger   logger.LoggerV1
+	options  SeckillConsumerOptions
+	process  func(context.Context, seckilldomain.Event) error
 }
 
-type seckillMessageTask struct {
-	msg *rmq_client.MessageView
-	evt seckilldomain.Event
-}
-
-func NewSeckillConsumer(consumer simpleConsumer, processor *EventProcessor, l logger.LoggerV1, options SeckillConsumerOptions) *SeckillConsumer {
+func NewSeckillConsumer(consumer pushConsumer, processor *EventProcessor, l logger.LoggerV1, options SeckillConsumerOptions) *SeckillConsumer {
+	options = options.withDefaults()
 	c := &SeckillConsumer{
-		consumer:  consumer,
-		processor: processor,
-		logger:    l,
-		options:   options.withDefaults(),
-		stopCh:    make(chan struct{}),
+		consumer: consumer,
+		logger:   l,
+		options:  options,
 	}
-	taskPool, err := pool.NewKeyedConsumerPool(pool.KeyedConsumerPoolOptions{
-		GlobalWorkerNum:        c.options.GlobalWorkerNum,
-		PerActivityConcurrency: c.options.PerActivityConcurrency,
-		TaskTimeout:            c.options.HandleTimeout,
-	}, l)
-	if err != nil {
-		panic(fmt.Errorf("init seckill keyed consumer pool failed: %w", err))
+	if processor != nil {
+		c.process = processor.Process
 	}
-	c.taskPool = taskPool
+	if c.process == nil {
+		panic("seckill processor is required")
+	}
+	if c.consumer != nil {
+		if err := c.subscribe(); err != nil {
+			panic(fmt.Errorf("subscribe seckill push consumer failed: %w", err))
+		}
+	}
 	return c
 }
 
+func (c *SeckillConsumer) subscribe() error {
+	if c.consumer == nil {
+		return nil
+	}
+	return c.consumer.Subscribe(TopicSeckillRequest, pushconsumer.MessageSelector{
+		Type:       pushconsumer.TAG,
+		Expression: "*",
+	}, c.consumeMessages)
+}
+
 func (c *SeckillConsumer) Start() error {
+	if c.consumer == nil {
+		return nil
+	}
 	if err := c.consumer.Start(); err != nil {
 		return err
 	}
-	loopCtx, cancel := context.WithCancel(context.Background())
-	c.cancel = cancel
-	go c.loop(loopCtx)
+	c.logger.Info("seckill request push consumer started",
+		logger.Int("consumeConcurrency", c.options.GlobalWorkerNum),
+		logger.Field{Key: "handleTimeout", Value: c.options.HandleTimeout},
+		logger.String("consumerMode", "push"))
 	return nil
 }
 
 func (c *SeckillConsumer) Stop() error {
-	select {
-	case <-c.stopCh:
-	default:
-		close(c.stopCh)
+	if c.consumer == nil {
+		return nil
 	}
-	if c.cancel != nil {
-		c.cancel()
-	}
-	if c.taskPool != nil {
-		if ok := c.taskPool.CloseWithTimeout(c.options.ShutdownTimeout); !ok {
-			c.logger.Warn("seckill consumer stopped before all tasks finished",
-				logger.Field{Key: "shutdownTimeout", Value: c.options.ShutdownTimeout})
-		}
-	}
-	if c.consumer != nil {
-		return c.consumer.GracefulStop()
-	}
-	return nil
+	return c.consumer.Shutdown()
 }
 
-func (c *SeckillConsumer) loop(ctx context.Context) {
-	for {
-		select {
-		case <-c.stopCh:
-			return
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		msgs, err := c.consumer.Receive(ctx, c.options.MaxMessageNum, c.options.InvisibleDuration)
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			c.logger.Warn("receive seckill message failed", logger.Error(err))
-			time.Sleep(time.Second)
+func (c *SeckillConsumer) consumeMessages(ctx context.Context, msgs ...*pushprimitive.MessageExt) (pushconsumer.ConsumeResult, error) {
+	for _, msg := range msgs {
+		var evt seckilldomain.Event
+		if err := json.Unmarshal(msg.Body, &evt); err != nil {
+			c.logger.Error("decode seckill message failed, skip poison message",
+				logger.Error(err),
+				logger.String("messageID", msg.MsgId))
 			continue
 		}
 
-		for _, msg := range msgs {
-			if err = c.dispatchMessage(msg); err != nil {
-				c.logger.Warn("dispatch seckill message rejected",
-					logger.Error(err),
-					logger.String("messageID", msg.GetMessageId()),
-					logger.Int32("deliveryAttempt", msg.GetDeliveryAttempt()))
-			}
+		if err := c.handleEventWithTimeout(ctx, evt); err != nil {
+			c.logger.Warn("process seckill message failed, waiting for MQ retry",
+				logger.Error(err),
+				logger.String("requestNo", evt.RequestNo),
+				logger.String("messageID", msg.MsgId),
+				logger.Int32("reconsumeTimes", msg.ReconsumeTimes))
+			return pushconsumer.ConsumeRetryLater, nil
 		}
 	}
+	return pushconsumer.ConsumeSuccess, nil
 }
 
-func (c *SeckillConsumer) dispatchMessage(msg *rmq_client.MessageView) error {
-	var evt seckilldomain.Event
-	if err := json.Unmarshal(msg.GetBody(), &evt); err != nil {
-		return fmt.Errorf("decode seckill message failed: %w", err)
+func (c *SeckillConsumer) handleEventWithTimeout(ctx context.Context, evt seckilldomain.Event) error {
+	taskCtx := ctx
+	cancel := func() {}
+	if c.options.HandleTimeout > 0 {
+		taskCtx, cancel = context.WithTimeout(ctx, c.options.HandleTimeout)
 	}
-
-	return c.taskPool.Submit(context.Background(), activityKey(evt.ActivityID), func(ctx context.Context) error {
-		return c.handleTask(ctx, seckillMessageTask{
-			msg: msg,
-			evt: evt,
-		})
-	})
-}
-
-func (c *SeckillConsumer) handleTask(ctx context.Context, messageTask seckillMessageTask) error {
-	err := c.processor.Process(ctx, messageTask.evt)
-	if err == nil {
-		if ackErr := c.consumer.Ack(ctx, messageTask.msg); ackErr != nil {
-			c.logger.Error("ack seckill message failed", logger.Error(ackErr))
-		}
-		return nil
-	}
-
-	c.logger.Warn("seckill message will retry",
-		logger.Error(err),
-		logger.String("requestNo", messageTask.evt.RequestNo),
-		logger.Int32("deliveryAttempt", messageTask.msg.GetDeliveryAttempt()))
-	return err
-}
-
-func activityKey(activityID int64) string {
-	return strconv.FormatInt(activityID, 10)
+	defer cancel()
+	return c.process(taskCtx, evt)
 }

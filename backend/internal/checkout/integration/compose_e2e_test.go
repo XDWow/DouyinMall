@@ -64,6 +64,7 @@ func TestCheckoutComposeEndToEnd(t *testing.T) {
 
 	now := time.Now()
 	userID := now.UnixNano()%1_000_000_000 + 50_000
+	skuID := userID + 1_000_000
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -73,6 +74,7 @@ func TestCheckoutComposeEndToEnd(t *testing.T) {
 			Name:         fmt.Sprintf("compose-e2e-product-%d", userID),
 			Description:  "compose checkout e2e product",
 			Picture:      "https://example.com/product.png",
+			SkuId:        skuID,
 			Price:        299,
 			Currency:     "CNY",
 			Categories:   []string{"integration"},
@@ -83,7 +85,6 @@ func TestCheckoutComposeEndToEnd(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotZero(t, createProductResp.GetId())
-	skuID := createProductResp.GetId() + 1_000_000
 
 	adjustResp, err := inventoryClient.AdjustStock(ctx, &inventoryv1.AdjustStockReq{
 		Reason: "compose_e2e_seed",
@@ -197,6 +198,7 @@ func TestCheckoutTimeoutCancelRestoresStock(t *testing.T) {
 
 	now := time.Now()
 	userID := now.UnixNano()%1_000_000_000 + 80_000
+	skuID := userID + 2_000_000
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -206,6 +208,7 @@ func TestCheckoutTimeoutCancelRestoresStock(t *testing.T) {
 			Name:         fmt.Sprintf("compose-timeout-product-%d", userID),
 			Description:  "compose checkout timeout product",
 			Picture:      "https://example.com/product-timeout.png",
+			SkuId:        skuID,
 			Price:        399,
 			Currency:     "CNY",
 			Categories:   []string{"integration"},
@@ -216,7 +219,6 @@ func TestCheckoutTimeoutCancelRestoresStock(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotZero(t, createProductResp.GetId())
-	skuID := createProductResp.GetId() + 2_000_000
 
 	adjustResp, err := inventoryClient.AdjustStock(ctx, &inventoryv1.AdjustStockReq{
 		Reason: "compose_e2e_timeout_seed",

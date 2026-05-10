@@ -21,26 +21,23 @@ func (h *ProductHandler) ListProducts(ctx context.Context, req *v1.ListProductsR
 	if err != nil {
 		return nil, err
 	}
-
-	return &v1.ListProductsResp{
-		Products: toProtoList(products),
-	}, nil
+	return &v1.ListProductsResp{Products: toProtoList(products)}, nil
 }
 
 func (h *ProductHandler) GetProducts(ctx context.Context, req *v1.GetProductsReq) (*v1.GetProductsResp, error) {
-	ids := req.GetId()
-	products := make([]*v1.Product, 0, len(ids))
-	for _, id := range ids {
-		product, err := h.svc.GetProduct(ctx, id)
+	items := req.GetItems()
+	products := make([]*v1.Product, 0, len(items))
+	for _, item := range items {
+		product, err := h.svc.GetProduct(ctx, domain.ProductQuery{
+			ID:    item.GetProductId(),
+			SKUID: item.GetSkuId(),
+		})
 		if err != nil {
 			return nil, err
 		}
 		products = append(products, toProto(product))
 	}
-
-	return &v1.GetProductsResp{
-		Product: products,
-	}, nil
+	return &v1.GetProductsResp{Product: products}, nil
 }
 
 func (h *ProductHandler) CreateProduct(ctx context.Context, req *v1.CreateProductReq) (*v1.CreateProductResp, error) {
@@ -48,7 +45,6 @@ func (h *ProductHandler) CreateProduct(ctx context.Context, req *v1.CreateProduc
 	if err != nil {
 		return nil, err
 	}
-
 	return &v1.CreateProductResp{Id: id}, nil
 }
 
@@ -57,29 +53,28 @@ func (h *ProductHandler) UpdateProduct(ctx context.Context, req *v1.UpdateProduc
 	if err != nil {
 		return nil, err
 	}
-
 	return &v1.UpdateProductResp{Id: id}, nil
 }
 
 func (h *ProductHandler) DeleteProduct(ctx context.Context, req *v1.DeleteProductReq) (*v1.DeleteProductResp, error) {
-	err := h.svc.DeleteProduct(ctx, req.GetId(), req.GetUserId())
-	if err != nil {
+	if err := h.svc.DeleteProduct(ctx, req.GetId(), req.GetUserId()); err != nil {
 		return nil, err
 	}
-
 	return &v1.DeleteProductResp{}, nil
 }
 
 func toProto(p domain.Product) *v1.Product {
 	return &v1.Product{
 		Id:           p.ID,
+		SkuId:        p.SKUID,
 		Name:         p.Name,
 		Description:  p.Description,
 		Picture:      p.Picture,
 		SliderImgs:   p.SlideImgs,
 		Price:        p.Price,
+		Currency:     p.Currency,
 		Categories:   p.Categories,
-		InStock:      p.InStock, // 鐩存帴浣跨敤 in_stock锛堟潵鑷簱瀛樻湇鍔★級
+		InStock:      p.InStock,
 		MerchantID:   p.MerchantID,
 		MerchantName: p.MerchantName,
 	}
@@ -94,18 +89,21 @@ func toProtoList(products []domain.Product) []*v1.Product {
 }
 
 func toDomain(p *v1.Product) domain.Product {
+	if p == nil {
+		return domain.Product{}
+	}
 	return domain.Product{
 		ID:           p.GetId(),
+		SKUID:        p.GetSkuId(),
 		Name:         p.GetName(),
 		Description:  p.GetDescription(),
 		Picture:      p.GetPicture(),
 		SlideImgs:    p.GetSliderImgs(),
 		Price:        p.GetPrice(),
+		Currency:     p.GetCurrency(),
 		Categories:   p.GetCategories(),
-		InStock:      p.GetInStock(), // 鐩存帴浣跨敤 in_stock锛堝簱瀛樻湇鍔＄鐞嗭級
+		InStock:      p.GetInStock(),
 		MerchantID:   p.GetMerchantID(),
 		MerchantName: p.GetMerchantName(),
 	}
 }
-
-

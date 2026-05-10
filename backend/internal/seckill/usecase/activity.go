@@ -10,10 +10,14 @@ import (
 type CreateActivityUseCase struct {
 	activityRepo domain.ActivityRepository
 	cache        domain.Cache
+	soldOut      domain.SoldOutMarker
 }
 
-func NewCreateActivityUseCase(activityRepo domain.ActivityRepository, cache domain.Cache) *CreateActivityUseCase {
-	return &CreateActivityUseCase{activityRepo: activityRepo, cache: cache}
+func NewCreateActivityUseCase(activityRepo domain.ActivityRepository, cache domain.Cache, soldOut domain.SoldOutMarker) *CreateActivityUseCase {
+	if soldOut == nil {
+		soldOut = domain.NewNopSoldOutMarker()
+	}
+	return &CreateActivityUseCase{activityRepo: activityRepo, cache: cache, soldOut: soldOut}
 }
 
 type CreateActivityCmd struct {
@@ -50,6 +54,8 @@ func (uc *CreateActivityUseCase) Execute(ctx context.Context, cmd CreateActivity
 	if err := uc.activityRepo.Create(ctx, activity); err != nil {
 		return 0, err
 	}
+	// 新活动创建后先清一次本机售罄标记，避免复用旧状态。
+	uc.soldOut.Clear(activity.ID)
 	_ = uc.cache.SetActivity(ctx, activity)
 	_ = uc.cache.SetActivityStock(ctx, activity.ID, activity.AvailableStock)
 	return activity.ID, nil
@@ -58,10 +64,14 @@ func (uc *CreateActivityUseCase) Execute(ctx context.Context, cmd CreateActivity
 type UpdateActivityStatusUseCase struct {
 	activityRepo domain.ActivityRepository
 	cache        domain.Cache
+	soldOut      domain.SoldOutMarker
 }
 
-func NewUpdateActivityStatusUseCase(activityRepo domain.ActivityRepository, cache domain.Cache) *UpdateActivityStatusUseCase {
-	return &UpdateActivityStatusUseCase{activityRepo: activityRepo, cache: cache}
+func NewUpdateActivityStatusUseCase(activityRepo domain.ActivityRepository, cache domain.Cache, soldOut domain.SoldOutMarker) *UpdateActivityStatusUseCase {
+	if soldOut == nil {
+		soldOut = domain.NewNopSoldOutMarker()
+	}
+	return &UpdateActivityStatusUseCase{activityRepo: activityRepo, cache: cache, soldOut: soldOut}
 }
 
 func (uc *UpdateActivityStatusUseCase) Execute(ctx context.Context, activityID int64, status string) error {
@@ -72,6 +82,8 @@ func (uc *UpdateActivityStatusUseCase) Execute(ctx context.Context, activityID i
 	if err != nil {
 		return err
 	}
+	// 活动状态被人工调整后，保守起见清掉本机售罄标记。
+	uc.soldOut.Clear(activityID)
 	return uc.cache.SetActivity(ctx, activity)
 }
 
@@ -99,5 +111,3 @@ func (uc *GetActivityUseCase) Execute(ctx context.Context, activityID int64) (*d
 	_ = uc.cache.SetActivity(ctx, activity)
 	return activity, nil
 }
-
-

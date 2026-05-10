@@ -374,6 +374,14 @@ services:
       TZ: Asia/Shanghai
       DB_PASSWORD: ${DB_PASSWORD:-root}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      ROCKETMQ_NAME_SERVER: ${ROCKETMQ_NAME_SERVER:-43.136.121.171:9876}
+      ROCKETMQ_PRODUCER_GROUP: ${ROCKETMQ_PRODUCER_GROUP:-seckill-request-producer}
+      ROCKETMQ_REQUEST_GROUP: ${ROCKETMQ_REQUEST_GROUP:-seckill-request-consumer}
+      ROCKETMQ_DEAD_LETTER_GROUP: ${ROCKETMQ_DEAD_LETTER_GROUP:-seckill-request-dead-letter-consumer}
+      ROCKETMQ_ORDER_STATUS_GROUP: ${ROCKETMQ_ORDER_STATUS_GROUP:-seckill-order-status-consumer}
+      ROCKETMQ_ACCESS_KEY: ${ROCKETMQ_ACCESS_KEY:-}
+      ROCKETMQ_SECRET_KEY: ${ROCKETMQ_SECRET_KEY:-}
+      ROCKETMQ_GLOBAL_WORKER_NUM: ${ROCKETMQ_GLOBAL_WORKER_NUM:-10}
     depends_on:
       - mysql
       - redis

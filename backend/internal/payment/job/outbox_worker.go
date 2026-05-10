@@ -43,7 +43,7 @@ func (j *PaymentOutboxWorkerJob) Run() error {
 	for {
 		events, err := j.outboxRepo.ListPending(ctx, offset, j.batchSize)
 		if err != nil {
-			j.l.Error("list pending payment outbox failed", logger.Error(err))
+			j.l.Error("查询待投递支付 outbox 失败", logger.Error(err))
 			return err
 		}
 		if len(events) == 0 {
@@ -77,22 +77,22 @@ func (j *PaymentOutboxWorkerJob) processBatch(ctx context.Context, outboxEvents 
 				successIDs = append(successIDs, outboxEvents[i].ID)
 				continue
 			}
-			j.l.Error("send payment outbox event failed",
+			j.l.Error("投递支付 outbox 事件失败",
 				logger.Error(err),
 				logger.Int64("outboxID", outboxEvents[i].ID),
 				logger.Int64("orderID", outboxEvents[i].Event.OrderID))
 			retry, retryErr := j.outboxRepo.IncreaseRetry(ctx, outboxEvents[i].ID)
 			if retryErr != nil {
-				j.l.Error("increase payment outbox retry failed",
+				j.l.Error("增加支付 outbox 重试次数失败",
 					logger.Error(retryErr),
 					logger.Int64("outboxID", outboxEvents[i].ID))
 			} else if retry > j.maxRetry {
-				j.l.Warn("payment outbox retry exhausted",
+				j.l.Warn("支付 outbox 重试次数耗尽",
 					logger.Int64("outboxID", outboxEvents[i].ID),
 					logger.Int64("orderID", outboxEvents[i].Event.OrderID),
 					logger.Int("maxRetry", j.maxRetry))
 				if markErr := j.outboxRepo.MarkFailed(ctx, outboxEvents[i].ID); markErr != nil {
-					j.l.Error("mark payment outbox failed failed",
+					j.l.Error("标记支付 outbox 为失败状态失败",
 						logger.Error(markErr),
 						logger.Int64("outboxID", outboxEvents[i].ID))
 				}
@@ -102,7 +102,7 @@ func (j *PaymentOutboxWorkerJob) processBatch(ctx context.Context, outboxEvents 
 
 	if len(successIDs) > 0 {
 		if err := j.outboxRepo.BatchMarkSent(ctx, successIDs); err != nil {
-			j.l.Error("mark payment outbox sent failed",
+			j.l.Error("标记支付 outbox 已投递失败",
 				logger.Error(err),
 				logger.Int("count", len(successIDs)))
 		}

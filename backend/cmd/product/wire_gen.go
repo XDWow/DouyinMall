@@ -9,14 +9,12 @@ package main
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/product/handler"
 	"github.com/XDWow/DouyinMall/backend/internal/product/ioc"
-	"github.com/XDWow/DouyinMall/backend/internal/product/producer"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo/cache"
 	"github.com/XDWow/DouyinMall/backend/internal/product/repo/dao"
 	"github.com/XDWow/DouyinMall/backend/internal/product/service"
 	transporthttp "github.com/XDWow/DouyinMall/backend/internal/product/transport/http"
-	"github.com/XDWow/DouyinMall/backend/pkg/ginx"
-	"github.com/cloudwego/kitex/server"
+	"github.com/spf13/viper"
 )
 
 func InitApp() *App {
@@ -31,19 +29,16 @@ func InitApp() *App {
 	server := ioc.InitGRPCServer(productHandler)
 	httpHandler := transporthttp.NewHandler(productService)
 	httpServer := ioc.InitHTTPServer(httpHandler)
-	client := ioc.InitKafkaClient()
-	syncProducer := ioc.InitKafkaSyncProducer(client)
-	producer := ioc.InitCanalProducer(syncProducer, loggerV1, db)
-	app := newApp(server, httpServer, producer)
-	return app
-}
-
-func newApp(svr server.Server, httpServer *ginx.Server, p producer.Producer) *App {
+	var producers []ProducerComponent
+	if viper.GetBool("canal.enabled") {
+		client := ioc.InitKafkaClient()
+		syncProducer := ioc.InitKafkaSyncProducer(client)
+		producer := ioc.InitCanalProducer(syncProducer, loggerV1, db)
+		producers = append(producers, &producerWrapper{Producer: producer})
+	}
 	return &App{
-		Server:     svr,
+		Server:     server,
 		HTTPServer: httpServer,
-		Producers: []ProducerComponent{
-			&producerWrapper{Producer: p},
-		},
+		Producers:  producers,
 	}
 }

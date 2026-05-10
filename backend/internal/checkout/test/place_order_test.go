@@ -28,6 +28,7 @@ func TestPlaceOrderReleasesCouponWhenCreateOrderFails(t *testing.T) {
 		getProductsResp: &productv1.GetProductsResp{
 			Product: []*productv1.Product{{
 				Id:       1,
+				SkuId:    101,
 				Name:     "test product",
 				Price:    100,
 				Currency: "CNY",
@@ -79,6 +80,7 @@ func TestPlaceOrderKeepsOrderWhenPrepayFails(t *testing.T) {
 		getProductsResp: &productv1.GetProductsResp{
 			Product: []*productv1.Product{{
 				Id:       1,
+				SkuId:    101,
 				Name:     "test product",
 				Price:    100,
 				Currency: "CNY",
@@ -120,6 +122,7 @@ func TestPlaceOrderPassesDiscountedPayableAmountToOrder(t *testing.T) {
 		getProductsResp: &productv1.GetProductsResp{
 			Product: []*productv1.Product{{
 				Id:       1,
+				SkuId:    101,
 				Name:     "test product",
 				Price:    100,
 				Currency: "CNY",

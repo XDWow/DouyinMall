@@ -1,0 +1,30 @@
+﻿{
+  "scenario": "seckill_submit",
+  "requests": 1000,
+  "concurrency": 200,
+  "success": 200,
+  "failure": 800,
+  "success_rate": 0.2,
+  "rps": 884.4728144013402,
+  "p50_ms": 100.1879,
+  "p90_ms": 277.4695,
+  "p99_ms": 742.0032,
+  "total_duration_ms": 1130.617,
+  "submit_duration_ms": 1130.617,
+  "settle_duration_ms": 16715.610399999998,
+  "end_to_end_duration_ms": 17894.6654,
+  "corrected_rate": 0,
+  "misclosed_orders": 0,
+  "oversold_count": 0,
+  "duplicate_users": 0,
+  "duplicate_rate": 0,
+  "expected_stock": 200,
+  "final_success_count": 200,
+  "final_available_stock": 0,
+  "activity_id": 42,
+  "status_counts": {
+    "FAILED": 128,
+    "PROCESSING": 3,
+    "SUCCESS": 200
+  }
+}

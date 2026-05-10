@@ -49,16 +49,17 @@ func (repo *paymentRepository) ApplyProviderResult(ctx context.Context, pmt doma
 		return domain.Payment{}, false, err
 	}
 
-	nextStatus, changed := nextPaymentStatus(domain.PaymentStatus(current.Status), pmt.Status)
-	if !changed {
-		return toDomainPayment(current), false, nil
+	currentPayment := toDomainPayment(current)
+	transition := currentPayment.ApplyProviderResult(pmt)
+	if !transition.ShouldPersist {
+		return currentPayment, false, nil
 	}
 
 	updates := map[string]any{
-		"status": nextStatus.AsUint8(),
+		"status": transition.Payment.Status.AsUint8(),
 	}
-	if pmt.TxnID != "" {
-		updates["txn_id"] = sql.NullString{String: pmt.TxnID, Valid: true}
+	if transition.Payment.TxnID != "" && transition.Payment.TxnID != currentPayment.TxnID {
+		updates["txn_id"] = sql.NullString{String: transition.Payment.TxnID, Valid: true}
 	}
 
 	res := conn.Model(&db.Payment{}).
@@ -71,11 +72,7 @@ func (repo *paymentRepository) ApplyProviderResult(ctx context.Context, pmt doma
 		return domain.Payment{}, false, domain.ErrPaymentStatusRace
 	}
 
-	current.Status = nextStatus.AsUint8()
-	if pmt.TxnID != "" {
-		current.TxnID = sql.NullString{String: pmt.TxnID, Valid: true}
-	}
-	return toDomainPayment(current), true, nil
+	return transition.Payment, transition.StatusChanged, nil
 }
 
 func (repo *paymentRepository) GetPayment(ctx context.Context, bizTradeNo string) (domain.Payment, error) {
@@ -112,29 +109,6 @@ func (repo *paymentRepository) FindExpiredPayment(ctx context.Context,
 	return res, nil
 }
 
-func nextPaymentStatus(current, incoming domain.PaymentStatus) (domain.PaymentStatus, bool) {
-	if incoming == domain.PaymentStatusUnknown || incoming == domain.PaymentStatusInit {
-		return current, false
-	}
-	switch current {
-	case domain.PaymentStatusSuccess:
-		// Success is monotonic: late failure callbacks must not overwrite a paid order.
-		if incoming == domain.PaymentStatusRefund {
-			return domain.PaymentStatusRefund, true
-		}
-		return current, false
-	case domain.PaymentStatusRefund:
-		return current, false
-	case domain.PaymentStatusFailed:
-		if incoming == domain.PaymentStatusSuccess {
-			return domain.PaymentStatusSuccess, true
-		}
-		return current, false
-	default:
-		return incoming, true
-	}
-}
-
 func toDomainPayment(pmt db.Payment) domain.Payment {
 	return domain.Payment{
 		ID:          pmt.ID,
@@ -145,7 +119,7 @@ func toDomainPayment(pmt db.Payment) domain.Payment {
 			Total:    pmt.Amt,
 		},
 		Status: domain.PaymentStatus(pmt.Status),
-		TxnID:  pmt.TxnID.String, // sql.NullString 鈫?string
+		TxnID:  pmt.TxnID.String,
 	}
 }
 

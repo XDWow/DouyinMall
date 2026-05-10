@@ -15,7 +15,7 @@ func InitJobs(
 
 	_, err := c.AddFunc("0 */2 * * * ?", func() {
 		if err := syncPaymentOrderJob.Run(); err != nil {
-			l.Error("sync payment order job failed", logger.Error(err))
+			l.Error("同步支付订单任务失败", logger.Error(err))
 		}
 	})
 	if err != nil {
@@ -24,13 +24,13 @@ func InitJobs(
 
 	_, err = c.AddFunc("*/10 * * * * ?", func() {
 		if err := paymentOutboxWorkerJob.Run(); err != nil {
-			l.Error("payment outbox worker job failed", logger.Error(err))
+			l.Error("支付 outbox 投递任务失败", logger.Error(err))
 		}
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	l.Info("payment cron jobs initialized")
+	l.Info("支付定时任务已初始化")
 	return c
 }

@@ -26,7 +26,7 @@ func InitInventoryClient() inventoryv1.Client {
 	}
 
 	// 服务发现名（需与 inventory 服务注册名一致）
-	serviceName := "inventory-service"
+	serviceName := "inventory.service"
 
 	// Kitex Client
 	c, err := inventoryv1.NewClient(

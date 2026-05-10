@@ -58,7 +58,7 @@ func (c *PaymentStatusConsumer) Start() error {
 	if err := c.consumer.Start(); err != nil {
 		return err
 	}
-	c.logger.Info("order payment status consumer started",
+	c.logger.Info("订单支付状态消费者已启动",
 		logger.String("topic", TopicPaymentStatusUpdate),
 		logger.String("consumerGroup", "order-payment-consumer"))
 	return nil
@@ -83,8 +83,8 @@ func (c *PaymentStatusConsumer) Consume(_ *rmq_client.MessageView, evt PaymentSt
 	}
 
 	if errors.Is(err, domain.ErrInvalidStatusTransition) {
-		// Retrying cannot make a canceled/refunded order payable; log and leave refund/ops flow to handle it.
-		c.logger.Error("payment status cannot be applied to current order status",
+		// 已取消/已退款订单不能靠重试变成已支付，记录后交给退款或运营流程处理。
+		c.logger.Error("支付状态不能应用到当前订单状态",
 			logger.Error(err),
 			logger.Int64("orderID", evt.OrderID),
 			logger.Int("paymentStatus", int(evt.Status)))

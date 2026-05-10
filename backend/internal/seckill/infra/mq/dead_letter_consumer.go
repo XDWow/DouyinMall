@@ -3,150 +3,129 @@ package mq
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
-	"time"
 
 	seckilldomain "github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/pkg/pool"
-	rmq_client "github.com/apache/rocketmq-clients/golang"
+	pushconsumer "github.com/apache/rocketmq-client-go/v2/consumer"
+	pushprimitive "github.com/apache/rocketmq-client-go/v2/primitive"
 )
 
 type DeadLetterConsumer struct {
-	consumer  simpleConsumer
-	processor *EventProcessor
-	logger    logger.LoggerV1
-	options   SeckillConsumerOptions
-
-	taskPool *pool.KeyedConsumerPool
-	stopCh   chan struct{}
-	cancel   context.CancelFunc
+	consumer pushConsumer
+	topic    string
+	process  func(context.Context, seckilldomain.DeadLetterEvent) error
+	logger   logger.LoggerV1
+	options  SeckillConsumerOptions
 }
 
-type deadLetterTask struct {
-	msg  *rmq_client.MessageView
-	dead seckilldomain.DeadLetterEvent
-}
-
-func NewDeadLetterConsumer(consumer simpleConsumer, processor *EventProcessor, l logger.LoggerV1, options SeckillConsumerOptions) *DeadLetterConsumer {
+func NewDeadLetterConsumer(consumer pushConsumer, deadLetterTopic string, processor *EventProcessor, l logger.LoggerV1, options SeckillConsumerOptions) *DeadLetterConsumer {
+	options = options.withDefaults()
 	c := &DeadLetterConsumer{
-		consumer:  consumer,
-		processor: processor,
-		logger:    l,
-		options:   options.withDefaults(),
-		stopCh:    make(chan struct{}),
+		consumer: consumer,
+		topic:    deadLetterTopic,
+		logger:   l,
+		options:  options,
 	}
-	taskPool, err := pool.NewKeyedConsumerPool(pool.KeyedConsumerPoolOptions{
-		GlobalWorkerNum:        c.options.GlobalWorkerNum,
-		PerActivityConcurrency: c.options.PerActivityConcurrency,
-		TaskTimeout:            c.options.HandleTimeout,
-	}, l)
-	if err != nil {
-		panic(err)
+	if processor != nil {
+		c.process = processor.ProcessDeadLetter
 	}
-	c.taskPool = taskPool
+	if c.process == nil {
+		panic("dead-letter processor is required")
+	}
+	if c.consumer != nil {
+		if err := c.subscribe(); err != nil {
+			panic(fmt.Errorf("subscribe seckill dead-letter push consumer failed: %w", err))
+		}
+	}
 	return c
 }
 
-func (c *DeadLetterConsumer) Start() error {
+func (c *DeadLetterConsumer) subscribe() error {
 	if c.consumer == nil {
-		c.logger.Warn("seckill dead-letter consumer disabled because native DLQ topic is not ready")
 		return nil
 	}
+	return c.consumer.Subscribe(c.topic, pushconsumer.MessageSelector{
+		Type:       pushconsumer.TAG,
+		Expression: "*",
+	}, c.consumeMessages)
+}
+
+func (c *DeadLetterConsumer) Start() (err error) {
+	if c.consumer == nil {
+		c.logger.Warn("seckill dead-letter consumer disabled, DLQ topic not configured")
+		return nil
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			_ = c.consumer.Shutdown()
+			c.logger.Warn("seckill dead-letter consumer disabled because native DLQ topic is unavailable",
+				logger.String("topic", c.topic),
+				logger.Field{Key: "panic", Value: fmt.Sprint(r)})
+			err = nil
+		}
+	}()
 	if err := c.consumer.Start(); err != nil {
-		if strings.Contains(err.Error(), "TOPIC_NOT_FOUND") {
-			c.logger.Warn("seckill native DLQ topic is not ready, dead-letter consumer disabled",
-				logger.Error(err))
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "TOPIC_NOT_FOUND") ||
+			strings.Contains(errMsg, "route info not found") ||
+			strings.Contains(errMsg, "it may not exist") {
+			_ = c.consumer.Shutdown()
+			c.logger.Warn("seckill native DLQ topic not found, dead-letter consumer stays disabled",
+				logger.Error(err),
+				logger.String("topic", c.topic))
 			return nil
 		}
 		return err
 	}
-	loopCtx, cancel := context.WithCancel(context.Background())
-	c.cancel = cancel
-	go c.loop(loopCtx)
+	c.logger.Info("seckill dead-letter push consumer started",
+		logger.String("topic", c.topic),
+		logger.Int("consumeConcurrency", c.options.GlobalWorkerNum),
+		logger.Field{Key: "handleTimeout", Value: c.options.HandleTimeout})
 	return nil
 }
 
 func (c *DeadLetterConsumer) Stop() error {
-	select {
-	case <-c.stopCh:
-	default:
-		close(c.stopCh)
+	if c.consumer == nil {
+		return nil
 	}
-	if c.cancel != nil {
-		c.cancel()
-	}
-	if c.taskPool != nil {
-		if ok := c.taskPool.CloseWithTimeout(c.options.ShutdownTimeout); !ok {
-			c.logger.Warn("seckill dead-letter consumer stopped before all tasks finished",
-				logger.Field{Key: "shutdownTimeout", Value: c.options.ShutdownTimeout})
-		}
-	}
-	if c.consumer != nil {
-		return c.consumer.GracefulStop()
-	}
-	return nil
+	return c.consumer.Shutdown()
 }
 
-func (c *DeadLetterConsumer) loop(ctx context.Context) {
-	for {
-		select {
-		case <-c.stopCh:
-			return
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		msgs, err := c.consumer.Receive(ctx, c.options.MaxMessageNum, c.options.InvisibleDuration)
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			c.logger.Warn("receive seckill dead-letter failed", logger.Error(err))
-			time.Sleep(time.Second)
+func (c *DeadLetterConsumer) consumeMessages(ctx context.Context, msgs ...*pushprimitive.MessageExt) (pushconsumer.ConsumeResult, error) {
+	for _, msg := range msgs {
+		var evt seckilldomain.Event
+		if err := json.Unmarshal(msg.Body, &evt); err != nil {
+			c.logger.Error("decode dead-letter seckill message failed, skip poison message",
+				logger.Error(err),
+				logger.String("messageID", msg.MsgId))
 			continue
 		}
 
-		for _, msg := range msgs {
-			if err = c.dispatchMessage(msg); err != nil {
-				c.logger.Warn("dispatch seckill dead-letter rejected",
-					logger.Error(err),
-					logger.String("messageID", msg.GetMessageId()),
-					logger.Int32("deliveryAttempt", msg.GetDeliveryAttempt()))
-			}
+		dead := seckilldomain.DeadLetterEvent{
+			Event:           evt,
+			SourceMessageID: msg.MsgId,
+			DeliveryAttempt: msg.ReconsumeTimes,
+		}
+		if err := c.handleDeadLetterWithTimeout(ctx, dead); err != nil {
+			c.logger.Warn("process seckill dead-letter message failed, waiting for MQ retry",
+				logger.Error(err),
+				logger.String("requestNo", evt.RequestNo),
+				logger.String("messageID", msg.MsgId),
+				logger.Int32("reconsumeTimes", msg.ReconsumeTimes))
+			return pushconsumer.ConsumeRetryLater, nil
 		}
 	}
+	return pushconsumer.ConsumeSuccess, nil
 }
 
-func (c *DeadLetterConsumer) dispatchMessage(msg *rmq_client.MessageView) error {
-	var evt seckilldomain.Event
-	if err := json.Unmarshal(msg.GetBody(), &evt); err != nil {
-		return c.consumer.Ack(context.Background(), msg)
+func (c *DeadLetterConsumer) handleDeadLetterWithTimeout(ctx context.Context, dead seckilldomain.DeadLetterEvent) error {
+	taskCtx := ctx
+	cancel := func() {}
+	if c.options.HandleTimeout > 0 {
+		taskCtx, cancel = context.WithTimeout(ctx, c.options.HandleTimeout)
 	}
-	dead := seckilldomain.DeadLetterEvent{
-		Event:           evt,
-		SourceMessageID: msg.GetMessageId(),
-		DeliveryAttempt: msg.GetDeliveryAttempt(),
-	}
-	return c.taskPool.Submit(context.Background(), activityKey(evt.ActivityID), func(ctx context.Context) error {
-		return c.handleTask(ctx, deadLetterTask{
-			msg:  msg,
-			dead: dead,
-		})
-	})
-}
-
-func (c *DeadLetterConsumer) handleTask(ctx context.Context, deadTask deadLetterTask) error {
-	if err := c.processor.ProcessDeadLetter(ctx, deadTask.dead); err != nil {
-		c.logger.Warn("dead-letter processing will retry",
-			logger.Error(err),
-			logger.String("requestNo", deadTask.dead.Event.RequestNo))
-		return err
-	}
-	if err := c.consumer.Ack(ctx, deadTask.msg); err != nil {
-		c.logger.Error("ack seckill dead-letter failed", logger.Error(err))
-		return err
-	}
-	return nil
+	defer cancel()
+	return c.process(taskCtx, dead)
 }

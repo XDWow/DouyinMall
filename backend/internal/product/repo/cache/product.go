@@ -11,9 +11,9 @@ import (
 type ProductCache interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Set(ctx context.Context, key string, value interface{}) error
-	SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error // 璁剧疆缂撳瓨骞舵寚瀹氳繃鏈熸椂闂?
+	SetWithTTL(ctx context.Context, key string, value interface{}, ttl time.Duration) error
 	Delete(ctx context.Context, key string) error
-	GetTTL(ctx context.Context, key string) (time.Duration, error) // 鑾峰彇鍓╀綑杩囨湡鏃堕棿
+	GetTTL(ctx context.Context, key string) (time.Duration, error)
 
 	BatchSetWithTTL(ctx context.Context, items []CacheItem) error
 }
@@ -64,7 +64,7 @@ func (c *RedisProductCache) GetTTL(ctx context.Context, key string) (time.Durati
 	return c.cmd.TTL(ctx, key).Result()
 }
 
-// BatchSetWithTTL 鎵归噺璁剧疆缂撳瓨锛屼娇鐢?Pipeline 鍑忓皯缃戠粶寰€杩?
+// BatchSetWithTTL writes multiple cache items with a Redis pipeline.
 func (c *RedisProductCache) BatchSetWithTTL(ctx context.Context, items []CacheItem) error {
 	if len(items) == 0 {
 		return nil
@@ -82,5 +82,3 @@ func (c *RedisProductCache) BatchSetWithTTL(ctx context.Context, items []CacheIt
 	_, err := pipe.Exec(ctx)
 	return err
 }
-
-

@@ -6,53 +6,76 @@ import (
 	"time"
 
 	seckillconfig "github.com/XDWow/DouyinMall/backend/internal/seckill/config"
-	seckilldomain "github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/mq"
-	"github.com/XDWow/DouyinMall/backend/pkg/logger"
-	"github.com/XDWow/DouyinMall/backend/pkg/rocketmqx"
-	rmq_client "github.com/apache/rocketmq-clients/golang"
-	"github.com/apache/rocketmq-clients/golang/credentials"
+	pushmq "github.com/apache/rocketmq-client-go/v2"
+	pushconsumer "github.com/apache/rocketmq-client-go/v2/consumer"
+	pushprimitive "github.com/apache/rocketmq-client-go/v2/primitive"
+	pushproducer "github.com/apache/rocketmq-client-go/v2/producer"
 	"github.com/spf13/viper"
 )
 
 func InitRocketMQConfig() seckillconfig.RocketMQConfig {
 	cfg := seckillconfig.RocketMQConfig{
-		RequestGroup:           "seckill-request-consumer",
-		DeadLetterGroup:        "seckill-request-dead-letter-consumer",
-		InvisibleDurationSec:   30,
-		HandleTimeoutSec:       25,
-		ShutdownTimeoutSec:     10,
-		AwaitDurationSec:       5,
-		MaxMessageNum:          16,
-		ProducerMaxAttempts:    3,
-		GlobalWorkerNum:        32,
-		PerActivityConcurrency: 8,
+		ProducerGroup:       "seckill-request-producer",
+		RequestGroup:        "seckill-request-consumer",
+		DeadLetterGroup:     "seckill-request-dead-letter-consumer",
+		OrderStatusGroup:    "seckill-order-status-consumer",
+		HandleTimeoutSec:    25,
+		ProducerMaxAttempts: 3,
+		GlobalWorkerNum:     32,
 	}
 	if err := viper.UnmarshalKey("rocketmq", &cfg); err != nil {
 		panic(fmt.Errorf("read rocketmq config failed: %w", err))
 	}
-	if cfg.Endpoint == "" {
-		panic("rocketmq.endpoint is required")
+	if cfg.NameServer == "" {
+		panic("rocketmq.name_server is required")
 	}
 	cfg.AccessKey = viper.GetString("rocketmq.access_key")
 	cfg.SecretKey = viper.GetString("rocketmq.secret_key")
 	return cfg
 }
 
-func InitRocketMQProducerClient(cache seckilldomain.Cache, l logger.LoggerV1) rmq_client.Producer {
+func resolveRocketMQNameServers(cfg seckillconfig.RocketMQConfig) pushprimitive.NamesrvAddr {
+	parts := strings.Split(cfg.NameServer, ",")
+	addrs := make([]string, 0, len(parts))
+	for _, part := range parts {
+		addr := strings.TrimSpace(part)
+		if addr == "" {
+			continue
+		}
+		addrs = append(addrs, addr)
+	}
+	if len(addrs) == 0 {
+		panic("rocketmq.name_server is required")
+	}
+	return pushprimitive.NamesrvAddr(addrs)
+}
+
+func withPushCredentials(opts []pushconsumer.Option, cfg seckillconfig.RocketMQConfig) []pushconsumer.Option {
+	if cfg.AccessKey != "" || cfg.SecretKey != "" {
+		opts = append(opts, pushconsumer.WithCredentials(pushprimitive.Credentials{
+			AccessKey: cfg.AccessKey,
+			SecretKey: cfg.SecretKey,
+		}))
+	}
+	return opts
+}
+
+func InitRocketMQProducerClient(listener *mq.TransactionListener) pushmq.TransactionProducer {
 	cfg := InitRocketMQConfig()
-	producer, err := rmq_client.NewProducer(
-		&rmq_client.Config{
-			Endpoint: cfg.Endpoint,
-			Credentials: &credentials.SessionCredentials{
-				AccessKey:    cfg.AccessKey,
-				AccessSecret: cfg.SecretKey,
-			},
-		},
-		rmq_client.WithTransactionChecker(mq.NewTransactionChecker(cache, l)),
-		rmq_client.WithTopics(mq.TopicSeckillRequest),
-		rmq_client.WithMaxAttempts(cfg.ProducerMaxAttempts),
-	)
+	opts := []pushproducer.Option{
+		pushproducer.WithNameServer(resolveRocketMQNameServers(cfg)),
+		pushproducer.WithGroupName(cfg.ProducerGroup),
+		pushproducer.WithRetry(int(cfg.ProducerMaxAttempts)),
+	}
+	if cfg.AccessKey != "" || cfg.SecretKey != "" {
+		opts = append(opts, pushproducer.WithCredentials(pushprimitive.Credentials{
+			AccessKey: cfg.AccessKey,
+			SecretKey: cfg.SecretKey,
+		}))
+	}
+
+	producer, err := pushmq.NewTransactionProducer(listener, opts...)
 	if err != nil {
 		panic(fmt.Errorf("init rocketmq producer failed: %w", err))
 	}
@@ -62,50 +85,43 @@ func InitRocketMQProducerClient(cache seckilldomain.Cache, l logger.LoggerV1) rm
 	return producer
 }
 
-func InitSeckillSimpleConsumer() rmq_client.SimpleConsumer {
+func InitSeckillPushConsumer() pushmq.PushConsumer {
 	cfg := InitRocketMQConfig()
-	consumer, err := rmq_client.NewSimpleConsumer(
-		&rmq_client.Config{
-			Endpoint:      cfg.Endpoint,
-			ConsumerGroup: cfg.RequestGroup,
-			Credentials: &credentials.SessionCredentials{
-				AccessKey:    cfg.AccessKey,
-				AccessSecret: cfg.SecretKey,
-			},
-		},
-		rmq_client.WithAwaitDuration(time.Duration(cfg.AwaitDurationSec)*time.Second),
-		rmq_client.WithSubscriptionExpressions(map[string]*rmq_client.FilterExpression{
-			mq.TopicSeckillRequest: rmq_client.SUB_ALL,
-		}),
-	)
+	opts := []pushconsumer.Option{
+		pushconsumer.WithNameServer(resolveRocketMQNameServers(cfg)),
+		pushconsumer.WithGroupName(cfg.RequestGroup),
+		pushconsumer.WithConsumeGoroutineNums(cfg.GlobalWorkerNum),
+		pushconsumer.WithPullBatchSize(1),
+		pushconsumer.WithConsumeMessageBatchMaxSize(1),
+	}
+	opts = withPushCredentials(opts, cfg)
+
+	consumer, err := pushmq.NewPushConsumer(opts...)
 	if err != nil {
-		panic(fmt.Errorf("init seckill simple consumer failed: %w", err))
+		panic(fmt.Errorf("init seckill push consumer failed: %w", err))
 	}
 	return consumer
 }
 
-func InitSeckillDeadLetterSimpleConsumer() rmq_client.SimpleConsumer {
+func InitSeckillDeadLetterTopic() string {
 	cfg := InitRocketMQConfig()
-	consumer, err := rmq_client.NewSimpleConsumer(
-		&rmq_client.Config{
-			Endpoint:      cfg.Endpoint,
-			ConsumerGroup: cfg.DeadLetterGroup,
-			Credentials: &credentials.SessionCredentials{
-				AccessKey:    cfg.AccessKey,
-				AccessSecret: cfg.SecretKey,
-			},
-		},
-		rmq_client.WithAwaitDuration(time.Duration(cfg.AwaitDurationSec)*time.Second),
-		rmq_client.WithSubscriptionExpressions(map[string]*rmq_client.FilterExpression{
-			mq.NativeDeadLetterTopic(cfg.RequestGroup): rmq_client.SUB_ALL,
-		}),
-	)
+	return mq.NativeDeadLetterTopic(cfg.RequestGroup)
+}
+
+func InitSeckillDeadLetterPushConsumer() pushmq.PushConsumer {
+	cfg := InitRocketMQConfig()
+	opts := []pushconsumer.Option{
+		pushconsumer.WithNameServer(resolveRocketMQNameServers(cfg)),
+		pushconsumer.WithGroupName(cfg.DeadLetterGroup),
+		pushconsumer.WithConsumeGoroutineNums(cfg.GlobalWorkerNum),
+		pushconsumer.WithPullBatchSize(1),
+		pushconsumer.WithConsumeMessageBatchMaxSize(1),
+	}
+	opts = withPushCredentials(opts, cfg)
+
+	consumer, err := pushmq.NewPushConsumer(opts...)
 	if err != nil {
-		if strings.Contains(err.Error(), "TOPIC_NOT_FOUND") {
-			fmt.Printf("warning: seckill native DLQ topic %s not found, dead-letter consumer disabled until RocketMQ creates it\n", mq.NativeDeadLetterTopic(cfg.RequestGroup))
-			return nil
-		}
-		panic(fmt.Errorf("init seckill dead-letter consumer failed: %w", err))
+		panic(fmt.Errorf("init seckill dead-letter push consumer failed: %w", err))
 	}
 	return consumer
 }
@@ -113,45 +129,25 @@ func InitSeckillDeadLetterSimpleConsumer() rmq_client.SimpleConsumer {
 func InitSeckillConsumerOptions() mq.SeckillConsumerOptions {
 	cfg := InitRocketMQConfig()
 	return mq.SeckillConsumerOptions{
-		InvisibleDuration:      time.Duration(cfg.InvisibleDurationSec) * time.Second,
-		HandleTimeout:          time.Duration(cfg.HandleTimeoutSec) * time.Second,
-		ShutdownTimeout:        time.Duration(cfg.ShutdownTimeoutSec) * time.Second,
-		MaxMessageNum:          cfg.MaxMessageNum,
-		GlobalWorkerNum:        cfg.GlobalWorkerNum,
-		PerActivityConcurrency: cfg.PerActivityConcurrency,
+		HandleTimeout:   time.Duration(cfg.HandleTimeoutSec) * time.Second,
+		GlobalWorkerNum: cfg.GlobalWorkerNum,
 	}
 }
 
-func InitSeckillOrderStatusSimpleConsumer() rmq_client.SimpleConsumer {
+func InitSeckillOrderStatusPushConsumer() pushmq.PushConsumer {
 	cfg := InitRocketMQConfig()
-	group := viper.GetString("rocketmq.order_status_group")
-	if group == "" {
-		group = "seckill-order-status-consumer"
+	opts := []pushconsumer.Option{
+		pushconsumer.WithNameServer(resolveRocketMQNameServers(cfg)),
+		pushconsumer.WithGroupName(cfg.OrderStatusGroup),
+		pushconsumer.WithConsumeGoroutineNums(cfg.GlobalWorkerNum),
+		pushconsumer.WithPullBatchSize(1),
+		pushconsumer.WithConsumeMessageBatchMaxSize(1),
 	}
-	consumer, err := rmq_client.NewSimpleConsumer(
-		&rmq_client.Config{
-			Endpoint:      cfg.Endpoint,
-			ConsumerGroup: group,
-			Credentials: &credentials.SessionCredentials{
-				AccessKey:    cfg.AccessKey,
-				AccessSecret: cfg.SecretKey,
-			},
-		},
-		rmq_client.WithAwaitDuration(time.Duration(cfg.AwaitDurationSec)*time.Second),
-		rmq_client.WithSubscriptionExpressions(map[string]*rmq_client.FilterExpression{
-			mq.TopicOrderStatusUpdate: rmq_client.SUB_ALL,
-		}),
-	)
+	opts = withPushCredentials(opts, cfg)
+
+	consumer, err := pushmq.NewPushConsumer(opts...)
 	if err != nil {
-		panic(fmt.Errorf("init seckill order status consumer failed: %w", err))
+		panic(fmt.Errorf("init seckill order-status push consumer failed: %w", err))
 	}
 	return consumer
-}
-
-func InitSeckillOrderStatusConsumerOptions() rocketmqx.ConsumerOptions {
-	cfg := InitRocketMQConfig()
-	return rocketmqx.ConsumerOptions{
-		MaxMessageNum:     cfg.MaxMessageNum,
-		InvisibleDuration: time.Duration(cfg.InvisibleDurationSec) * time.Second,
-	}
 }

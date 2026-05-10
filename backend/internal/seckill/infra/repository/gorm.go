@@ -132,32 +132,6 @@ func (r *GormRequestRepository) AdvanceProcessing(ctx context.Context, evt domai
 			return fmt.Errorf("seckill AdvanceProcessing: request_no=%s status=%s is not PROCESSING", evt.RequestNo, req.Status)
 		}
 
-		now := time.Now()
-		res := tx.Model(&db.SeckillActivity{}).
-			Where("id = ? AND available_stock >= ? AND status = ? AND start_time <= ? AND end_time >= ?",
-				evt.ActivityID, 1, domain.ActivityStatusOnline, now, now).
-			Updates(map[string]any{
-				"available_stock": gorm.Expr("available_stock - 1"),
-				"version":         gorm.Expr("version + 1"),
-			})
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected == 0 {
-			if err := tx.Model(&db.SeckillRequest{}).
-				Where("request_no = ? AND status = ?", evt.RequestNo, domain.RequestStatusProcessing).
-				Updates(map[string]any{
-					"status":      domain.RequestStatusFailed,
-					"fail_reason": domain.FailReasonOutOfStock,
-				}).Error; err != nil {
-				return err
-			}
-			req.Status = domain.RequestStatusFailed
-			req.FailReason = domain.FailReasonOutOfStock
-			next = toDomainRequest(req)
-			return nil
-		}
-
 		qualification := db.SeckillQualification{
 			ActivityID: evt.ActivityID,
 			UserID:     evt.UserID,
@@ -165,14 +139,6 @@ func (r *GormRequestRepository) AdvanceProcessing(ctx context.Context, evt domai
 		}
 		if err := tx.Create(&qualification).Error; err != nil {
 			if isDuplicate(err) {
-				if err = tx.Model(&db.SeckillActivity{}).
-					Where("id = ?", evt.ActivityID).
-					Updates(map[string]any{
-						"available_stock": gorm.Expr("available_stock + 1"),
-						"version":         gorm.Expr("version + 1"),
-					}).Error; err != nil {
-					return err
-				}
 				if err = tx.Model(&db.SeckillRequest{}).
 					Where("request_no = ? AND status = ?", evt.RequestNo, domain.RequestStatusProcessing).
 					Updates(map[string]any{
@@ -187,6 +153,36 @@ func (r *GormRequestRepository) AdvanceProcessing(ctx context.Context, evt domai
 				return nil
 			}
 			return err
+		}
+
+		now := time.Now()
+		res := tx.Model(&db.SeckillActivity{}).
+			Where("id = ? AND available_stock >= ? AND status = ? AND start_time <= ? AND end_time >= ?",
+				evt.ActivityID, 1, domain.ActivityStatusOnline, now, now).
+			Updates(map[string]any{
+				"available_stock": gorm.Expr("available_stock - 1"),
+				"version":         gorm.Expr("version + 1"),
+			})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			if err := tx.Where("activity_id = ? AND user_id = ? AND request_no = ?", evt.ActivityID, evt.UserID, evt.RequestNo).
+				Delete(&db.SeckillQualification{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&db.SeckillRequest{}).
+				Where("request_no = ? AND status = ?", evt.RequestNo, domain.RequestStatusProcessing).
+				Updates(map[string]any{
+					"status":      domain.RequestStatusFailed,
+					"fail_reason": domain.FailReasonOutOfStock,
+				}).Error; err != nil {
+				return err
+			}
+			req.Status = domain.RequestStatusFailed
+			req.FailReason = domain.FailReasonOutOfStock
+			next = toDomainRequest(req)
+			return nil
 		}
 
 		res = tx.Model(&db.SeckillRequest{}).

@@ -8,7 +8,7 @@ db:
 
 redis:
   addr: "106.52.154.235:6379"
-  password: ""
+  password: "0624"
   db: 0
 
 etcd:
@@ -58,5 +58,5 @@ canal:
     host: "134.175.67.79"
     port: 3306
     user: "app"
-    password: ""
+    password: "0324"
   server_id: 1234

@@ -84,7 +84,7 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 		return nil, err
 	}
 
-	productResp, err := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Id: extractProductIDs(input.Items)})
+	productResp, err := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Items: extractProductQueries(input.Items)})
 	if err != nil {
 		return nil, fmt.Errorf("query products: %w", err)
 	}

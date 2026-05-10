@@ -74,10 +74,10 @@ func (uc *NativePrePaymentUC) Execute(ctx context.Context, cmd PrePaymentCmd) (s
 		Amount:      pmt.Amt,
 	})
 	if err != nil {
-		uc.l.Error("native prepay failed", logger.Error(err))
+		uc.l.Error("原生预支付失败", logger.Error(err))
 		return "", err
 	}
-	uc.l.Debug("native prepay success", logger.Field{Key: "codeURL", Value: codeURL})
+	uc.l.Debug("原生预支付成功", logger.Field{Key: "codeURL", Value: codeURL})
 	return codeURL, nil
 }
 

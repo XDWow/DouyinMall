@@ -2,57 +2,58 @@ syntax = "proto3";
 
 package product;
 
-option go_package="product/v1;productv1";
+option go_package = "product/v1;productv1";
 
 service ProductService {
-    // 获取商品列表
+    // List product cards.
     rpc ListProducts(ListProductsReq) returns (ListProductsResp) {}
-    // 获取商品详情，修改了一下，同时支持单个和批量查询
+    // Get one or more product details. Prefer items when SKU-aware pricing is needed.
     rpc GetProducts(GetProductsReq) returns (GetProductsResp) {}
-    // 添加新商品
+    // Create a product and optionally its default SKU.
     rpc CreateProduct(CreateProductReq) returns (CreateProductResp) {}
-    // 修改商品
+    // Update a product and optionally one SKU.
     rpc UpdateProduct(UpdateProductReq) returns (UpdateProductResp) {}
-    // 删除商品
+    // Delete a product owned by a merchant.
     rpc DeleteProduct(DeleteProductReq) returns (DeleteProductResp) {}
 }
 
 message Product {
-    int64 id = 1; // 商品ID
-    string name = 2; // 商品名称
-    string description = 3; // 商品描述
-    string picture = 4; // 商品图片地址
-    repeated string sliderImgs = 5; // 商品轮播图地址
-    int64 price = 6; // 商品价格（单位：分）
-    string currency = 11; // 商品货币（如 "CNY", "USD"）
-    repeated string categories = 7; // 商品分类
-    bool in_stock = 8; // 是否有货（用于搜索等场景，不显示具体库存数量）
-    int64 merchantID = 9; // 商品所属商家ID
-    string merchantName = 10; // 商品所属商家名称
+    int64 id = 1; // Product ID.
+    string name = 2; // Product name.
+    string description = 3; // Product description.
+    string picture = 4; // Cover image URL.
+    repeated string sliderImgs = 5; // Gallery image URLs.
+    int64 price = 6; // Price in minor units, for example cents/fen.
+    repeated string categories = 7; // Category labels.
+    bool in_stock = 8; // Availability flag; exact inventory is owned by inventory service.
+    int64 merchantID = 9; // Merchant ID.
+    string merchantName = 10; // Merchant name.
+    string currency = 11; // Currency code, for example CNY or USD.
+    int64 sku_id = 12; // SKU ID used for SKU-specific price and stock.
 }
 
-message CreateProductReq{
+message CreateProductReq {
     Product product = 1;
 }
 
-message CreateProductResp{
+message CreateProductResp {
     int64 id = 1;
 }
 
-message UpdateProductReq{
+message UpdateProductReq {
     Product product = 1;
 }
 
-message UpdateProductResp{
+message UpdateProductResp {
     int64 id = 1;
 }
 
-message DeleteProductReq{
+message DeleteProductReq {
     int64 id = 1;
     int64 user_id = 2;
 }
 
-message DeleteProductResp{
+message DeleteProductResp {
 }
 
 message ListProductsReq {
@@ -65,8 +66,13 @@ message ListProductsResp {
     repeated Product products = 1;
 }
 
+message ProductQuery {
+    int64 product_id = 1;
+    int64 sku_id = 2;
+}
+
 message GetProductsReq {
-    repeated int64 id = 1;
+    repeated ProductQuery items = 1;
 }
 
 message GetProductsResp {

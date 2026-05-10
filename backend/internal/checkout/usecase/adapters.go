@@ -14,14 +14,22 @@ type IDGenerator interface {
 	GenerateOrderID() int64
 }
 
+type productLineKey struct {
+	productID int64
+	skuID     int64
+}
+
 func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Product) (available, unavailable []domain.OrderLine) {
-	prodMap := make(map[int64]*productv1.Product, len(protoProducts))
+	prodMap := make(map[productLineKey]*productv1.Product, len(protoProducts))
 	for _, p := range protoProducts {
-		prodMap[p.Id] = p
+		if p == nil {
+			continue
+		}
+		prodMap[productLineKey{productID: p.GetId(), skuID: p.GetSkuId()}] = p
 	}
 
 	for _, item := range items {
-		p, ok := prodMap[item.ProductID]
+		p, ok := prodMap[productLineKey{productID: item.ProductID, skuID: item.SKUID}]
 		if !ok {
 			unavailable = append(unavailable, domain.OrderLine{
 				ProductID:     item.ProductID,
@@ -32,30 +40,30 @@ func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Pro
 			})
 			continue
 		}
-		if !p.InStock {
+		if !p.GetInStock() {
 			unavailable = append(unavailable, domain.OrderLine{
-				ProductID:     p.Id,
+				ProductID:     p.GetId(),
 				SKUID:         item.SKUID,
-				Name:          p.Name,
-				Picture:       p.Picture,
-				Price:         p.Price,
-				Currency:      p.Currency,
+				Name:          p.GetName(),
+				Picture:       p.GetPicture(),
+				Price:         p.GetPrice(),
+				Currency:      p.GetCurrency(),
 				Quantity:      item.Quantity,
-				Subtotal:      p.Price * item.Quantity,
+				Subtotal:      p.GetPrice() * item.Quantity,
 				Available:     false,
 				UnavailReason: "product out of stock",
 			})
 			continue
 		}
 		available = append(available, domain.OrderLine{
-			ProductID: p.Id,
+			ProductID: p.GetId(),
 			SKUID:     item.SKUID,
-			Name:      p.Name,
-			Picture:   p.Picture,
-			Price:     p.Price,
-			Currency:  p.Currency,
+			Name:      p.GetName(),
+			Picture:   p.GetPicture(),
+			Price:     p.GetPrice(),
+			Currency:  p.GetCurrency(),
 			Quantity:  item.Quantity,
-			Subtotal:  p.Price * item.Quantity,
+			Subtotal:  p.GetPrice() * item.Quantity,
 			Available: true,
 		})
 	}
@@ -201,12 +209,15 @@ func toOrderItems(lines []domain.OrderLine, currency string) []*orderv1.OrderIte
 	return result
 }
 
-func extractProductIDs(items []domain.CheckoutItem) []int64 {
-	ids := make([]int64, 0, len(items))
+func extractProductQueries(items []domain.CheckoutItem) []*productv1.ProductQuery {
+	queries := make([]*productv1.ProductQuery, 0, len(items))
 	for _, item := range items {
-		ids = append(ids, item.ProductID)
+		queries = append(queries, &productv1.ProductQuery{
+			ProductId: item.ProductID,
+			SkuId:     item.SKUID,
+		})
 	}
-	return ids
+	return queries
 }
 
 func validateCheckoutItems(items []domain.CheckoutItem) error {

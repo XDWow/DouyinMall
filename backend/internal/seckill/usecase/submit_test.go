@@ -10,11 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSubmitUseCaseCommitOnReserveSuccess(t *testing.T) {
-	cache := &submitCacheStub{reserveCode: 0}
-	tx := &submitTxStub{}
-	producer := &submitProducerStub{tx: tx}
-	uc := NewSubmitUseCase(&submitActivityRepoStub{}, nil, cache, producer, submitIDGenStub("1001"))
+func TestSubmitUseCaseReturnsProcessingOnReserveSuccess(t *testing.T) {
+	cache := &submitCacheStub{}
+	producer := &submitProducerStub{
+		result: &domain.Result{
+			RequestNo: "1001",
+			Status:    domain.RequestStatusProcessing,
+		},
+	}
+	uc := NewSubmitUseCase(&submitActivityRepoStub{}, nil, cache, domain.NewNopSoldOutMarker(), producer, submitIDGenStub("1001"))
 
 	result, err := uc.Execute(context.Background(), SubmitCmd{
 		ActivityID: 1,
@@ -23,16 +27,21 @@ func TestSubmitUseCaseCommitOnReserveSuccess(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, domain.RequestStatusProcessing, result.Status)
-	require.True(t, tx.committed)
-	require.False(t, tx.rolledBack)
+	require.EqualValues(t, 24*time.Hour/time.Second+60, producer.lastUserTTL)
 	require.Equal(t, "1001", producer.lastEvent.RequestNo)
 }
 
-func TestSubmitUseCaseRollbackOnDuplicate(t *testing.T) {
-	cache := &submitCacheStub{reserveCode: 2}
-	tx := &submitTxStub{}
-	producer := &submitProducerStub{tx: tx}
-	uc := NewSubmitUseCase(&submitActivityRepoStub{}, nil, cache, producer, submitIDGenStub("1002"))
+func TestSubmitUseCaseReturnsDuplicateResultFromProducer(t *testing.T) {
+	cache := &submitCacheStub{}
+	producer := &submitProducerStub{
+		result: &domain.Result{
+			RequestNo:  "1002",
+			Status:     domain.RequestStatusFailed,
+			FailReason: domain.FailReasonDuplicate,
+		},
+		err: domain.ErrDuplicateSeckill,
+	}
+	uc := NewSubmitUseCase(&submitActivityRepoStub{}, nil, cache, domain.NewNopSoldOutMarker(), producer, submitIDGenStub("1002"))
 
 	result, err := uc.Execute(context.Background(), SubmitCmd{
 		ActivityID: 1,
@@ -41,25 +50,39 @@ func TestSubmitUseCaseRollbackOnDuplicate(t *testing.T) {
 
 	require.ErrorIs(t, err, domain.ErrDuplicateSeckill)
 	require.Equal(t, domain.RequestStatusFailed, result.Status)
-	require.True(t, tx.rolledBack)
-	require.False(t, tx.committed)
+	require.Equal(t, domain.FailReasonDuplicate, result.FailReason)
 }
 
-func TestSubmitUseCaseLeavesHalfMessageOnReserveError(t *testing.T) {
-	cache := &submitCacheStub{reserveErr: errors.New("redis timeout")}
-	tx := &submitTxStub{}
-	producer := &submitProducerStub{tx: tx}
-	uc := NewSubmitUseCase(&submitActivityRepoStub{}, nil, cache, producer, submitIDGenStub("1003"))
+func TestSubmitUseCaseReturnsProducerError(t *testing.T) {
+	cache := &submitCacheStub{}
+	producer := &submitProducerStub{err: errors.New("send failed")}
+	uc := NewSubmitUseCase(&submitActivityRepoStub{}, nil, cache, domain.NewNopSoldOutMarker(), producer, submitIDGenStub("1003"))
 
 	result, err := uc.Execute(context.Background(), SubmitCmd{
 		ActivityID: 1,
 		UserID:     9,
 	})
 
-	require.NoError(t, err)
-	require.Equal(t, domain.RequestStatusProcessing, result.Status)
-	require.False(t, tx.committed)
-	require.False(t, tx.rolledBack)
+	require.Nil(t, result)
+	require.EqualError(t, err, "send failed")
+}
+
+func TestSubmitUseCaseShortCircuitsWhenLocalSoldOutMarked(t *testing.T) {
+	cache := &submitCacheStub{}
+	producer := &submitProducerStub{}
+	soldOut := &submitSoldOutMarkerStub{soldOut: map[int64]bool{1: true}}
+	uc := NewSubmitUseCase(&submitActivityRepoStub{}, nil, cache, soldOut, producer, submitIDGenStub("1004"))
+
+	result, err := uc.Execute(context.Background(), SubmitCmd{
+		ActivityID: 1,
+		UserID:     9,
+	})
+
+	require.ErrorIs(t, err, domain.ErrOutOfStock)
+	require.NotNil(t, result)
+	require.Equal(t, domain.RequestStatusFailed, result.Status)
+	require.Equal(t, domain.FailReasonOutOfStock, result.FailReason)
+	require.False(t, producer.called)
 }
 
 type submitActivityRepoStub struct{}
@@ -80,10 +103,7 @@ func (s *submitActivityRepoStub) FindByID(context.Context, int64) (*domain.Activ
 
 func (s *submitActivityRepoStub) UpdateStatus(context.Context, int64, string) error { return nil }
 
-type submitCacheStub struct {
-	reserveCode int64
-	reserveErr  error
-}
+type submitCacheStub struct{}
 
 func (s *submitCacheStub) SetActivity(context.Context, *domain.Activity) error { return nil }
 
@@ -94,7 +114,7 @@ func (s *submitCacheStub) GetActivity(context.Context, int64) (*domain.Activity,
 func (s *submitCacheStub) SetActivityStock(context.Context, int64, int32) error { return nil }
 
 func (s *submitCacheStub) AtomicReserve(context.Context, int64, int64, string, int64) (int64, error) {
-	return s.reserveCode, s.reserveErr
+	return 0, nil
 }
 
 func (s *submitCacheStub) Compensate(context.Context, int64, int64, string, domain.Result) error {
@@ -110,30 +130,42 @@ func (s *submitCacheStub) ResolveTransaction(context.Context, int64, int64, stri
 }
 
 type submitProducerStub struct {
-	tx        *submitTxStub
-	lastEvent domain.Event
+	result      *domain.Result
+	err         error
+	lastEvent   domain.Event
+	lastUserTTL int64
+	called      bool
 }
 
-func (s *submitProducerStub) Prepare(_ context.Context, evt domain.Event) (domain.Transaction, error) {
+func (s *submitProducerStub) Submit(_ context.Context, evt domain.Event, userTTLSeconds int64) (*domain.Result, error) {
+	s.called = true
 	s.lastEvent = evt
-	return s.tx, nil
-}
-
-type submitTxStub struct {
-	committed  bool
-	rolledBack bool
-}
-
-func (s *submitTxStub) Commit() error {
-	s.committed = true
-	return nil
-}
-
-func (s *submitTxStub) Rollback() error {
-	s.rolledBack = true
-	return nil
+	s.lastUserTTL = userTTLSeconds
+	return s.result, s.err
 }
 
 type submitIDGenStub string
 
 func (s submitIDGenStub) GenerateID() string { return string(s) }
+
+type submitSoldOutMarkerStub struct {
+	soldOut map[int64]bool
+}
+
+func (s *submitSoldOutMarkerStub) IsSoldOut(activityID int64) bool {
+	return s.soldOut[activityID]
+}
+
+func (s *submitSoldOutMarkerStub) MarkSoldOut(activityID int64) {
+	if s.soldOut == nil {
+		s.soldOut = make(map[int64]bool)
+	}
+	s.soldOut[activityID] = true
+}
+
+func (s *submitSoldOutMarkerStub) Clear(activityID int64) {
+	if s.soldOut == nil {
+		return
+	}
+	delete(s.soldOut, activityID)
+}

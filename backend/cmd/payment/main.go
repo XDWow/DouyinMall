@@ -17,37 +17,37 @@ func main() {
 
 	go func() {
 		port := viper.GetInt("grpc.server.port")
-		log.Printf("Payment gRPC service starting on port %d...", port)
+		log.Printf("支付 gRPC 服务启动中，端口 %d...", port)
 		if err := app.GRPCServer.Run(); err != nil {
-			log.Fatalf("gRPC server run error: %v", err)
+			log.Fatalf("gRPC 服务运行失败: %v", err)
 		}
 	}()
 
 	go func() {
 		port := viper.GetInt("http.server.port")
-		log.Printf("Payment HTTP service starting on port %d...", port)
+		log.Printf("支付 HTTP 服务启动中，端口 %d...", port)
 		if err := app.HTTPServer.Start(); err != nil {
-			log.Fatalf("HTTP server run error: %v", err)
+			log.Fatalf("HTTP 服务运行失败: %v", err)
 		}
 	}()
 
 	app.Cron.Start()
-	log.Println("Payment cron jobs started")
+	log.Println("支付定时任务已启动")
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down payment services...")
+	log.Println("正在关闭支付服务...")
 
 	stopCtx := app.Cron.Stop()
 	<-stopCtx.Done()
 
 	if err := app.GRPCServer.Stop(); err != nil {
-		log.Printf("gRPC server forced to shutdown: %v", err)
+		log.Printf("gRPC 服务强制关闭: %v", err)
 	}
 
-	log.Println("Payment services exited")
+	log.Println("支付服务已退出")
 }
 
 func initViperWatch() {
@@ -73,5 +73,5 @@ func initViperWatch() {
 	_ = viper.BindEnv("alipay.notify_url", "ALIPAY_NOTIFY_URL")
 	viper.WatchConfig()
 
-	log.Println("payment config loaded:", viper.ConfigFileUsed())
+	log.Println("支付配置已加载:", viper.ConfigFileUsed())
 }

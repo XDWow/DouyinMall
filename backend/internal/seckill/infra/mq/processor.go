@@ -17,14 +17,19 @@ type EventProcessor struct {
 	orderClient orderservice.Client
 	requestRepo seckilldomain.RequestRepository
 	cache       seckilldomain.Cache
+	soldOut     seckilldomain.SoldOutMarker
 	logger      logger.LoggerV1
 }
 
-func NewEventProcessor(orderClient orderservice.Client, requestRepo seckilldomain.RequestRepository, _ seckilldomain.ActivityRepository, cache seckilldomain.Cache, l logger.LoggerV1) *EventProcessor {
+func NewEventProcessor(orderClient orderservice.Client, requestRepo seckilldomain.RequestRepository, _ seckilldomain.ActivityRepository, cache seckilldomain.Cache, soldOut seckilldomain.SoldOutMarker, l logger.LoggerV1) *EventProcessor {
+	if soldOut == nil {
+		soldOut = seckilldomain.NewNopSoldOutMarker()
+	}
 	return &EventProcessor{
 		orderClient: orderClient,
 		requestRepo: requestRepo,
 		cache:       cache,
+		soldOut:     soldOut,
 		logger:      l,
 	}
 }
@@ -47,7 +52,7 @@ func (p *EventProcessor) Process(ctx context.Context, evt seckilldomain.Event) e
 			OrderID:   req.OrderID,
 		})
 	case seckilldomain.RequestStatusFailed:
-		return p.cache.Compensate(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
+		return p.compensateAndClear(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
 			RequestNo:  evt.RequestNo,
 			Status:     seckilldomain.RequestStatusFailed,
 			FailReason: req.FailReason,
@@ -63,7 +68,7 @@ func (p *EventProcessor) ProcessDeadLetter(ctx context.Context, dead seckilldoma
 	req, err := p.requestRepo.FindByRequestNo(ctx, evt.RequestNo)
 	if err != nil {
 		if errors.Is(err, seckilldomain.ErrRequestNotFound) {
-			return p.cache.Compensate(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
+			return p.compensateAndClear(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
 				RequestNo:  evt.RequestNo,
 				Status:     seckilldomain.RequestStatusFailed,
 				FailReason: reason,
@@ -80,7 +85,7 @@ func (p *EventProcessor) ProcessDeadLetter(ctx context.Context, dead seckilldoma
 			OrderID:   req.OrderID,
 		})
 	case seckilldomain.RequestStatusFailed:
-		return p.cache.Compensate(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
+		return p.compensateAndClear(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
 			RequestNo:  evt.RequestNo,
 			Status:     seckilldomain.RequestStatusFailed,
 			FailReason: req.FailReason,
@@ -89,7 +94,7 @@ func (p *EventProcessor) ProcessDeadLetter(ctx context.Context, dead seckilldoma
 		if err = p.requestRepo.MarkFail(ctx, evt.RequestNo, reason); err != nil {
 			return err
 		}
-		return p.cache.Compensate(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
+		return p.compensateAndClear(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
 			RequestNo:  evt.RequestNo,
 			Status:     seckilldomain.RequestStatusFailed,
 			FailReason: reason,
@@ -157,7 +162,7 @@ func (p *EventProcessor) processProcessing(ctx context.Context, evt seckilldomai
 	case seckilldomain.RequestStatusOrderCreating:
 		return p.processOrderCreating(ctx, evt)
 	case seckilldomain.RequestStatusFailed:
-		return p.cache.Compensate(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
+		return p.compensateAndClear(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
 			RequestNo:  evt.RequestNo,
 			Status:     seckilldomain.RequestStatusFailed,
 			FailReason: req.FailReason,
@@ -240,11 +245,26 @@ func (p *EventProcessor) rollbackOrderCreating(ctx context.Context, evt seckilld
 	if err != nil {
 		return err
 	}
-	return p.cache.Compensate(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
+	return p.compensateAndClear(ctx, evt.ActivityID, evt.UserID, evt.RequestNo, seckilldomain.Result{
 		RequestNo:  evt.RequestNo,
 		Status:     seckilldomain.RequestStatusFailed,
 		FailReason: req.FailReason,
 	})
+}
+
+func (p *EventProcessor) compensateAndClear(ctx context.Context, activityID, userID int64, requestNo string, result seckilldomain.Result) error {
+	if err := p.cache.Compensate(ctx, activityID, userID, requestNo, result); err != nil {
+		return err
+	}
+	// 这里代表库存已经回补，本机售罄标记也要一起清掉，避免继续误杀。
+	p.soldOut.Clear(activityID)
+	p.logger.Info("compensation finished, clear local sold-out flag",
+		logger.String("requestNo", requestNo),
+		logger.Int64("activityID", activityID),
+		logger.Int64("userID", userID),
+		logger.String("status", result.Status),
+		logger.String("failReason", result.FailReason))
+	return nil
 }
 
 func orderIDOrRequestNo(req *seckilldomain.Request) int64 {

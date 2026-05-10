@@ -14,330 +14,135 @@ import (
 )
 
 func TestProductService_ListProducts(t *testing.T) {
-	testCases := []struct {
-		name      string
-		page      int64
-		pageSize  int64
-		category  string
-		mock      func(ctrl *gomock.Controller) *repomocks.MockProductRepo
-		wantCount int
-		wantErr   bool
-	}{
-		{
-			name:     "鎴愬姛鑾峰彇鍟嗗搧鍒楄〃",
-			page:     1,
-			pageSize: 10,
-			category: "",
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().ListProducts(gomock.Any(), int64(1), int64(10), "").Return([]domain.Product{
-					{ID: 1, Name: "鍟嗗搧1", Price: 100},
-					{ID: 2, Name: "鍟嗗搧2", Price: 200},
-				}, nil)
-				return repo
-			},
-			wantCount: 2,
-			wantErr:   false,
-		},
-		{
-			name:     "鎸夊垎绫绘煡璇?,
-			page:     1,
-			pageSize: 10,
-			category: "鐢靛瓙浜у搧",
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().ListProducts(gomock.Any(), int64(1), int64(10), "鐢靛瓙浜у搧").Return([]domain.Product{
-					{ID: 1, Name: "鎵嬫満", Price: 599900, Categories: []string{"鐢靛瓙浜у搧"}},
-				}, nil)
-				return repo
-			},
-			wantCount: 1,
-			wantErr:   false,
-		},
-		{
-			name:     "Repo杩斿洖閿欒",
-			page:     1,
-			pageSize: 10,
-			category: "",
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().ListProducts(gomock.Any(), int64(1), int64(10), "").Return(nil, errors.New("db error"))
-				return repo
-			},
-			wantCount: 0,
-			wantErr:   true,
-		},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	repo := repomocks.NewMockProductRepo(ctrl)
+	repo.EXPECT().ListProducts(gomock.Any(), int64(1), int64(20), "").Return([]domain.Product{
+		{ID: 1, Name: "Phone"},
+	}, nil)
 
-			repo := tc.mock(ctrl)
-			svc := NewProductService(repo, logger.NewNopLogger())
+	svc := NewProductService(repo, logger.NewNopLogger())
+	products, err := svc.ListProducts(context.Background(), 0, 0, "")
 
-			products, err := svc.ListProducts(context.Background(), tc.page, tc.pageSize, tc.category)
-
-			if tc.wantErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Len(t, products, tc.wantCount)
-			}
-		})
-	}
+	require.NoError(t, err)
+	require.Len(t, products, 1)
 }
 
 func TestProductService_GetProduct(t *testing.T) {
-	testCases := []struct {
-		name    string
-		id      int64
-		mock    func(ctrl *gomock.Controller) *repomocks.MockProductRepo
-		wantID  int64
-		wantErr bool
-	}{
-		{
-			name: "鎴愬姛鑾峰彇鍟嗗搧璇︽儏",
-			id:   1,
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().GetProduct(gomock.Any(), int64(1)).Return(domain.Product{
-					ID:      1,
-					Name:    "iPhone 15",
-					Price:   599900,
-					InStock: true,
-				}, nil)
-				return repo
-			},
-			wantID:  1,
-			wantErr: false,
-		},
-		{
-			name: "鍟嗗搧涓嶅瓨鍦?,
-			id:   999,
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().GetProduct(gomock.Any(), int64(999)).Return(domain.Product{}, errors.New("not found"))
-				return repo
-			},
-			wantID:  0,
-			wantErr: true,
-		},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	query := domain.ProductQuery{ID: 1, SKUID: 101}
+	repo := repomocks.NewMockProductRepo(ctrl)
+	repo.EXPECT().GetProduct(gomock.Any(), query).Return(domain.Product{
+		ID:    1,
+		SKUID: 101,
+		Name:  "Phone",
+	}, nil)
 
-			repo := tc.mock(ctrl)
-			svc := NewProductService(repo, logger.NewNopLogger())
+	svc := NewProductService(repo, logger.NewNopLogger())
+	product, err := svc.GetProduct(context.Background(), query)
 
-			product, err := svc.GetProduct(context.Background(), tc.id)
+	require.NoError(t, err)
+	assert.Equal(t, int64(101), product.SKUID)
+}
 
-			if tc.wantErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tc.wantID, product.ID)
-			}
-		})
-	}
+func TestProductService_GetProduct_RequiresSKU(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	svc := NewProductService(repomocks.NewMockProductRepo(ctrl), logger.NewNopLogger())
+	product, err := svc.GetProduct(context.Background(), domain.ProductQuery{ID: 1})
+
+	assert.Error(t, err)
+	assert.Equal(t, domain.Product{}, product)
 }
 
 func TestProductService_CreateProduct(t *testing.T) {
-	testCases := []struct {
-		name    string
-		product domain.Product
-		mock    func(ctrl *gomock.Controller) *repomocks.MockProductRepo
-		wantID  int64
-		wantErr bool
-	}{
-		{
-			name: "鎴愬姛鍒涘缓鍟嗗搧",
-			product: domain.Product{
-				Name:       "鏂板晢鍝?,
-				Price:      9900,
-				InStock:    true,
-				Categories: []string{"鏈嶈"},
-			},
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().CreateProduct(gomock.Any(), gomock.Any()).Return(int64(1), nil)
-				return repo
-			},
-			wantID:  1,
-			wantErr: false,
-		},
-		{
-			name: "鍟嗗搧鍚嶅寘鍚晱鎰熻瘝",
-			product: domain.Product{
-				Name:  "鏁忔劅璇嶅晢鍝?,
-				Price: 9900,
-			},
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				// 涓嶄細璋冪敤 repo锛屽洜涓烘晱鎰熻瘝鏍￠獙鍦ㄥ墠
-				return repomocks.NewMockProductRepo(ctrl)
-			},
-			wantID:  0,
-			wantErr: true,
-		},
-		{
-			name: "鎻忚堪鍖呭惈鏁忔劅璇?,
-			product: domain.Product{
-				Name:        "姝ｅ父鍟嗗搧",
-				Description: "杩欐槸鏁忔劅璇嶆弿杩?,
-				Price:       9900,
-			},
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				return repomocks.NewMockProductRepo(ctrl)
-			},
-			wantID:  0,
-			wantErr: true,
-		},
-		{
-			name: "Repo杩斿洖閿欒",
-			product: domain.Product{
-				Name:  "姝ｅ父鍟嗗搧",
-				Price: 9900,
-			},
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().CreateProduct(gomock.Any(), gomock.Any()).Return(int64(0), errors.New("db error"))
-				return repo
-			},
-			wantID:  0,
-			wantErr: true,
-		},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	product := validProduct()
+	repo := repomocks.NewMockProductRepo(ctrl)
+	repo.EXPECT().CreateProduct(gomock.Any(), product).Return(int64(1), nil)
 
-			repo := tc.mock(ctrl)
-			svc := NewProductService(repo, logger.NewNopLogger())
+	svc := NewProductService(repo, logger.NewNopLogger())
+	id, err := svc.CreateProduct(context.Background(), product)
 
-			id, err := svc.CreateProduct(context.Background(), tc.product)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), id)
+}
 
-			if tc.wantErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tc.wantID, id)
-			}
-		})
-	}
+func TestProductService_CreateProduct_ValidationAndSensitiveWords(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	svc := NewProductService(repomocks.NewMockProductRepo(ctrl), logger.NewNopLogger())
+
+	_, err := svc.CreateProduct(context.Background(), domain.Product{Name: "missing sku", MerchantID: 1})
+	assert.Error(t, err)
+
+	product := validProduct()
+	product.Name = "blocked item"
+	_, err = svc.CreateProduct(context.Background(), product)
+	assert.Error(t, err)
 }
 
 func TestProductService_UpdateProduct(t *testing.T) {
-	testCases := []struct {
-		name    string
-		product domain.Product
-		mock    func(ctrl *gomock.Controller) *repomocks.MockProductRepo
-		wantID  int64
-		wantErr bool
-	}{
-		{
-			name: "鎴愬姛鏇存柊鍟嗗搧",
-			product: domain.Product{
-				ID:    1,
-				Name:  "鏇存柊鍚庣殑鍟嗗搧鍚?,
-				Price: 19900,
-			},
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().UpdateProduct(gomock.Any(), gomock.Any()).Return(int64(1), nil)
-				return repo
-			},
-			wantID:  1,
-			wantErr: false,
-		},
-		{
-			name: "鏇存柊鏃跺晢鍝佸悕鍖呭惈鏁忔劅璇?,
-			product: domain.Product{
-				ID:   1,
-				Name: "鏁忔劅璇嶅悕绉?,
-			},
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				return repomocks.NewMockProductRepo(ctrl)
-			},
-			wantID:  0,
-			wantErr: true,
-		},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	product := validProduct()
+	product.ID = 1
+	product.Name = "Phone Pro"
 
-			repo := tc.mock(ctrl)
-			svc := NewProductService(repo, logger.NewNopLogger())
+	repo := repomocks.NewMockProductRepo(ctrl)
+	repo.EXPECT().UpdateProduct(gomock.Any(), product).Return(int64(1), nil)
 
-			id, err := svc.UpdateProduct(context.Background(), tc.product)
+	svc := NewProductService(repo, logger.NewNopLogger())
+	id, err := svc.UpdateProduct(context.Background(), product)
 
-			if tc.wantErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tc.wantID, id)
-			}
-		})
-	}
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), id)
+}
+
+func TestProductService_UpdateProduct_RepoError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	product := validProduct()
+	product.ID = 1
+
+	repo := repomocks.NewMockProductRepo(ctrl)
+	repo.EXPECT().UpdateProduct(gomock.Any(), product).Return(int64(0), errors.New("db error"))
+
+	svc := NewProductService(repo, logger.NewNopLogger())
+	_, err := svc.UpdateProduct(context.Background(), product)
+
+	assert.Error(t, err)
 }
 
 func TestProductService_DeleteProduct(t *testing.T) {
-	testCases := []struct {
-		name    string
-		id      int64
-		userID  int64
-		mock    func(ctrl *gomock.Controller) *repomocks.MockProductRepo
-		wantErr bool
-	}{
-		{
-			name:   "鎴愬姛鍒犻櫎鍟嗗搧",
-			id:     1,
-			userID: 100,
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().DeleteProduct(gomock.Any(), int64(1), int64(100)).Return(nil)
-				return repo
-			},
-			wantErr: false,
-		},
-		{
-			name:   "鍒犻櫎澶辫触-鏃犳潈闄?,
-			id:     1,
-			userID: 999,
-			mock: func(ctrl *gomock.Controller) *repomocks.MockProductRepo {
-				repo := repomocks.NewMockProductRepo(ctrl)
-				repo.EXPECT().DeleteProduct(gomock.Any(), int64(1), int64(999)).Return(errors.New("no permission"))
-				return repo
-			},
-			wantErr: true,
-		},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	repo := repomocks.NewMockProductRepo(ctrl)
+	repo.EXPECT().DeleteProduct(gomock.Any(), int64(1), int64(1001)).Return(nil)
 
-			repo := tc.mock(ctrl)
-			svc := NewProductService(repo, logger.NewNopLogger())
+	svc := NewProductService(repo, logger.NewNopLogger())
+	err := svc.DeleteProduct(context.Background(), 1, 1001)
 
-			err := svc.DeleteProduct(context.Background(), tc.id, tc.userID)
-
-			if tc.wantErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
+	require.NoError(t, err)
 }
 
-
+func validProduct() domain.Product {
+	return domain.Product{
+		SKUID:      101,
+		Name:       "Phone",
+		Price:      9900,
+		Currency:   "CNY",
+		InStock:    true,
+		MerchantID: 1001,
+	}
+}

@@ -34,7 +34,7 @@ func NewSyncPaymentOrderUC(
 func (uc *SyncPaymentOrderUC) SyncOrderInfo(ctx context.Context, bizTradeNo string) error {
 	resp, err := uc.svc.QueryOrderByOutTradeNo(ctx, bizTradeNo)
 	if err != nil {
-		uc.l.Error("query payment order failed",
+		uc.l.Error("查询支付渠道订单失败",
 			logger.String("biz_trade_no", bizTradeNo),
 			logger.Error(err))
 		return err
@@ -47,7 +47,7 @@ func (uc *SyncPaymentOrderUC) SyncOrderInfo(ctx context.Context, bizTradeNo stri
 	}
 
 	if err = uc.payCallbackUC.UpdatePaymentByTxn(ctx, cmd); err != nil {
-		uc.l.Error("update local payment by provider order failed",
+		uc.l.Error("根据支付渠道订单更新本地支付状态失败",
 			logger.String("biz_trade_no", bizTradeNo),
 			logger.Error(err))
 		return err

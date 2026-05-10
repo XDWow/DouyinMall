@@ -8,7 +8,7 @@ db:
 
 redis:
   addr: "106.52.154.235:6379"
-  password: ""
+  password: "0624"
   db: 0
 
 etcd:
@@ -25,16 +25,13 @@ http:
     port: 18098
 
 rocketmq:
-  endpoint: "43.136.121.171:8081"
+  name_server: "43.136.121.171:9876"
   access_key: ""
   secret_key: ""
+  producer_group: "seckill-request-producer"
   request_group: "seckill-request-consumer"
   dead_letter_group: "seckill-request-dead-letter-consumer"
-  invisible_duration_sec: 30
+  order_status_group: "seckill-order-status-consumer"
   handle_timeout_sec: 25
-  shutdown_timeout_sec: 10
-  await_duration_sec: 5
-  max_message_num: 16
   producer_max_attempts: 3
-  global_worker_num: 32
-  per_activity_concurrency: 8
+  global_worker_num: 10

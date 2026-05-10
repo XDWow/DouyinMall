@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/XDWow/DouyinMall/backend/internal/payment/domain"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
@@ -50,9 +51,16 @@ func (uc *PayCallbackUC) Execute(ctx context.Context, cmd CallbackCmd) error {
 }
 
 func (uc *PayCallbackUC) UpdatePaymentByTxn(ctx context.Context, cmd CallbackCmd) error {
+	cmd.TradeState = strings.TrimSpace(cmd.TradeState)
+	cmd.TransactionId = strings.TrimSpace(cmd.TransactionId)
+	cmd.OutTradeNo = strings.TrimSpace(cmd.OutTradeNo)
+
 	status, ok := uc.nativeCBTypeToStatus[cmd.TradeState]
 	if !ok {
 		return errors.New("unknown trade state")
+	}
+	if status == domain.PaymentStatusSuccess && cmd.TransactionId == "" {
+		return domain.ErrPaymentTxnIDRequired
 	}
 
 	orderID, err := strconv.ParseInt(cmd.OutTradeNo, 10, 64)
@@ -61,7 +69,7 @@ func (uc *PayCallbackUC) UpdatePaymentByTxn(ctx context.Context, cmd CallbackCmd
 	}
 
 	err = uc.tx.Tx(ctx, func(ctx context.Context) error {
-		// Persist payment state and outbox atomically, so order advancement is recoverable.
+		// 支付状态和 outbox 同事务落库，确保订单状态推进可恢复
 		pmt, changed, applyErr := uc.repo.ApplyProviderResult(ctx, domain.Payment{
 			BizTradeNo: cmd.OutTradeNo,
 			Status:     status,
@@ -71,7 +79,7 @@ func (uc *PayCallbackUC) UpdatePaymentByTxn(ctx context.Context, cmd CallbackCmd
 			return applyErr
 		}
 		if !changed {
-			uc.l.Info("payment provider result ignored by monotonic state machine",
+			uc.l.Info("支付回调被单调状态机忽略",
 				logger.String("bizTradeNo", cmd.OutTradeNo),
 				logger.Int("incomingStatus", int(status)))
 			return nil

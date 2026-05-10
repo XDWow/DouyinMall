@@ -6,6 +6,7 @@ package main
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/cache"
+	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/local"
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/mq"
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/ioc"
@@ -31,30 +32,32 @@ func InitApp() *App {
 	cmdable := ioc.InitRedis()
 	redisCache := cache.NewRedisCache(cmdable)
 	cache2 := repository.NewCacheRepository(redisCache)
+	soldOutMarker := local.NewSoldOutMarker()
 	activityRepository := repository.NewActivityRepository(gormDB)
 	requestRepository := repository.NewRequestRepository(gormDB)
-	producerClient := ioc.InitRocketMQProducerClient(cache2, loggerV1)
-	producer := mq.NewProducer(producerClient)
-	seckillSimpleConsumer := ioc.InitSeckillSimpleConsumer()
-	deadLetterSimpleConsumer := ioc.InitSeckillDeadLetterSimpleConsumer()
+	transactionListener := mq.NewTransactionListener(cache2, soldOutMarker, loggerV1)
+	producerClient := ioc.InitRocketMQProducerClient(transactionListener)
+	producer := mq.NewProducer(producerClient, transactionListener, loggerV1)
+	seckillPushConsumer := ioc.InitSeckillPushConsumer()
+	deadLetterPushConsumer := ioc.InitSeckillDeadLetterPushConsumer()
+	deadLetterTopic := ioc.InitSeckillDeadLetterTopic()
 	seckillConsumerOptions := ioc.InitSeckillConsumerOptions()
 	idGenerator := ioc.InitIDGenerator()
-	createActivityUseCase := usecase.NewCreateActivityUseCase(activityRepository, cache2)
-	updateActivityStatusUseCase := usecase.NewUpdateActivityStatusUseCase(activityRepository, cache2)
+	createActivityUseCase := usecase.NewCreateActivityUseCase(activityRepository, cache2, soldOutMarker)
+	updateActivityStatusUseCase := usecase.NewUpdateActivityStatusUseCase(activityRepository, cache2, soldOutMarker)
 	getActivityUseCase := usecase.NewGetActivityUseCase(activityRepository, cache2)
-	submitUseCase := usecase.NewSubmitUseCase(activityRepository, requestRepository, cache2, producer, idGenerator, loggerV1)
+	submitUseCase := usecase.NewSubmitUseCase(activityRepository, requestRepository, cache2, soldOutMarker, producer, idGenerator, loggerV1)
 	getResultUseCase := usecase.NewGetResultUseCase(requestRepository, cache2)
 	handler := transportgrpc.NewHandler(createActivityUseCase, updateActivityStatusUseCase, getActivityUseCase, submitUseCase, getResultUseCase)
 	grpcServer := ioc.InitGRPCServer(handler)
 	httpHandler := transporthttp.NewHandler(getActivityUseCase, submitUseCase, getResultUseCase)
 	httpServer := ioc.InitHTTPServer(httpHandler)
 	orderClient := ioc.InitOrderClient()
-	processor := mq.NewEventProcessor(orderClient, requestRepository, activityRepository, cache2, loggerV1)
-	seckillConsumer := mq.NewSeckillConsumer(seckillSimpleConsumer, processor, loggerV1, seckillConsumerOptions)
-	deadLetterConsumer := mq.NewDeadLetterConsumer(deadLetterSimpleConsumer, processor, loggerV1, seckillConsumerOptions)
-	orderStatusSimpleConsumer := ioc.InitSeckillOrderStatusSimpleConsumer()
-	orderStatusConsumerOptions := ioc.InitSeckillOrderStatusConsumerOptions()
-	orderStatusConsumer := mq.NewOrderStatusConsumer(orderStatusSimpleConsumer, requestRepository, activityRepository, cache2, loggerV1, orderStatusConsumerOptions)
+	processor := mq.NewEventProcessor(orderClient, requestRepository, activityRepository, cache2, soldOutMarker, loggerV1)
+	seckillConsumer := mq.NewSeckillConsumer(seckillPushConsumer, processor, loggerV1, seckillConsumerOptions)
+	deadLetterConsumer := mq.NewDeadLetterConsumer(deadLetterPushConsumer, deadLetterTopic, processor, loggerV1, seckillConsumerOptions)
+	orderStatusPushConsumer := ioc.InitSeckillOrderStatusPushConsumer()
+	orderStatusConsumer := mq.NewOrderStatusConsumer(orderStatusPushConsumer, requestRepository, activityRepository, cache2, soldOutMarker, loggerV1, seckillConsumerOptions)
 	return &App{
 		GRPCServer:          grpcServer,
 		HTTPServer:          httpServer,

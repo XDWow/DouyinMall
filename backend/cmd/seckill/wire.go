@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/cache"
+	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/local"
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/mq"
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/ioc"
@@ -29,12 +30,14 @@ func InitApp() *App {
 		ioc.InitLogger,
 		ioc.InitDB,
 		ioc.InitRedis,
+		local.NewSoldOutMarker,
+		mq.NewTransactionListener,
 		ioc.InitRocketMQProducerClient,
-		ioc.InitSeckillSimpleConsumer,
-		ioc.InitSeckillDeadLetterSimpleConsumer,
-		ioc.InitSeckillOrderStatusSimpleConsumer,
+		ioc.InitSeckillPushConsumer,
+		ioc.InitSeckillDeadLetterPushConsumer,
+		ioc.InitSeckillDeadLetterTopic,
+		ioc.InitSeckillOrderStatusPushConsumer,
 		ioc.InitSeckillConsumerOptions,
-		ioc.InitSeckillOrderStatusConsumerOptions,
 		ioc.InitOrderClient,
 		ioc.InitIDGenerator,
 		cache.NewRedisCache,

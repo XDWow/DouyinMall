@@ -33,7 +33,7 @@ func (o KeyedConsumerPoolOptions) withDefaults() KeyedConsumerPoolOptions {
 	if o.GlobalWorkerNum <= 0 {
 		o.GlobalWorkerNum = defaultGlobalWorkerNum
 	}
-	if o.PerActivityConcurrency <= 0 {
+	if o.PerActivityConcurrency == 0 {
 		o.PerActivityConcurrency = defaultPerActivityLimit
 	}
 	return o
@@ -61,9 +61,14 @@ func NewKeyedConsumerPool(options KeyedConsumerPoolOptions, l logger.LoggerV1) (
 		return nil, err
 	}
 
+	var sem *keyedsemaphore.KeyedSemaphore[string]
+	if options.PerActivityConcurrency > 0 {
+		sem = keyedsemaphore.NewKeyedSemaphore[string](options.PerActivityConcurrency)
+	}
+
 	return &KeyedConsumerPool{
 		pool:        workerPool,
-		sem:         keyedsemaphore.NewKeyedSemaphore[string](options.PerActivityConcurrency),
+		sem:         sem,
 		log:         l,
 		taskTimeout: options.TaskTimeout,
 	}, nil
@@ -82,19 +87,22 @@ func (p *KeyedConsumerPool) Submit(ctx context.Context, activityKey string, task
 		p.mu.Unlock()
 		return ErrPoolClosed
 	}
-
-	ok := p.sem.TryWait(ctx, activityKey)
-	if !ok {
-		p.mu.Unlock()
-		return ErrActivityBusy
+	if p.sem != nil {
+		ok := p.sem.TryWait(ctx, activityKey)
+		if !ok {
+			p.mu.Unlock()
+			return ErrActivityBusy
+		}
 	}
-
 	p.wg.Add(1)
 	p.mu.Unlock()
+
 	err := p.pool.Submit(func() {
 		defer func() {
 			p.wg.Done()
-			_ = p.sem.Release(activityKey)
+			if p.sem != nil {
+				_ = p.sem.Release(activityKey)
+			}
 		}()
 
 		defer func() {
@@ -118,11 +126,20 @@ func (p *KeyedConsumerPool) Submit(ctx context.Context, activityKey string, task
 	})
 	if err != nil {
 		p.wg.Done()
-		_ = p.sem.Release(activityKey)
+		if p.sem != nil {
+			_ = p.sem.Release(activityKey)
+		}
 		return err
 	}
 
 	return nil
+}
+
+func (p *KeyedConsumerPool) Available() int {
+	if p == nil || p.pool == nil {
+		return 0
+	}
+	return p.pool.Free()
 }
 
 func (p *KeyedConsumerPool) Close() {

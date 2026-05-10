@@ -1,7 +1,6 @@
 package domain
 
-// Payment status changes are published through payment outbox.
-// Order service consumes this event to advance CREATED -> PAID asynchronously.
+// 支付状态变化通过支付 outbox 投递，订单服务异步消费后推进状态机。
 const EventTypePaymentStatusChanged = "payment.status.changed"
 
 type PaymentStatusUpdateEvent struct {

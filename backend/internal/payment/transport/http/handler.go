@@ -49,14 +49,14 @@ func NewPaymentCallbackHandler(
 
 func (h *PaymentCallbackHandler) HandleWechatCallback(c *gin.Context) {
 	if h.provider != providerMockWechat && h.provider != providerWechat {
-		h.respondWechatFail(c, "wechat callback is disabled")
+		h.respondWechatFail(c, "微信回调未启用")
 		return
 	}
 
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		h.l.Error("read wechat callback body failed", logger.Error(err))
-		h.respondWechatFail(c, "read request failed")
+		h.l.Error("读取微信回调请求体失败", logger.Error(err))
+		h.respondWechatFail(c, "读取请求失败")
 		return
 	}
 	c.Request.Body = io.NopCloser(strings.NewReader(string(body)))
@@ -68,10 +68,10 @@ func (h *PaymentCallbackHandler) HandleWechatCallback(c *gin.Context) {
 		cmd, err = h.parseWechatCallback(c)
 	}
 	if err != nil {
-		h.l.Error("parse wechat callback failed",
+		h.l.Error("解析微信回调失败",
 			logger.Error(err),
 			logger.String("body", string(body)))
-		h.respondWechatFail(c, "invalid callback")
+		h.respondWechatFail(c, "回调参数无效")
 		return
 	}
 
@@ -79,10 +79,10 @@ func (h *PaymentCallbackHandler) HandleWechatCallback(c *gin.Context) {
 	defer cancel()
 
 	if err = h.payCallbackUC.Execute(ctx, cmd); err != nil {
-		h.l.Error("handle wechat callback failed",
+		h.l.Error("处理微信回调失败",
 			logger.Error(err),
 			logger.String("out_trade_no", cmd.OutTradeNo))
-		h.respondWechatFail(c, "handle callback failed")
+		h.respondWechatFail(c, "处理回调失败")
 		return
 	}
 
@@ -96,14 +96,14 @@ func (h *PaymentCallbackHandler) HandleAlipayCallback(c *gin.Context) {
 	}
 
 	if err := c.Request.ParseForm(); err != nil {
-		h.l.Error("parse alipay callback form failed", logger.Error(err))
+		h.l.Error("解析支付宝回调表单失败", logger.Error(err))
 		h.respondAlipayFail(c)
 		return
 	}
 
 	notification, err := h.alipayClient.DecodeNotification(c.Request.Context(), c.Request.PostForm)
 	if err != nil {
-		h.l.Error("decode alipay callback failed", logger.Error(err))
+		h.l.Error("解码支付宝回调失败", logger.Error(err))
 		h.respondAlipayFail(c)
 		return
 	}
@@ -118,7 +118,7 @@ func (h *PaymentCallbackHandler) HandleAlipayCallback(c *gin.Context) {
 	defer cancel()
 
 	if err = h.payCallbackUC.Execute(ctx, cmd); err != nil {
-		h.l.Error("handle alipay callback failed",
+		h.l.Error("处理支付宝回调失败",
 			logger.Error(err),
 			logger.String("out_trade_no", cmd.OutTradeNo))
 		h.respondAlipayFail(c)
@@ -142,10 +142,17 @@ func (h *PaymentCallbackHandler) parseWechatCallback(c *gin.Context) (usecase.Ca
 	if err != nil {
 		return usecase.CallbackCmd{}, err
 	}
+	if transaction.TradeState == nil || transaction.OutTradeNo == nil {
+		return usecase.CallbackCmd{}, fmt.Errorf("wechat callback missing required fields")
+	}
+	transactionID := ""
+	if transaction.TransactionId != nil {
+		transactionID = *transaction.TransactionId
+	}
 
 	return usecase.CallbackCmd{
 		TradeState:    string(*transaction.TradeState),
-		TransactionId: *transaction.TransactionId,
+		TransactionId: transactionID,
 		OutTradeNo:    *transaction.OutTradeNo,
 	}, nil
 }
@@ -163,9 +170,9 @@ func (h *PaymentCallbackHandler) parseMockWechatCallback(body []byte) (usecase.C
 		return usecase.CallbackCmd{}, fmt.Errorf("mock callback missing required fields")
 	}
 	return usecase.CallbackCmd{
-		TradeState:    payload.TradeState,
-		TransactionId: payload.TransactionID,
-		OutTradeNo:    payload.OutTradeNo,
+		TradeState:    strings.TrimSpace(payload.TradeState),
+		TransactionId: strings.TrimSpace(payload.TransactionID),
+		OutTradeNo:    strings.TrimSpace(payload.OutTradeNo),
 	}, nil
 }
 

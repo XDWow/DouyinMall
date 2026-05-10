@@ -73,8 +73,16 @@ func (h *Handler) GetProduct(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "invalid product id"})
 		return
 	}
+	skuID := int64Query(c, "sku_id")
+	if skuID <= 0 {
+		c.JSON(http.StatusBadRequest, ginx.Result{Code: 4, Msg: "sku_id is required"})
+		return
+	}
 
-	product, err := h.svc.GetProduct(c.Request.Context(), productID)
+	product, err := h.svc.GetProduct(c.Request.Context(), domain.ProductQuery{
+		ID:    productID,
+		SKUID: skuID,
+	})
 	if err != nil {
 		writeProductError(c, err)
 		return
@@ -88,11 +96,13 @@ func (h *Handler) GetProduct(c *gin.Context) {
 func productToResponse(p domain.Product) gin.H {
 	return gin.H{
 		"id":            p.ID,
+		"sku_id":        p.SKUID,
 		"name":          p.Name,
 		"description":   p.Description,
 		"picture":       p.Picture,
 		"slider_imgs":   p.SlideImgs,
 		"price":         p.Price,
+		"currency":      p.Currency,
 		"categories":    p.Categories,
 		"in_stock":      p.InStock,
 		"merchant_id":   p.MerchantID,

@@ -24,7 +24,7 @@ func TestEventProcessorProcessSuccess(t *testing.T) {
 	cache.stock[1] = 1
 	activityRepo.stockByActivity[1] = 1
 
-	processor := NewEventProcessor(&processorOrderClient{}, requestRepo, activityRepo, cache, logger.NewNopLogger())
+	processor := NewEventProcessor(&processorOrderClient{}, requestRepo, activityRepo, cache, seckilldomain.NewNopSoldOutMarker(), logger.NewNopLogger())
 	evt := seckilldomain.Event{
 		RequestNo:    "10001",
 		ActivityID:   1,
@@ -56,6 +56,7 @@ func TestEventProcessorDeadLetterRollsBackOrderCreating(t *testing.T) {
 	cache := newProcessorCache()
 	cache.stock[1] = 0
 	cache.userMarkers[processorActUserKey(1, 2)] = "10002"
+	soldOut := &processorSoldOutMarker{soldOut: map[int64]bool{1: true}}
 	requestRepo.byReq["10002"] = &seckilldomain.Request{
 		ID:         1,
 		RequestNo:  "10002",
@@ -66,7 +67,7 @@ func TestEventProcessorDeadLetterRollsBackOrderCreating(t *testing.T) {
 	activityRepo.stockByActivity[1] = 0
 	activityRepo.qualifications[processorActUserKey(1, 2)] = "10002"
 
-	processor := NewEventProcessor(&processorOrderClient{}, requestRepo, activityRepo, cache, logger.NewNopLogger())
+	processor := NewEventProcessor(&processorOrderClient{}, requestRepo, activityRepo, cache, soldOut, logger.NewNopLogger())
 	err := processor.ProcessDeadLetter(context.Background(), seckilldomain.DeadLetterEvent{
 		Event: seckilldomain.Event{
 			RequestNo:  "10002",
@@ -86,6 +87,7 @@ func TestEventProcessorDeadLetterRollsBackOrderCreating(t *testing.T) {
 	require.EqualValues(t, 1, cache.stock[1])
 	_, ok := cache.userMarkers[processorActUserKey(1, 2)]
 	require.False(t, ok)
+	require.False(t, soldOut.IsSoldOut(1))
 	result, err := cache.GetResult(context.Background(), "10002")
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -110,7 +112,7 @@ func TestEventProcessorDuplicateCreateOrderErrorDoesNotRollback(t *testing.T) {
 
 	processor := NewEventProcessor(&processorOrderClient{
 		createErr: errors.New("Error 1062: Duplicate entry '10003' for key 'PRIMARY'"),
-	}, requestRepo, activityRepo, cache, logger.NewNopLogger())
+	}, requestRepo, activityRepo, cache, seckilldomain.NewNopSoldOutMarker(), logger.NewNopLogger())
 
 	err := processor.Process(context.Background(), seckilldomain.Event{
 		RequestNo:  "10003",
@@ -145,7 +147,7 @@ func TestEventProcessorDeadLetterLookupOrderNetworkErrorDoesNotRollback(t *testi
 
 	processor := NewEventProcessor(&processorOrderClient{
 		getErr: errors.New("network timeout"),
-	}, requestRepo, activityRepo, cache, logger.NewNopLogger())
+	}, requestRepo, activityRepo, cache, seckilldomain.NewNopSoldOutMarker(), logger.NewNopLogger())
 
 	err := processor.ProcessDeadLetter(context.Background(), seckilldomain.DeadLetterEvent{
 		Event: seckilldomain.Event{
@@ -169,6 +171,7 @@ func TestEventProcessorDeadLetterOrderNotFoundRollsBack(t *testing.T) {
 	cache := newProcessorCache()
 	cache.stock[1] = 0
 	cache.userMarkers[processorActUserKey(1, 2)] = "10005"
+	soldOut := &processorSoldOutMarker{soldOut: map[int64]bool{1: true}}
 	requestRepo.byReq["10005"] = &seckilldomain.Request{
 		ID:         1,
 		RequestNo:  "10005",
@@ -181,7 +184,7 @@ func TestEventProcessorDeadLetterOrderNotFoundRollsBack(t *testing.T) {
 
 	processor := NewEventProcessor(&processorOrderClient{
 		getErr: kerrors.NewBizStatusError(orderdomain.BizStatusGetOrderNotFound, "record not found"),
-	}, requestRepo, activityRepo, cache, logger.NewNopLogger())
+	}, requestRepo, activityRepo, cache, soldOut, logger.NewNopLogger())
 
 	err := processor.ProcessDeadLetter(context.Background(), seckilldomain.DeadLetterEvent{
 		Event: seckilldomain.Event{
@@ -198,6 +201,7 @@ func TestEventProcessorDeadLetterOrderNotFoundRollsBack(t *testing.T) {
 	require.Equal(t, seckilldomain.RequestStatusFailed, req.Status)
 	require.EqualValues(t, 1, activityRepo.stockByActivity[1])
 	require.False(t, activityRepo.hasQualification(1, 2))
+	require.False(t, soldOut.IsSoldOut(1))
 }
 
 type processorActivityRepo struct {
@@ -533,4 +537,26 @@ var _ orderservice.Client = (*processorOrderClient)(nil)
 
 func processorActUserKey(activityID, userID int64) string {
 	return strconv.FormatInt(activityID, 10) + ":" + strconv.FormatInt(userID, 10)
+}
+
+type processorSoldOutMarker struct {
+	soldOut map[int64]bool
+}
+
+func (m *processorSoldOutMarker) IsSoldOut(activityID int64) bool {
+	return m.soldOut[activityID]
+}
+
+func (m *processorSoldOutMarker) MarkSoldOut(activityID int64) {
+	if m.soldOut == nil {
+		m.soldOut = make(map[int64]bool)
+	}
+	m.soldOut[activityID] = true
+}
+
+func (m *processorSoldOutMarker) Clear(activityID int64) {
+	if m.soldOut == nil {
+		return
+	}
+	delete(m.soldOut, activityID)
 }
