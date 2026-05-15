@@ -18,7 +18,7 @@ import (
 
 // Injectors from wire.go:
 
-// InitApp 鍒濆鍖栨暣涓簲鐢?
+// InitApp initializes the user service server.
 func InitApp() server.Server {
 	db := ioc.InitDB()
 	userDAO := dao.NewGORMUserDAO(db)
@@ -31,5 +31,3 @@ func InitApp() server.Server {
 	serverServer := ioc.InitGRPCServer(userServiceServer)
 	return serverServer
 }
-
-

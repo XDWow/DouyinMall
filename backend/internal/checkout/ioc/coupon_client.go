@@ -18,13 +18,11 @@ func InitCouponClient() couponservice.Client {
 	}
 	r, err := etcd.NewEtcdResolver(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 etcd 鏈嶅姟鍙戠幇澶辫触: %w", err))
+		panic(fmt.Errorf("create etcd resolver for coupon client: %w", err))
 	}
 	c, err := couponservice.NewClient("coupon.service", client.WithResolver(r))
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 coupon 瀹㈡埛绔け璐? %w", err))
+		panic(fmt.Errorf("create coupon client: %w", err))
 	}
 	return c
 }
-
-

@@ -9,5 +9,5 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/bff .
-COPY --from=builder /app/internal/bff/config/docker.yaml ./internal/bff/config/dev.yaml
-ENTRYPOINT ["./bff", "--config", "internal/bff/config/dev.yaml"]
+COPY --from=builder /app/internal/bff/config/prod.yaml ./internal/bff/config/prod.yaml
+ENTRYPOINT ["./bff", "--config", "internal/bff/config/prod.yaml"]

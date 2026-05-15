@@ -121,7 +121,7 @@ func (repo *couponRepository) GetAvailableByIDs(ctx context.Context, userID int6
 func (repo *couponRepository) CountByUserAndTemplate(ctx context.Context, userID, templateID int64) (int32, error) {
 	var count int64
 	err := repo.db.WithContext(ctx).Model(&db.Coupon{}).
-		Where("userID = ? && templateID = ?", userID, templateID).
+		Where("user_id = ? AND template_id = ?", userID, templateID).
 		Count(&count).Error
 	if err != nil {
 		return 0, err
@@ -302,5 +302,3 @@ func (repo *couponRepository) MarkExpiredCoupons(ctx context.Context) (int64, er
 
 	return result.RowsAffected, nil
 }
-
-

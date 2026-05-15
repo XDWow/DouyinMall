@@ -9,6 +9,6 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/checkout .
-COPY --from=builder /app/internal/checkout/config/docker.yaml ./internal/checkout/config/dev.yaml
+COPY --from=builder /app/internal/checkout/config/prod.yaml ./internal/checkout/config/prod.yaml
 EXPOSE 8086 18086
-ENTRYPOINT ["./checkout"]
+ENTRYPOINT ["./checkout", "--config", "internal/checkout/config/prod.yaml"]

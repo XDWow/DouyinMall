@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -47,6 +48,10 @@ func main() {
 }
 
 func initViperWatch() {
+	if err := envx.Load(); err != nil {
+		panic(fmt.Errorf("load .env failed: %w", err))
+	}
+
 	cfile := pflag.String("config", "internal/search/config/dev.yaml", "config file path")
 	pflag.Parse()
 	viper.SetConfigFile(*cfile)
@@ -57,6 +62,8 @@ func initViperWatch() {
 
 	viper.AutomaticEnv()
 	_ = viper.BindEnv("db.password", "DB_PASSWORD")
+	_ = viper.BindEnv("llm.api_key", "SEARCH_LLM_API_KEY", "LLM_API_KEY")
+	_ = viper.BindEnv("embedding.api_key", "SEARCH_EMBEDDING_API_KEY", "EMBEDDING_API_KEY")
 	_ = viper.BindEnv("elasticsearch.addresses", "ES_ADDRESSES")
 	_ = viper.BindEnv("kafka.brokers", "KAFKA_BROKERS")
 	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")

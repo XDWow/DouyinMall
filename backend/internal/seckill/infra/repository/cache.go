@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
@@ -27,11 +28,17 @@ var compensateLua string
 var resolveTransactionLua string
 
 type CacheRepository struct {
-	cache *rediscache.RedisCache
+	cache      *rediscache.RedisCache
+	activities sync.Map
 }
 
 func NewCacheRepository(cache *rediscache.RedisCache) domain.Cache {
 	return &CacheRepository{cache: cache}
+}
+
+type activityCacheEntry struct {
+	activity  *domain.Activity
+	expiresAt time.Time
 }
 
 func activityKey(activityID int64) string { return fmt.Sprintf("seckill:activity:%d", activityID) }
@@ -47,10 +54,25 @@ func (r *CacheRepository) SetActivity(ctx context.Context, activity *domain.Acti
 	if err != nil {
 		return err
 	}
-	return r.cache.Set(ctx, activityKey(activity.ID), data, activityTTL)
+	if err = r.cache.Set(ctx, activityKey(activity.ID), data, activityTTL); err != nil {
+		return err
+	}
+	r.activities.Store(activity.ID, activityCacheEntry{
+		activity:  cloneActivity(activity),
+		expiresAt: time.Now().Add(activityTTL),
+	})
+	return nil
 }
 
 func (r *CacheRepository) GetActivity(ctx context.Context, activityID int64) (*domain.Activity, error) {
+	if cached, ok := r.activities.Load(activityID); ok {
+		entry := cached.(activityCacheEntry)
+		if time.Now().Before(entry.expiresAt) && entry.activity != nil {
+			return cloneActivity(entry.activity), nil
+		}
+		r.activities.Delete(activityID)
+	}
+
 	val, err := r.cache.Get(ctx, activityKey(activityID))
 	if err != nil {
 		if err == redis.Nil {
@@ -62,6 +84,10 @@ func (r *CacheRepository) GetActivity(ctx context.Context, activityID int64) (*d
 	if err := json.Unmarshal([]byte(val), &activity); err != nil {
 		return nil, err
 	}
+	r.activities.Store(activityID, activityCacheEntry{
+		activity:  cloneActivity(&activity),
+		expiresAt: time.Now().Add(activityTTL),
+	})
 	return &activity, nil
 }
 
@@ -70,29 +96,16 @@ func (r *CacheRepository) SetActivityStock(ctx context.Context, activityID int64
 }
 
 func (r *CacheRepository) AtomicReserve(ctx context.Context, activityID, userID int64, requestNo string, userTTLSeconds int64) (int64, error) {
-	result := domain.Result{
-		RequestNo: requestNo,
-		Status:    domain.RequestStatusProcessing,
-	}
-	resultData, err := json.Marshal(result)
-	if err != nil {
-		return 0, err
-	}
 	return r.cache.EvalInt64(
 		ctx,
 		reserveStockLua,
 		[]string{
 			stockKey(activityID),
 			userKey(activityID, userID),
-			resultStatusKey(requestNo),
-			resultDataKey(requestNo),
 		},
 		1,
 		userTTLSeconds,
 		requestNo,
-		result.Status,
-		string(resultData),
-		int64(resultTTL.Seconds()),
 	)
 }
 
@@ -194,4 +207,12 @@ func (r *CacheRepository) ResolveTransaction(ctx context.Context, activityID, us
 	default:
 		return domain.TransactionResolutionUnknown, nil
 	}
+}
+
+func cloneActivity(activity *domain.Activity) *domain.Activity {
+	if activity == nil {
+		return nil
+	}
+	cloned := *activity
+	return &cloned
 }

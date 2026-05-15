@@ -2,18 +2,18 @@ db:
   host: "134.175.67.79"
   port: 3306
   user: "app"
-  password: "0324"
+  password: ""
   database: "douyin_mall"
   params: "charset=utf8mb4&parseTime=True&loc=Local"
 
 redis:
   addr: "106.52.154.235:6379"
-  password: "0624"
+  password: ""
   db: 0
 
 etcd:
   endpoints:
-    - "42.193.160.221:2379"
+    - "etcd:2379"
 
 grpc:
   server:
@@ -27,7 +27,7 @@ http:
 
 mcp:
   server:
-    addr: ""
+    addr: ":19092"
     name: "order-mcp"
     version: "1.0.0"
   upstream:

@@ -9,6 +9,4 @@ end
 
 redis.call("DECRBY", KEYS[1], ARGV[1])
 redis.call("SET", KEYS[2], ARGV[3], "EX", ARGV[2])
-redis.call("SET", KEYS[3], ARGV[4], "EX", ARGV[6])
-redis.call("SET", KEYS[4], ARGV[5], "EX", ARGV[6])
 return 0

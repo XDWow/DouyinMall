@@ -14,14 +14,14 @@ var ErrUserNorFound = dao.ErrDataNotFound
 
 type UserRepository interface {
 	Create(ctx context.Context, u domain.User) (int64, error)
-	// Update 鏇存柊鏁版嵁锛屽彧鏈夐潪 0 鍊兼墠浼氭洿鏂?
+	// Update 更新数据，只有非 0 值才会更新。
 	Update(ctx context.Context, u domain.User) error
 	FindById(ctx context.Context, id int64) (domain.User, error)
 	FindByEmail(ctx context.Context, email string) (domain.User, error)
 	Delete(ctx context.Context, id int64) error
 }
 
-// CachedUserRepository 浣跨敤浜嗙紦瀛樼殑 repository 瀹炵幇
+// CachedUserRepository 使用缓存的 repository 实现。
 type CachedUserRepository struct {
 	dao   dao.UserDAO
 	cache cache.UserCache
@@ -83,5 +83,3 @@ func (r *CachedUserRepository) entityToDomain(u dao.User) domain.User {
 		Avatar:   u.Avatar,
 	}
 }
-
-

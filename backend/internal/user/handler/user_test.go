@@ -201,7 +201,7 @@ func TestUserServiceServer_Query(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "鐢ㄦ埛涓嶅瓨鍦?,
+			name: "user not found",
 			req: &userv1.QueryUserReq{
 				UserId: 999,
 			},

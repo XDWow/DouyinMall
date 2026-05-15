@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/seckill/domain"
@@ -21,6 +23,8 @@ type SubmitUseCase struct {
 	idGen        IDGenerator
 	log          logger.LoggerV1
 }
+
+var submitStageTimingEnabled = isSubmitStageTimingEnabled()
 
 func NewSubmitUseCase(activityRepo domain.ActivityRepository, requestRepo domain.RequestRepository, cache domain.Cache, soldOut domain.SoldOutMarker, producer domain.Producer, idGen IDGenerator, logs ...logger.LoggerV1) *SubmitUseCase {
 	l := logger.NewNopLogger()
@@ -59,15 +63,21 @@ func resultTTLForRequest() time.Duration {
 }
 
 func (uc *SubmitUseCase) Execute(ctx context.Context, cmd SubmitCmd) (*domain.Result, error) {
+	startedAt := time.Now()
+
+	activityLookupStartedAt := time.Now()
 	activity, err := uc.cache.GetActivity(ctx, cmd.ActivityID)
+	activityLookupElapsed := time.Since(activityLookupStartedAt)
 	if err != nil {
 		return nil, err
 	}
 	if activity == nil {
+		dbLookupStartedAt := time.Now()
 		activity, err = uc.activityRepo.FindByID(ctx, cmd.ActivityID)
 		if err != nil {
 			return nil, err
 		}
+		activityLookupElapsed += time.Since(dbLookupStartedAt)
 		_ = uc.cache.SetActivity(ctx, activity)
 	}
 
@@ -80,7 +90,9 @@ func (uc *SubmitUseCase) Execute(ctx context.Context, cmd SubmitCmd) (*domain.Re
 	case now.After(activity.EndTime):
 		return &domain.Result{Status: domain.RequestStatusFailed, FailReason: domain.FailReasonActivityNotOpen}, domain.ErrActivityEnded
 	}
-	// 本机已经确认这个活动卖完后，后续尾流量直接快速失败，不再打 Redis。
+
+	// Once the current node has confirmed the activity is sold out, tail traffic
+	// can fail fast locally instead of continuing to hit Redis.
 	if uc.soldOut.IsSoldOut(activity.ID) {
 		uc.log.Info("local sold-out marker hit, skip redis reserve",
 			logger.Int64("activityID", activity.ID),
@@ -102,6 +114,20 @@ func (uc *SubmitUseCase) Execute(ctx context.Context, cmd SubmitCmd) (*domain.Re
 	}
 
 	result, err := uc.producer.Submit(ctx, evt, userMarkerTTL(activity.EndTime))
+	producerElapsed := time.Since(startedAt) - activityLookupElapsed
+	totalElapsed := time.Since(startedAt)
+	if submitStageTimingEnabled && (totalElapsed > 200*time.Millisecond || activityLookupElapsed > 20*time.Millisecond || producerElapsed > 100*time.Millisecond) {
+		uc.log.Warn("slow seckill submit stages",
+			logger.String("requestNo", requestNo),
+			logger.Int64("activityID", activity.ID),
+			logger.Int64("userID", cmd.UserID),
+			logger.Int64("activity_lookup_ms", activityLookupElapsed.Milliseconds()),
+			logger.Int64("producer_submit_ms", producerElapsed.Milliseconds()),
+			logger.Int64("submit_total_ms", totalElapsed.Milliseconds()))
+	}
+	if result != nil && result.Status == domain.RequestStatusProcessing && result.RequestNo != "" {
+		uc.persistProcessingResult(result.RequestNo)
+	}
 	if err != nil {
 		if result != nil {
 			return result, err
@@ -114,4 +140,22 @@ func (uc *SubmitUseCase) Execute(ctx context.Context, cmd SubmitCmd) (*domain.Re
 		return nil, err
 	}
 	return result, nil
+}
+
+func (uc *SubmitUseCase) persistProcessingResult(requestNo string) {
+	go func() {
+		_ = uc.cache.SetResult(context.Background(), domain.Result{
+			RequestNo: requestNo,
+			Status:    domain.RequestStatusProcessing,
+		})
+	}()
+}
+
+func isSubmitStageTimingEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SECKILL_STAGE_TIMING"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }

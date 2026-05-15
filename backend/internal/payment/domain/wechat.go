@@ -2,8 +2,8 @@ package domain
 
 import "context"
 
-// NativePayService abstracts the payment channel used by the payment service.
-// It is implemented by mock wechat, real wechat, and alipay sandbox adapters.
+// NativePayService 抽象了支付服务对接的原生支付通道。
+// 当前既可以接 mock wechat，也可以接真实微信或支付宝沙盒。
 type NativePayService interface {
 	Prepay(ctx context.Context, req PrepayRequest) (codeURL string, err error)
 	QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*PayOrder, error)

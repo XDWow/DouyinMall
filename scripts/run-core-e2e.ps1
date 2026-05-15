@@ -6,7 +6,7 @@ $composeFile = Join-Path $repoRoot "docker-compose.yml"
 $gocacheDir = Join-Path $repoRoot ".gocache"
 
 Write-Host "Starting core compose services..."
-docker compose -f $composeFile up -d mysql redis etcd kafka mock-wechat-service product-service order-service inventory-service payment-service checkout-service seckill-service
+docker compose -f $composeFile up -d mysql redis etcd kafka product-service order-service inventory-service payment-service checkout-service seckill-service
 
 Push-Location $backendDir
 try {

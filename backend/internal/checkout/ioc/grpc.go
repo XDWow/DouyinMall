@@ -21,7 +21,7 @@ func InitGRPCServer(handler *transportgrpc.CheckoutHandler) server.Server {
 	}
 	r, err := etcd.NewEtcdRegistry(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 etcd 娉ㄥ唽涓績澶辫触: %w", err))
+		panic(fmt.Errorf("create etcd registry for checkout server: %w", err))
 	}
 
 	port := viper.GetInt("grpc.server.port")
@@ -38,5 +38,3 @@ func InitGRPCServer(handler *transportgrpc.CheckoutHandler) server.Server {
 	)
 	return svr
 }
-
-

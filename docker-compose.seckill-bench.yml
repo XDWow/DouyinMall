@@ -1,0 +1,4 @@
+services:
+  seckill-service:
+    environment:
+      SECKILL_STAGE_TIMING: "1"

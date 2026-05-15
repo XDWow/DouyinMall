@@ -10,14 +10,15 @@ import (
 	"time"
 
 	agentconfig "github.com/XDWow/DouyinMall/backend/internal/agent/config"
-	"github.com/joho/godotenv"
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 func main() {
-	// Load optional .env from current working directory (e.g. backend/.env); ignore if missing.
-	_ = godotenv.Load()
+	if err := envx.Load(); err != nil {
+		log.Fatalf("load .env failed: %v", err)
+	}
 
 	cfg := initConfig()
 
@@ -55,6 +56,7 @@ func initConfig() agentconfig.Config {
 
 	viper.SetConfigFile(*configPath)
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
 	bindSecretsFromEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -68,9 +70,13 @@ func initConfig() agentconfig.Config {
 	return cfg
 }
 
-// bindSecretsFromEnv 仅从环境变量注入密钥类配置；地址、端口、库名等拓扑信息放配置文件。
 func bindSecretsFromEnv() {
+	mustBindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	mustBindEnv("grpc.server.port", "GRPC_PORT")
+	mustBindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
+	mustBindEnv("http.addr", "HTTP_ADDR")
 	mustBindEnv("db.password", "DB_PASSWORD")
+	mustBindEnv("redis.addr", "REDIS_ADDR")
 	mustBindEnv("llm.weak.api_key", "LLM_WEAK_API_KEY", "LLM_API_KEY")
 	mustBindEnv("llm.strong.api_key", "LLM_STRONG_API_KEY", "LLM_API_KEY")
 	mustBindEnv("redis.password", "REDIS_PASSWORD")

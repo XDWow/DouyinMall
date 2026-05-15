@@ -9,6 +9,6 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/search .
-COPY --from=builder /app/internal/search/config/docker.yaml ./internal/search/config/dev.yaml
+COPY --from=builder /app/internal/search/config/prod.yaml ./internal/search/config/prod.yaml
 EXPOSE 8093 18093
-ENTRYPOINT ["./search"]
+ENTRYPOINT ["./search", "--config", "internal/search/config/prod.yaml"]

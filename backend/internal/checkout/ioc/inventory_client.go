@@ -18,13 +18,11 @@ func InitInventoryClient() inventoryservice.Client {
 	}
 	r, err := etcd.NewEtcdResolver(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 etcd 鏈嶅姟鍙戠幇澶辫触: %w", err))
+		panic(fmt.Errorf("create etcd resolver for inventory client: %w", err))
 	}
 	c, err := inventoryservice.NewClient("inventory.service", client.WithResolver(r))
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 inventory 瀹㈡埛绔け璐? %w", err))
+		panic(fmt.Errorf("create inventory client: %w", err))
 	}
 	return c
 }
-
-

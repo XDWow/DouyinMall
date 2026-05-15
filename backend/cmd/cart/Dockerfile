@@ -9,6 +9,6 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/cart .
-COPY --from=builder /app/internal/cart/config/docker.yaml ./internal/cart/config/dev.yaml
-EXPOSE 8099 18099
-ENTRYPOINT ["./cart"]
+COPY --from=builder /app/internal/cart/config/prod.yaml ./internal/cart/config/prod.yaml
+EXPOSE 8099 18099 19094
+ENTRYPOINT ["./cart", "--config", "internal/cart/config/prod.yaml"]

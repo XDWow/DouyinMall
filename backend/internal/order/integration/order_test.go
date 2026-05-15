@@ -89,6 +89,10 @@ func (r *memoryOrderRepo) FindByIDs(_ context.Context, orderIDs []int64) ([]*dom
 	return orders, nil
 }
 
+func (r *memoryOrderRepo) FindByIDsForUpdate(_ context.Context, orderIDs []int64) ([]*domain.Order, error) {
+	return r.FindByIDs(context.Background(), orderIDs)
+}
+
 func (r *memoryOrderRepo) UpdateStatus(context.Context, int64, domain.OrderStatus, domain.OrderStatus) error {
 	return nil
 }
@@ -116,5 +120,3 @@ func (noopDelayQueue) Enqueue(context.Context, int64, time.Time) error { return 
 func (noopDelayQueue) DrainDue(context.Context, time.Time) ([]int64, error) {
 	return nil, nil
 }
-
-

@@ -8,7 +8,8 @@ import (
 	"github.com/spf13/viper"
 )
 
-// snowflakeGenerator 绠€鍗曢洩鑺盜D鐢熸垚鍣紙41浣嶆绉掓椂闂存埑 | 10浣嶈妭鐐?| 12浣嶅簭鍒楀彿锛?
+// snowflakeGenerator is a simple Snowflake-style ID generator:
+// 41 bits timestamp | 10 bits node ID | 12 bits sequence.
 type snowflakeGenerator struct {
 	mu     sync.Mutex
 	nodeID int64
@@ -23,7 +24,7 @@ func (g *snowflakeGenerator) GenerateOrderID() int64 {
 	if now == g.lastMS {
 		g.seq = (g.seq + 1) & 0xFFF
 		if g.seq == 0 {
-			// 绛夊緟涓嬩竴姣
+			// Wait for the next millisecond when the local sequence overflows.
 			for now <= g.lastMS {
 				now = time.Now().UnixMilli()
 			}
@@ -35,7 +36,7 @@ func (g *snowflakeGenerator) GenerateOrderID() int64 {
 	return (now&0x1FFFFFFFFFF)<<22 | (g.nodeID&0x3FF)<<12 | g.seq
 }
 
-// InitIDGenerator 鍒涘缓闆姳ID鐢熸垚鍣紝鑺傜偣ID浠庨厤缃鍙栵紙榛樿1锛?
+// InitIDGenerator builds the order ID generator from config.
 func InitIDGenerator() usecase.IDGenerator {
 	nodeID := viper.GetInt64("snowflake.node_id")
 	if nodeID <= 0 {
@@ -43,5 +44,3 @@ func InitIDGenerator() usecase.IDGenerator {
 	}
 	return &snowflakeGenerator{nodeID: nodeID}
 }
-
-

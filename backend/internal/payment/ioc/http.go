@@ -15,6 +15,9 @@ import (
 
 func InitHTTPServer(
 	payCallbackUC *usecase.PayCallbackUC,
+	alipayNotifyUC *usecase.AlipayNotifyUC,
+	alipayPagePayUC *usecase.AlipayPagePayUC,
+	alipayReturnPageUC *usecase.AlipayReturnPageUC,
 	l logger.LoggerV1,
 	provider string,
 	alipayClient *ali.Client,
@@ -28,12 +31,20 @@ func InitHTTPServer(
 	engine := gin.Default()
 	callbackHandler := httptransport.NewPaymentCallbackHandler(
 		payCallbackUC,
+		alipayNotifyUC,
 		wechatNotifyHandler,
 		alipayClient,
 		provider,
 		l,
 	)
 	callbackHandler.RegisterRoutes(engine)
+	pageHandler := httptransport.NewAlipayPageHandler(
+		alipayPagePayUC,
+		alipayReturnPageUC,
+		provider,
+		l,
+	)
+	pageHandler.RegisterRoutes(engine)
 
 	return &ginx.Server{
 		Engine: engine,

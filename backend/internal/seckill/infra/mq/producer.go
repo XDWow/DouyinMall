@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +20,8 @@ const (
 	transactionUserTTLProperty = "SECKILL_USER_TTL_SECONDS"
 	transactionDecisionTTL     = 10 * time.Minute
 )
+
+var stageTimingEnabled = isStageTimingEnabled()
 
 type transactionProducer interface {
 	SendMessageInTransaction(ctx context.Context, msg *primitive.Message) (*primitive.TransactionSendResult, error)
@@ -83,9 +87,18 @@ func (p *Producer) Submit(ctx context.Context, evt seckilldomain.Event, userTTLS
 	msg.WithKeys([]string{evt.RequestNo})
 	msg.WithProperty(transactionUserTTLProperty, strconv.FormatInt(userTTLSeconds, 10))
 
+	sendStart := time.Now()
 	res, err := p.producer.SendMessageInTransaction(ctx, msg)
+	sendElapsed := time.Since(sendStart)
 	if err != nil {
 		return nil, fmt.Errorf("send seckill transaction message failed: %w", err)
+	}
+	if stageTimingEnabled && sendElapsed > 100*time.Millisecond {
+		p.log.Warn("slow seckill transaction submit",
+			logger.String("requestNo", evt.RequestNo),
+			logger.Int64("activityID", evt.ActivityID),
+			logger.Int64("userID", evt.UserID),
+			logger.Int64("send_message_ms", sendElapsed.Milliseconds()))
 	}
 
 	processing := &seckilldomain.Result{
@@ -130,7 +143,9 @@ func (l *TransactionListener) ExecuteLocalTransaction(msg *primitive.Message) pr
 		return primitive.RollbackMessageState
 	}
 
+	reserveStart := time.Now()
 	code, err := l.cache.AtomicReserve(context.Background(), evt.ActivityID, evt.UserID, evt.RequestNo, userTTLSeconds)
+	reserveElapsed := time.Since(reserveStart)
 	if err != nil {
 		l.log.Error("seckill redis reserve failed, wait broker transaction check",
 			logger.Error(err),
@@ -138,6 +153,14 @@ func (l *TransactionListener) ExecuteLocalTransaction(msg *primitive.Message) pr
 			logger.Int64("activityID", evt.ActivityID),
 			logger.Int64("userID", evt.UserID))
 		return primitive.UnknowState
+	}
+	if stageTimingEnabled && reserveElapsed > 20*time.Millisecond {
+		l.log.Warn("slow seckill redis reserve",
+			logger.String("requestNo", evt.RequestNo),
+			logger.Int64("activityID", evt.ActivityID),
+			logger.Int64("userID", evt.UserID),
+			logger.Int64("reserve_ms", reserveElapsed.Milliseconds()),
+			logger.Int64("reserve_code", code))
 	}
 
 	switch code {
@@ -218,12 +241,16 @@ func (l *TransactionListener) recordRollbackResult(requestNo string, result seck
 	l.decisions[requestNo] = decision
 	l.mu.Unlock()
 
-	if err := l.cache.SetResult(context.Background(), result); err != nil {
-		l.log.Warn("persist failed seckill transaction result to cache failed",
-			logger.Error(err),
-			logger.String("requestNo", result.RequestNo),
-			logger.String("failReason", result.FailReason))
-	}
+	// The immediate rollback response is already available from the in-memory decision map.
+	// Persisting the failed result to Redis can happen asynchronously to keep the hot path lean.
+	go func(res seckilldomain.Result) {
+		if err := l.cache.SetResult(context.Background(), res); err != nil {
+			l.log.Warn("persist failed seckill transaction result to cache failed",
+				logger.Error(err),
+				logger.String("requestNo", res.RequestNo),
+				logger.String("failReason", res.FailReason))
+		}
+	}(result)
 }
 
 func (l *TransactionListener) lookupDecision(requestNo string) (transactionDecision, bool) {
@@ -277,6 +304,15 @@ func decodeTransactionMessage(body []byte, userTTL string) (seckilldomain.Event,
 		return seckilldomain.Event{}, 0, fmt.Errorf("parse user ttl seconds: %w", err)
 	}
 	return evt, userTTLSeconds, nil
+}
+
+func isStageTimingEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SECKILL_STAGE_TIMING"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 // 编译期断言：确保生产者和事务监听器满足预期接口

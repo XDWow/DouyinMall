@@ -6,7 +6,6 @@ import (
 
 	"github.com/XDWow/DouyinMall/backend/internal/user/handler"
 	userv1 "github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/user/v1/userservice"
-	"github.com/cloudwego/kitex/pkg/registry"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/server"
 	etcd "github.com/kitex-contrib/registry-etcd"
@@ -14,36 +13,32 @@ import (
 )
 
 func InitGRPCServer(userHandler *handler.UserServiceServer) server.Server {
-	// 鍒濆鍖?etcd 娉ㄥ唽涓績
 	endpoints := viper.GetStringSlice("etcd.endpoints")
-	// 濡傛灉浠庣幆澧冨彉閲忚鍙栵紙瀛楃涓诧級锛岃浆鎹负鏁扮粍
 	if len(endpoints) == 0 {
-		if ep := viper.GetString("etcd.endpoints"); ep != "" {
-			endpoints = []string{ep}
-		}
+		panic("etcd.endpoints is empty")
 	}
+
 	r, err := etcd.NewEtcdRegistry(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 etcd 娉ㄥ唽涓績澶辫触: %w", err))
+		panic(fmt.Errorf("创建 etcd 注册中心失败: %w", err))
 	}
 
-	// 鏈嶅姟閰嶇疆
 	port := viper.GetInt("grpc.server.port")
 	serviceName := viper.GetString("grpc.server.name")
-	addr, _ := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
 
-	// 鍒涘缓 Kitex 鏈嶅姟
+	addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		panic(fmt.Errorf("解析服务地址失败: %w", err))
+	}
+
 	svr := userv1.NewServer(
 		userHandler,
-		server.WithRegistry(r),       // 娉ㄥ唽鍒?etcd
-		server.WithServiceAddr(addr), // 鏈嶅姟鍦板潃
+		server.WithServiceAddr(addr),
+		server.WithRegistry(r),
 		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{
 			ServiceName: serviceName,
 		}),
-		server.WithRegistry(r.(registry.Registry)), // 鏈嶅姟娉ㄥ唽
 	)
 
 	return svr
 }
-
-

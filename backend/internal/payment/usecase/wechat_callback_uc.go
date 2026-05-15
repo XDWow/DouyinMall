@@ -69,7 +69,7 @@ func (uc *PayCallbackUC) UpdatePaymentByTxn(ctx context.Context, cmd CallbackCmd
 	}
 
 	err = uc.tx.Tx(ctx, func(ctx context.Context) error {
-		// 支付状态和 outbox 同事务落库，确保订单状态推进可恢复
+		// 支付状态和 outbox 事件放在同一个事务里，确保订单状态推进可恢复。
 		pmt, changed, applyErr := uc.repo.ApplyProviderResult(ctx, domain.Payment{
 			BizTradeNo: cmd.OutTradeNo,
 			Status:     status,
@@ -79,7 +79,7 @@ func (uc *PayCallbackUC) UpdatePaymentByTxn(ctx context.Context, cmd CallbackCmd
 			return applyErr
 		}
 		if !changed {
-			uc.l.Info("支付回调被单调状态机忽略",
+			uc.l.Info("支付回调被状态机忽略",
 				logger.String("bizTradeNo", cmd.OutTradeNo),
 				logger.Int("incomingStatus", int(status)))
 			return nil

@@ -212,7 +212,7 @@ func (v *Validator[T]) validateTargetToBase(ctx context.Context) {
 				diff := slice.DiffSet(dstIds, srcIds)
 				v.notifyBaseMissing(ctx, diff)
 			default:
-				v.l.Error("鏌ヨbase:target涓湁鐨勬暟鎹け璐?)
+				v.l.Error("query base/target failed", logger.Error(err))
 			}
 		default:
 			v.l.Error("鏌ヨtarget 澶辫触", logger.Error(err))
@@ -305,5 +305,3 @@ func (v *Validator[T]) notify(ctx context.Context, id int64, typ string) {
 		v.l.Error("鍙戦€佹暟鎹笉涓€鑷寸殑娑堟伅澶辫触", logger.Error(err))
 	}
 }
-
-

@@ -9,6 +9,6 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/inventory .
-COPY --from=builder /app/internal/inventory/config/docker.yaml ./internal/inventory/config/dev.yaml
-EXPOSE 8094
-ENTRYPOINT ["./inventory"]
+COPY --from=builder /app/internal/inventory/config/prod.yaml ./internal/inventory/config/prod.yaml
+EXPOSE 8094 19096
+ENTRYPOINT ["./inventory", "--config", "internal/inventory/config/prod.yaml"]

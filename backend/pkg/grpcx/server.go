@@ -16,7 +16,6 @@ import (
 type Server struct {
 	*grpc.Server
 	Port int
-	// ETCD 鏈嶅姟娉ㄥ唽绉熺害 TTL
 	EtcdTTL     int64
 	EtcdClient  *clientv3.Client
 	etcdManager endpoints.Manager
@@ -69,7 +68,7 @@ func (s *Server) register(ctx context.Context, port string) error {
 	go func() {
 		// 鍙互棰勬湡锛屽綋鎴戜滑鐨?cancel 琚皟鐢ㄧ殑鏃跺€欙紝灏变細閫€鍑鸿繖涓惊鐜?
 		for chResp := range ch {
-			s.L.Debug("缁害锛?, logger.String("resp", chResp.String()))
+			s.L.Debug("lease renewed", logger.String("resp", chResp.String()))
 		}
 	}()
 	// metadata 鎴戜滑杩欓噷娌″暐瑕佹彁渚涚殑
@@ -93,5 +92,3 @@ func (s *Server) Close() error {
 	s.Server.GracefulStop()
 	return nil
 }
-
-

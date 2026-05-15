@@ -12,7 +12,6 @@ import (
 )
 
 func InitDB() *gorm.DB {
-	// 默认配置兜底
 	c := config.DBConfig{
 		Host:     "localhost",
 		Port:     3306,
@@ -21,7 +20,7 @@ func InitDB() *gorm.DB {
 	}
 	err := viper.UnmarshalKey("db", &c)
 	if err != nil {
-		panic(fmt.Errorf("数据库初始化读取配置失败: %w", err))
+		panic(fmt.Errorf("load inventory db config: %w", err))
 	}
 
 	c.Password = viper.GetString("db.password")
@@ -34,18 +33,16 @@ func InitDB() *gorm.DB {
 		Params:   c.Params,
 	})
 	if err != nil {
-		panic(fmt.Errorf("数据库初始化配置失败: %w", err))
+		panic(fmt.Errorf("build inventory db dsn: %w", err))
 	}
 
 	database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Errorf("数据库初始化连接失败: %w", err))
+		panic(fmt.Errorf("open inventory db connection: %w", err))
 	}
 
-	// 初始化数据库表
-	err = db.InitTables(database)
-	if err != nil {
-		panic(fmt.Errorf("数据库初始化建表失败: %w", err))
+	if err = db.InitTables(database); err != nil {
+		panic(fmt.Errorf("migrate inventory tables: %w", err))
 	}
 	return database
 }

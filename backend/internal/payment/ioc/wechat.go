@@ -124,6 +124,7 @@ func paymentProvider() string {
 
 func initAlipayClient() *ali.Client {
 	appID := strings.TrimSpace(viper.GetString("alipay.app_id"))
+	gateway := strings.TrimSpace(viper.GetString("alipay.gateway"))
 	privateKey := strings.TrimSpace(viper.GetString("alipay.private_key"))
 	publicKey := strings.TrimSpace(viper.GetString("alipay.public_key"))
 
@@ -137,7 +138,16 @@ func initAlipayClient() *ali.Client {
 		panic("alipay.public_key is required when payment.provider=alipay")
 	}
 
-	client, err := ali.New(appID, privateKey, !viper.GetBool("alipay.sandbox"))
+	// sandbox=true 时走支付宝沙盒网关，false 时走正式网关。
+	opts := make([]ali.OptionFunc, 0, 1)
+	if gateway != "" {
+		if viper.GetBool("alipay.sandbox") {
+			opts = append(opts, ali.WithSandboxGateway(gateway))
+		} else {
+			opts = append(opts, ali.WithProductionGateway(gateway))
+		}
+	}
+	client, err := ali.New(appID, privateKey, !viper.GetBool("alipay.sandbox"), opts...)
 	if err != nil {
 		panic(fmt.Errorf("init alipay client failed: %w", err))
 	}

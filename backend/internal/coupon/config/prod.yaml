@@ -1,0 +1,29 @@
+db:
+  host: "134.175.67.79"
+  port: 3306
+  user: "app"
+  password: ""
+  database: "douyin_mall"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "106.52.154.235:6379"
+  password: ""
+
+etcd:
+  endpoints:
+    - "etcd:2379"
+
+grpc:
+  server:
+    name: "coupon.service"
+    port: 8097
+
+rocketmq:
+  endpoint: "43.136.121.171:8081"
+  access_key: ""
+  secret_key: ""
+  consumer_group: "coupon-consumer"
+  await_duration_sec: 5
+  max_message_num: 16
+  invisible_duration_sec: 30

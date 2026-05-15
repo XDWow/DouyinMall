@@ -136,7 +136,7 @@ func TestCachedUserRepository_FindByEmail(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:  "鐢ㄦ埛涓嶅瓨鍦?,
+			name:  "user not found",
 			email: "notfound@example.com",
 			setupFn: func() {
 				mockDAO.FindByEmailFunc = func(ctx context.Context, email string) (dao.User, error) {

@@ -21,6 +21,8 @@ backend/.gocache/
 *.log
 .k6-*.txt
 backend/.k6-*.txt
+backend/.local/benchmarks/
+backend/.local/seckill-stack/
 
 # Documentation and design notes
 backend/docs/

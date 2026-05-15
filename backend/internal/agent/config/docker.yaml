@@ -1,0 +1,131 @@
+grpc:
+  server:
+    port: 8087
+    name: "agent-service"
+
+http:
+  addr: ":18087"
+  prefix: "/api/agent"
+  read_timeout_seconds: 30
+  write_timeout_seconds: 120
+  idle_timeout_seconds: 120
+
+db:
+  host: "134.175.67.79"
+  port: 3306
+  user: "root"
+  password: ""
+  database: "douyinmall_agent"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "106.52.154.235:6379"
+  password: ""
+  db: 0
+
+kafka:
+  enabled: true
+  brokers:
+    - "10.1.4.4:29092"
+
+etcd:
+  endpoints:
+    - "etcd:2379"
+
+mcp:
+  servers:
+    - name: "order"
+      endpoint: "http://order-service:19092/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "search"
+      endpoint: ""
+      timeout_seconds: 10
+      enabled: false
+    - name: "cart"
+      endpoint: "http://cart-service:19094/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "product"
+      endpoint: "http://product-service:19095/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "inventory"
+      endpoint: "http://inventory-service:19096/mcp"
+      timeout_seconds: 10
+      enabled: true
+    - name: "aftersale"
+      endpoint: "http://aftersale-service:19097/mcp"
+      timeout_seconds: 10
+      enabled: true
+
+skill:
+  enabled: true
+  roots:
+    - "internal/agent/skills"
+
+tenant:
+  default_id: "default"
+
+llm:
+  downgrade_one: true
+  retry_times: 1
+  weak:
+    provider: "ark"
+    base_url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+    api_key: ""
+    model: "ep-20260423170743-2hm6p"
+    timeout_seconds: 60
+    temperature: 0
+    max_tokens: 256
+  strong:
+    provider: "ark"
+    base_url: "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+    api_key: ""
+    model: "ep-20260331165600-tzrck"
+    timeout_seconds: 60
+    temperature: 0.2
+    max_tokens: 512
+
+embedding:
+  provider: "ark"
+  base_url: "https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal"
+  api_key: ""
+  model: "ep-20260331170306-c7qvn"
+  timeout_seconds: 15
+
+knowledge_base:
+  qdrant:
+    host: "43.136.121.171"
+    port: 6333
+    api_key: ""
+    collection: "agent_knowledge"
+    use_tls: false
+    score_threshold: 0.6
+
+workflow:
+  rate_limit_per_minute: 30
+  conversation_window: 5
+  exact_cache_ttl_seconds: 600
+  semantic_cache_ttl_seconds: 1800
+  semantic_cache_score: 0.9
+  semantic_cache_top_k: 20
+  retrieve_top_k: 8
+  retrieve_min_score: 0.6
+  confidence_threshold: 0.62
+  max_answer_tokens: 512
+  checkpoint_ttl_seconds: 604800
+  interrupt_before_nodes: []
+
+observability:
+  log:
+    level: "info"
+    file: ""
+  metrics:
+    path: "/metrics"
+  trace:
+    enabled: false
+    service_name: "agent-service"
+    endpoint: ""
+    insecure: true
+    sample_ratio: 1.0

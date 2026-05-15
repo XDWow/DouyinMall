@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -33,6 +34,10 @@ func main() {
 }
 
 func initViper() {
+	if err := envx.Load(); err != nil {
+		panic(fmt.Errorf("load .env failed: %w", err))
+	}
+
 	configFile := pflag.String("config", "internal/bff/config/dev.yaml", "BFF config file path")
 	pflag.Parse()
 
@@ -43,8 +48,10 @@ func initViper() {
 	}
 
 	viper.AutomaticEnv()
-	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
-	viper.BindEnv("http.addr", "HTTP_ADDR")
-	viper.BindEnv("jwt.access_secret", "JWT_ACCESS_SECRET")
-	viper.BindEnv("jwt.refresh_secret", "JWT_REFRESH_SECRET")
+	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	_ = viper.BindEnv("http.addr", "HTTP_ADDR")
+	_ = viper.BindEnv("jwt.access_secret", "JWT_ACCESS_SECRET")
+	_ = viper.BindEnv("jwt.refresh_secret", "JWT_REFRESH_SECRET")
+	_ = viper.BindEnv("redis.addr", "REDIS_ADDR")
+	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
 }

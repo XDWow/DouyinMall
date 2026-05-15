@@ -12,9 +12,9 @@ import (
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/product/v1/productservice"
 )
 
-// 缁撶畻棰勮鐢ㄤ緥
-// ai tool 閭ｈ竟鍙兘鍒拌繖涓€姝ワ紝鏈€鍚庤鐢ㄦ埛鐪嬭繖涓晫闈紝閫夋嫨浼樻儬鍒革紝纭畾鎵€鏈変俊鎭紝鐐瑰嚮鏀粯
-
+// PreviewOrderUseCase prepares checkout preview data before the user places an order.
+// The response is meant for the confirmation page where the user reviews products
+// and picks coupons before submitting payment.
 type PreviewOrderUseCase struct {
 	productClient productservice.Client
 	couponClient  couponservice.Client
@@ -41,7 +41,7 @@ type PreviewOrderOutput struct {
 }
 
 func (uc *PreviewOrderUseCase) Execute(ctx context.Context, input PreviewOrderInput) (*PreviewOrderOutput, error) {
-	// 鍙傛暟鏍￠獙
+	// Validate request parameters.
 	if input.UserID <= 0 {
 		return nil, errors.New("invalid user_id")
 	}
@@ -52,16 +52,16 @@ func (uc *PreviewOrderUseCase) Execute(ctx context.Context, input PreviewOrderIn
 		return nil, err
 	}
 
-	// 1. 鏌ヨ鍟嗗搧
+	// 1. Query product snapshots for all requested items.
 	resp, err := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Items: extractProductQueries(input.Items)})
 	if err != nil {
 		return nil, fmt.Errorf("get products: %w", err)
 	}
 
-	// 2. 鏋勫缓璁㈠崟琛岋細鐩存帴鍒嗘祦涓哄彲璐拱 / 澶辨晥涓ょ粍
+	// 2. Split items into available and unavailable order lines.
 	available, unavailable := buildOrderLines(input.Items, resp.Product)
 
-	// 3. 浠呯敤鍙喘涔拌鏌ヨ浼樻儬鍒?
+	// 3. Only available items participate in coupon evaluation.
 	couponResp, err := uc.couponClient.ListAvailableCoupons(ctx, &couponv1.ListAvailableCouponsReq{
 		UserId: input.UserID,
 		Items:  toCouponOrderItems(available),
@@ -71,7 +71,7 @@ func (uc *PreviewOrderUseCase) Execute(ctx context.Context, input PreviewOrderIn
 	}
 	coupons := toCouponOptions(couponResp.Coupons, available)
 
-	// Preview 鎶婂叏閮ㄨ锛堝惈澶辨晥锛夎繑鍥炵粰鍓嶇灞曠ず
+	// Return all lines, including unavailable ones, so the UI can explain what changed.
 	return &PreviewOrderOutput{
 		Lines:            append(available, unavailable...),
 		AvailableCoupons: coupons,

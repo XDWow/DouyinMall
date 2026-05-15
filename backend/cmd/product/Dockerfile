@@ -9,6 +9,6 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/product .
-COPY --from=builder /app/internal/product/config/docker.yaml ./internal/product/config/dev.yaml
-EXPOSE 8096 18096
-ENTRYPOINT ["./product"]
+COPY --from=builder /app/internal/product/config/prod.yaml ./internal/product/config/prod.yaml
+EXPOSE 8096 18096 19095
+ENTRYPOINT ["./product", "--config", "internal/product/config/prod.yaml"]

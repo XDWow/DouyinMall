@@ -20,6 +20,9 @@ coverage.html
 *.so
 *.dylib
 tmp/
+.local/
+coverage/
+order_coverage/
 
 # 文档
 *.md

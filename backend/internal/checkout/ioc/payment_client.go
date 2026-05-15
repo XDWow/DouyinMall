@@ -18,13 +18,11 @@ func InitPaymentClient() paymentservice.Client {
 	}
 	r, err := etcd.NewEtcdResolver(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 etcd 鏈嶅姟鍙戠幇澶辫触: %w", err))
+		panic(fmt.Errorf("create etcd resolver for payment client: %w", err))
 	}
 	c, err := paymentservice.NewClient("payment.service", client.WithResolver(r))
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 payment 瀹㈡埛绔け璐? %w", err))
+		panic(fmt.Errorf("create payment client: %w", err))
 	}
 	return c
 }
-
-

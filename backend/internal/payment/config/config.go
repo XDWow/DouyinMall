@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -70,10 +71,13 @@ type WechatConfig struct {
 
 type AlipayConfig struct {
 	AppID      string `yaml:"app_id"`
+	PID        string `yaml:"pid"`
+	Gateway    string `yaml:"gateway"`
 	PrivateKey string `yaml:"private_key"`
 	PublicKey  string `yaml:"public_key"`
 	Sandbox    bool   `yaml:"sandbox"`
 	NotifyURL  string `yaml:"notify_url"`
+	ReturnURL  string `yaml:"return_url"`
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -99,14 +103,55 @@ func LoadConfig(path string) (*Config, error) {
 	if etcdEndpoints := os.Getenv("ETCD_ENDPOINTS"); etcdEndpoints != "" {
 		cfg.Etcd.Endpoints = []string{etcdEndpoints}
 	}
+	if apiBaseURL := os.Getenv("WECHAT_API_BASE_URL"); apiBaseURL != "" {
+		cfg.Wechat.APIBaseURL = apiBaseURL
+	}
+	if appID := os.Getenv("WECHAT_APP_ID"); appID != "" {
+		cfg.Wechat.AppID = appID
+	}
+	if mchID := os.Getenv("WECHAT_MCH_ID"); mchID != "" {
+		cfg.Wechat.MchID = mchID
+	}
+	if certSerialNo := os.Getenv("WECHAT_CERT_SERIAL_NO"); certSerialNo != "" {
+		cfg.Wechat.CertSerialNo = certSerialNo
+	}
+	if privateKeyPath := os.Getenv("WECHAT_PRIVATE_KEY_PATH"); privateKeyPath != "" {
+		cfg.Wechat.PrivateKeyPath = privateKeyPath
+	}
+	if apiV3Key := os.Getenv("WECHAT_API_V3_KEY"); apiV3Key != "" {
+		cfg.Wechat.APIv3Key = apiV3Key
+	}
+	if notifyURL := os.Getenv("WECHAT_NOTIFY_URL"); notifyURL != "" {
+		cfg.Wechat.NotifyURL = notifyURL
+	}
 	if appID := os.Getenv("ALIPAY_APP_ID"); appID != "" {
 		cfg.Alipay.AppID = appID
+	}
+	if pid := os.Getenv("ALIPAY_PID"); pid != "" {
+		cfg.Alipay.PID = pid
+	}
+	if gateway := os.Getenv("ALIPAY_GATEWAY"); gateway != "" {
+		cfg.Alipay.Gateway = gateway
 	}
 	if privateKey := os.Getenv("ALIPAY_PRIVATE_KEY"); privateKey != "" {
 		cfg.Alipay.PrivateKey = privateKey
 	}
 	if publicKey := os.Getenv("ALIPAY_PUBLIC_KEY"); publicKey != "" {
 		cfg.Alipay.PublicKey = publicKey
+	}
+	if sandbox := os.Getenv("ALIPAY_SANDBOX"); sandbox != "" {
+		if parsed, err := strconv.ParseBool(sandbox); err == nil {
+			cfg.Alipay.Sandbox = parsed
+		}
+	}
+	if notifyURL := os.Getenv("ALIPAY_NOTIFY_URL"); notifyURL != "" {
+		cfg.Alipay.NotifyURL = notifyURL
+	}
+	if returnURL := os.Getenv("ALIPAY_RETURN_URL"); returnURL != "" {
+		cfg.Alipay.ReturnURL = returnURL
+	}
+	if provider := os.Getenv("PAYMENT_PROVIDER"); provider != "" {
+		cfg.Payment.Provider = provider
 	}
 
 	return &cfg, nil

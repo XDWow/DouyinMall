@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -43,15 +45,20 @@ func main() {
 
 func initViperWatch() {
 	cwd, _ := os.Getwd()
-	viper.SetConfigName("dev")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./internal/checkout/config")
-	viper.AddConfigPath("../internal/checkout/config")
-	viper.AddConfigPath("../../internal/checkout/config")
+	if err := envx.Load(); err != nil {
+		panic(fmt.Errorf("load .env failed: %w", err))
+	}
+
+	configPath := pflag.String("config", "internal/checkout/config/dev.yaml", "checkout config file path")
+	pflag.Parse()
+
+	viper.SetConfigFile(*configPath)
+	viper.AutomaticEnv()
+	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")
+	_ = viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
 
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w (宸ヤ綔鐩綍: %s)", err, cwd))
+		panic(fmt.Errorf("read checkout config failed: %w (cwd: %s)", err, cwd))
 	}
 }
-
-

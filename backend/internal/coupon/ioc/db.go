@@ -12,7 +12,6 @@ import (
 )
 
 func InitDB() *gorm.DB {
-	// 榛樿閰嶇疆鍏滃簳
 	c := config.DBConfig{
 		Host:     "localhost",
 		Port:     13306,
@@ -21,7 +20,7 @@ func InitDB() *gorm.DB {
 	}
 	err := viper.UnmarshalKey("db", &c)
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲璇诲彇閰嶇疆澶辫触: %w", err))
+		panic(fmt.Errorf("load coupon db config: %w", err))
 	}
 
 	c.Password = viper.GetString("db.password")
@@ -34,18 +33,16 @@ func InitDB() *gorm.DB {
 		Params:   c.Params,
 	})
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲閰嶇疆澶辫触: %w", err))
+		panic(fmt.Errorf("build coupon db dsn: %w", err))
 	}
 
 	database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲杩炴帴澶辫触: %w", err))
+		panic(fmt.Errorf("open coupon db connection: %w", err))
 	}
 
-	// 鍒濆鍖栬〃缁撴瀯
-	err = db.InitTables(database)
-	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲琛ㄥけ璐? %w", err))
+	if err = db.InitTables(database); err != nil {
+		panic(fmt.Errorf("migrate coupon tables: %w", err))
 	}
 
 	return database

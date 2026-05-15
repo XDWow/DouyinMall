@@ -7,7 +7,7 @@
 package main
 
 import (
-	paymentdb "github.com/XDWow/DouyinMall/backend/internal/payment/infra/db"
+	"github.com/XDWow/DouyinMall/backend/internal/payment/infra/db"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/infra/repository"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/ioc"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/job"
@@ -24,24 +24,30 @@ func InitApp() *App {
 	gormDB := ioc.InitDB()
 	loggerV1 := ioc.InitLogger()
 	paymentRepository := repository.NewPaymentRepository(gormDB, loggerV1)
-	paymentOutboxRepository := repository.NewPaymentOutboxRepository(gormDB)
-	txManager := paymentdb.NewGormTxManager(gormDB)
 	nativePayService := ioc.InitNativePayService()
 	nativePrePaymentUC := ioc.InitNativePrePaymentUC(paymentRepository, loggerV1, nativePayService)
 	getPaymentUC := usecase.NewGetPaymentUC(paymentRepository, loggerV1)
+	paymentOutboxRepository := repository.NewPaymentOutboxRepository(gormDB)
+	txManager := db.NewGormTxManager(gormDB)
 	payCallbackUC := usecase.NewPayCallbackUC(paymentRepository, paymentOutboxRepository, txManager, loggerV1)
 	syncPaymentOrderUC := ioc.InitSyncPaymentOrderUC(nativePayService, payCallbackUC, loggerV1)
 	confirmPaymentUC := usecase.NewConfirmPaymentUC(paymentRepository, syncPaymentOrderUC)
 	paymentHandler := grpc.NewPaymentHandler(nativePrePaymentUC, getPaymentUC, confirmPaymentUC)
 	server := ioc.InitGRPCServer(paymentHandler)
-	string2 := ioc.InitPaymentProvider()
+	alipayWebConfig := ioc.InitAlipayWebConfig()
+	alipayNotifyUC := usecase.NewAlipayNotifyUC(paymentRepository, payCallbackUC, alipayWebConfig)
+	client := ioc.InitOrderClient()
 	alipayClient := ioc.InitAlipayClient()
+	pagePayService := ioc.InitPagePayService(alipayClient)
+	alipayPagePayUC := usecase.NewAlipayPagePayUC(client, paymentRepository, pagePayService, alipayWebConfig, loggerV1)
+	alipayReturnPageUC := usecase.NewAlipayReturnPageUC(client)
+	string2 := ioc.InitPaymentProvider()
 	handler := ioc.InitWechatNotifyHandler()
-	ginxServer := ioc.InitHTTPServer(payCallbackUC, loggerV1, string2, alipayClient, handler)
+	ginxServer := ioc.InitHTTPServer(payCallbackUC, alipayNotifyUC, alipayPagePayUC, alipayReturnPageUC, loggerV1, string2, alipayClient, handler)
+	syncPaymentOrderJob := job.NewSyncPaymentOrderJob(syncPaymentOrderUC, paymentRepository, loggerV1)
 	producer := ioc.InitRocketMQProducerClient()
 	messageProducer := ioc.InitPaymentStatusProducer(producer)
 	paymentStatusProducer := ioc.InitPaymentMQProducer(messageProducer)
-	syncPaymentOrderJob := job.NewSyncPaymentOrderJob(syncPaymentOrderUC, paymentRepository, loggerV1)
 	paymentOutboxWorkerJob := job.NewPaymentOutboxWorkerJob(paymentOutboxRepository, paymentStatusProducer, loggerV1)
 	cron := ioc.InitJobs(syncPaymentOrderJob, paymentOutboxWorkerJob, loggerV1)
 	app := newApp(server, ginxServer, cron)

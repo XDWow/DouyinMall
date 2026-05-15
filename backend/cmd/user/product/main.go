@@ -2,32 +2,32 @@ package product
 
 import (
 	"fmt"
+
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
 func main() {
 	initViperWatch()
-
 }
 
 func initViperWatch() {
-	cfile := pflag.String("config",
-		"internal/user/config/dev.yaml", "閰嶇疆鏂囦欢璺緞")
+	if err := envx.Load(); err != nil {
+		panic(fmt.Errorf("load .env failed: %w", err))
+	}
+
+	cfile := pflag.String("config", "internal/user/config/dev.yaml", "config file path")
 	pflag.Parse()
 	viper.SetConfigFile(*cfile)
 	viper.WatchConfig()
 	if err := viper.ReadInConfig(); err != nil {
-		panic(fmt.Errorf("璇诲彇閰嶇疆鏂囦欢澶辫触: %w", err))
+		panic(fmt.Errorf("read config failed: %w", err))
 	}
 
-	// 鏀寔鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢锛堢幆澧冨彉閲忎紭鍏堬級
 	viper.AutomaticEnv()
-	// 璁剧疆鐜鍙橀噺鍓嶇紑锛堝彲閫夛級
-	// viper.SetEnvPrefix("USER_SERVICE")
-
-	// 鎵嬪姩缁戝畾鐜鍙橀噺鍒伴厤缃敭
 	viper.BindEnv("db.password", "DB_PASSWORD")
 	viper.BindEnv("redis.addr", "REDIS_ADDR")
+	viper.BindEnv("redis.password", "REDIS_PASSWORD")
 	viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 }

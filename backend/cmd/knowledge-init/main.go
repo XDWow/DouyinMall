@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
 	"github.com/spf13/pflag"
 )
 
@@ -30,7 +30,9 @@ type cliFlags struct {
 }
 
 func main() {
-	_ = godotenv.Load()
+	if err := envx.Load(); err != nil {
+		log.Fatalf("load .env failed: %v", err)
+	}
 
 	flags := parseFlags()
 	cfg := initConfig(flags.configPath, flags.mode)

@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -56,12 +57,21 @@ func main() {
 }
 
 func initViper() {
+	if err := envx.Load(); err != nil {
+		panic(fmt.Errorf("load .env failed: %w", err))
+	}
+
 	configPath := pflag.String("config", "internal/seckill/config/dev.yaml", "seckill config file path")
 	pflag.Parse()
 
 	viper.SetConfigFile(*configPath)
 	viper.AutomaticEnv()
+	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
+	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")
+	_ = viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
+	_ = viper.BindEnv("http.server.port", "HTTP_PORT")
 	_ = viper.BindEnv("db.password", "DB_PASSWORD")
+	_ = viper.BindEnv("redis.addr", "REDIS_ADDR")
 	_ = viper.BindEnv("redis.password", "REDIS_PASSWORD")
 	_ = viper.BindEnv("rocketmq.name_server", "ROCKETMQ_NAME_SERVER")
 	_ = viper.BindEnv("rocketmq.access_key", "ROCKETMQ_ACCESS_KEY")

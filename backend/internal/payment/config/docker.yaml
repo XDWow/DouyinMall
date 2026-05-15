@@ -8,7 +8,7 @@ db:
 
 redis:
   addr: "106.52.154.235:6379"
-  password: "0624"
+  password: ""
   db: 0
 
 etcd:
@@ -26,20 +26,27 @@ http:
     port: 8093
 
 payment:
-  mode: "mock"
+  mode: "real"
+  provider: "alipay"
 
 wechat:
-  api_base_url: "http://mock-wechat-service:8888"
+  api_base_url: ""
   app_id: "wx_mock_app_id"
   mch_id: "1234567890"
   cert_serial_no: "MOCK_CERT_SERIAL_NO"
   private_key_path: ""
-  api_v3_key: "mock_api_v3_key_32_characters!!"
-  notify_url: "http://payment-service:8093/payment/wechat/callback"
+  api_v3_key: ""
+  notify_url: ""
 
-kafka:
-  brokers:
-    - "10.1.4.4:29092"
+alipay:
+  app_id: "9021000163631795"
+  pid: "2088721101056182"
+  gateway: "https://openapi-sandbox.dl.alipaydev.com/gateway.do"
+  private_key: ""
+  public_key: ""
+  sandbox: true
+  notify_url: ""
+  return_url: ""
 
 rocketmq:
   endpoint: "43.136.121.171:8081"

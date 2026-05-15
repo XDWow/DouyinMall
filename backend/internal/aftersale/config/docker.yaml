@@ -1,0 +1,34 @@
+db:
+  host: "douyinmall-mysql"
+  port: 3306
+  user: "root"
+  password: ""
+  database: "DouyinMall"
+  params: "charset=utf8mb4&parseTime=True&loc=Local"
+
+etcd:
+  endpoints:
+    - "douyinmall-etcd:2379"
+
+grpc:
+  server:
+    name: "aftersale.service"
+    port: 8097
+
+mcp:
+  server:
+    addr: ":19097"
+    name: "aftersale-mcp"
+    version: "1.0.0"
+  upstream:
+    service_name: "aftersale.service"
+    direct_addr: "aftersale-service:8097"
+  tools:
+    - key: "create_after_sale_request"
+      name: "create_after_sale_request"
+      description: "Create an after-sale request for return or exchange."
+      enabled: true
+    - key: "get_after_sale_request"
+      name: "get_after_sale_request"
+      description: "Get after-sale request detail by request number."
+      enabled: true

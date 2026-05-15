@@ -8,7 +8,7 @@ db:
 
 redis:
   addr: "106.52.154.235:6379"
-  password: "0624"
+  password: ""
 
 etcd:
   endpoints:

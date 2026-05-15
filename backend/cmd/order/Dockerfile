@@ -11,5 +11,5 @@ WORKDIR /app
 COPY --from=builder /app/order .
 COPY --from=builder /app/internal/order/config/dev.yaml ./internal/order/config/dev.yaml
 COPY --from=builder /app/internal/order/config/prod.yaml ./internal/order/config/prod.yaml
-EXPOSE 8095 18095
+EXPOSE 8095 18095 19092
 ENTRYPOINT ["./order", "--config", "internal/order/config/prod.yaml"]

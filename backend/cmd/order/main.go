@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	ordermcp "github.com/XDWow/DouyinMall/backend/internal/order/transport/mcp"
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -75,6 +76,10 @@ func main() {
 }
 
 func initViperWatch() {
+	if err := envx.Load(); err != nil {
+		panic(fmt.Errorf("load .env failed: %w", err))
+	}
+
 	cfile := pflag.String("config", "internal/order/config/dev.yaml", "config file path")
 	pflag.Parse()
 
@@ -92,7 +97,10 @@ func initViperWatch() {
 	_ = viper.BindEnv("rocketmq.endpoint", "ROCKETMQ_ENDPOINT")
 	_ = viper.BindEnv("rocketmq.access_key", "ROCKETMQ_ACCESS_KEY")
 	_ = viper.BindEnv("rocketmq.secret_key", "ROCKETMQ_SECRET_KEY")
+	_ = viper.BindEnv("canal.mysql.password", "CANAL_MYSQL_PASSWORD")
 	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")
 	_ = viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
+	_ = viper.BindEnv("mcp.server.addr", "MCP_ADDR")
+	_ = viper.BindEnv("mcp.upstream.direct_addr", "MCP_UPSTREAM_DIRECT_ADDR")
 }

@@ -69,8 +69,6 @@ func (c *Consumer[T]) consume(msg *sarama.ConsumerMessage, t events.Inconsistent
 	case "DST":
 		return c.dstFirst.Fix(ctx, t.ID)
 	default:
-		return errors.New("鏈煡鐨勬牎楠屾柟鍚?)
+		return errors.New("unknown fix direction")
 	}
 }
-
-

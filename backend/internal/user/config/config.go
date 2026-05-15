@@ -23,7 +23,8 @@ type DBConfig struct {
 }
 
 type RedisConfig struct {
-	Addr string `yaml:"addr"`
+	Addr     string `yaml:"addr" mapstructure:"addr"`
+	Password string `yaml:"password" mapstructure:"password"`
 }
 
 type EtcdConfig struct {
@@ -39,7 +40,6 @@ type ServerConfig struct {
 	EtcdTTL int `yaml:"etcdTTL"`
 }
 
-// LoadConfig 浠庢枃浠跺姞杞介厤缃紝鐜鍙橀噺浼樺厛
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -51,12 +51,14 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// 鐜鍙橀噺瑕嗙洊閰嶇疆鏂囦欢
 	if password := os.Getenv("DB_PASSWORD"); password != "" {
 		cfg.DB.Password = password
 	}
 	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
 		cfg.Redis.Addr = redisAddr
+	}
+	if redisPassword := os.Getenv("REDIS_PASSWORD"); redisPassword != "" {
+		cfg.Redis.Password = redisPassword
 	}
 	if etcdEndpoints := os.Getenv("ETCD_ENDPOINTS"); etcdEndpoints != "" {
 		cfg.Etcd.Endpoints = []string{etcdEndpoints}

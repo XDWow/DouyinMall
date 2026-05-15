@@ -2,8 +2,8 @@ http:
   addr: ":8080"
 
 jwt:
-  access_secret: "douyinmall-access-secret-dev"
-  refresh_secret: "douyinmall-refresh-secret-dev"
+  access_secret: ""
+  refresh_secret: ""
   access_expiry: "2h"
   refresh_expiry: "168h"
 

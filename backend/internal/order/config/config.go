@@ -60,6 +60,9 @@ func LoadConfig(path string) (*Config, error) {
 	if redisAddr := os.Getenv("REDIS_ADDR"); redisAddr != "" {
 		cfg.Redis.Addr = redisAddr
 	}
+	if redisPassword := os.Getenv("REDIS_PASSWORD"); redisPassword != "" {
+		cfg.Redis.Password = redisPassword
+	}
 	if etcdEndpoints := os.Getenv("ETCD_ENDPOINTS"); etcdEndpoints != "" {
 		cfg.Etcd.Endpoints = []string{etcdEndpoints}
 	}

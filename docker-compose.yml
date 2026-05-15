@@ -1,448 +1,292 @@
+## 业务服务，走 etcd + 容器网络
+x-microservice-common: &microservice-common
+  restart: unless-stopped
+  env_file:
+    - .env
+  networks:
+    - mall-net
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
 services:
 
-  mysql:
-    image: mysql:8.0
-    container_name: douyinmall-mysql
-    restart: unless-stopped
-    ports:
-      - "13306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: douyinmall
-      TZ: Asia/Shanghai
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-    volumes:
-      - mysql-data:/var/lib/mysql
-      - ./scripts/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    networks:
-      - douyinmall-net
-
   redis:
-    image: redis/redis-stack-server:latest
+    image: redis:7.4-alpine
     container_name: douyinmall-redis
     restart: unless-stopped
-    ports:
-      - "16379:6379"
-    command: redis-stack-server --appendonly yes
+    env_file:
+      - .env
+    command:
+      - sh
+      - -c
+      - redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     volumes:
       - redis-data:/data
     networks:
-      - douyinmall-net
-
-  etcd:
-    image: quay.io/coreos/etcd:v3.5.12
-    container_name: douyinmall-etcd
-    restart: unless-stopped
-    ports:
-      - "12379:2379"
-    command: >
-      etcd
-      --advertise-client-urls=http://0.0.0.0:2379
-      --listen-client-urls=http://0.0.0.0:2379
-    volumes:
-      - etcd-data:/etcd
-    networks:
-      - douyinmall-net
-
-  kafka:
-    image: apache/kafka:4.1.1
-    container_name: douyinmall-kafka
-    restart: unless-stopped
-    ports:
-      - "9092:9092"
-      - "29092:29092"
-    environment:
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_LISTENERS: PLAINTEXT://:9092,HOST://:29092,CONTROLLER://:9093
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,HOST://10.1.4.4:29092
-      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
-      KAFKA_NUM_PARTITIONS: 3
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-    volumes:
-      - kafka-data:/tmp/kraft-combined-logs
-    networks:
-      - douyinmall-net
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
-    container_name: douyinmall-elasticsearch
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - douyinmall-net
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
-    container_name: douyinmall-elasticsearch
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - douyinmall-net
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
-    container_name: douyinmall-elasticsearch
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - douyinmall-net
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
-    container_name: douyinmall-elasticsearch
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - douyinmall-net
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
-    container_name: douyinmall-elasticsearch
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - douyinmall-net
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
-    container_name: douyinmall-elasticsearch
-    restart: unless-stopped
-    environment:
-      discovery.type: single-node
-      xpack.security.enabled: "false"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - douyinmall-net
-
-  milvus-etcd:
-    image: quay.io/coreos/etcd:v3.5.12
-    container_name: douyinmall-milvus-etcd
-    restart: unless-stopped
-    command: >
-      etcd
-      --advertise-client-urls=http://0.0.0.0:2379
-      --listen-client-urls=http://0.0.0.0:2379
-    volumes:
-      - milvus-etcd-data:/etcd
-    networks:
-      - douyinmall-net
-
-  milvus-minio:
-    image: minio/minio:latest
-    container_name: douyinmall-milvus-minio
-    restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - milvus-minio-data:/data
-    networks:
-      - douyinmall-net
-
-  milvus:
-    image: milvusdb/milvus:v2.4.4
-    container_name: douyinmall-milvus
-    restart: unless-stopped
-    command: ["milvus", "run", "standalone"]
-    environment:
-      ETCD_ENDPOINTS: milvus-etcd:2379
-      MINIO_ADDRESS: milvus-minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-    ports:
-      - "19530:19530"
-      - "9091:9091"
-    volumes:
-      - milvus-data:/var/lib/milvus
-    depends_on:
-      - milvus-etcd
-      - milvus-minio
-    networks:
-      - douyinmall-net
-
-  mcpServer:
-    build:
-      context: ./backend
-      dockerfile: cmd/mcp-tools/Dockerfile
-    image: douyinmall-mcp-server
-    container_name: douyinmall-mcpServer
-    restart: unless-stopped
-    ports:
-      - "9090:9090"
-    environment:
-      TZ: Asia/Shanghai
-    depends_on:
-      - etcd
-    networks:
-      - douyinmall-net
+      - mall-net
 
   user-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/user/Dockerfile
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/user:latest
     container_name: douyinmall-user
-    restart: unless-stopped
     ports:
       - "8091:8091"
     environment:
       TZ: Asia/Shanghai
-      DB_PASSWORD: ${DB_PASSWORD:-root}
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: user-service
+      KITEX_PORT_TO_REGISTRY: 8091
     depends_on:
-      - mysql
-      - redis
-      - etcd
-    networks:
-      - douyinmall-net
+      redis:
+        condition: service_healthy
 
   order-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/order/Dockerfile
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/order:latest
     container_name: douyinmall-order
-    restart: unless-stopped
     ports:
       - "8095:8095"
+      - "19092:19092"
     environment:
       TZ: Asia/Shanghai
-      DB_PASSWORD: ${DB_PASSWORD:-root}
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: order-service
+      KITEX_PORT_TO_REGISTRY: 8095
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:19092/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     depends_on:
-      - mysql
-      - redis
-      - etcd
-      - kafka
-    networks:
-      - douyinmall-net
+      redis:
+        condition: service_healthy
 
   inventory-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/inventory/Dockerfile
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/inventory:latest
     container_name: douyinmall-inventory
-    restart: unless-stopped
     ports:
       - "8094:8094"
+      - "19096:19096"
     environment:
       TZ: Asia/Shanghai
-      DB_PASSWORD: ${DB_PASSWORD:-root}
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: inventory-service
+      KITEX_PORT_TO_REGISTRY: 8094
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:19096/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     depends_on:
-      - mysql
-      - redis
-      - etcd
-      - kafka
-      - order-service
-    networks:
-      - douyinmall-net
+      redis:
+        condition: service_healthy
+      order-service:
+        condition: service_started
 
   product-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/product/Dockerfile
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/product:latest
     container_name: douyinmall-product
-    restart: unless-stopped
     ports:
       - "8096:8096"
+      - "19095:19095"
     environment:
       TZ: Asia/Shanghai
-      DB_PASSWORD: ${DB_PASSWORD:-root}
-      CANAL_MYSQL_PASSWORD: ${CANAL_MYSQL_PASSWORD:-root}
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: product-service
+      KITEX_PORT_TO_REGISTRY: 8096
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:19095/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     depends_on:
-      - mysql
-      - redis
-      - etcd
-      - kafka
-    networks:
-      - douyinmall-net
+      redis:
+        condition: service_healthy
 
-  mock-wechat-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/mock-wechat/Dockerfile
-    container_name: douyinmall-mock-wechat
-    restart: unless-stopped
+  cart-service:
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/cart:latest
+    container_name: douyinmall-cart
     ports:
-      - "8888:8888"
+      - "8099:8099"
+      - "19094:19094"
     environment:
       TZ: Asia/Shanghai
-    networks:
-      - douyinmall-net
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: cart-service
+      KITEX_PORT_TO_REGISTRY: 8099
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:19094/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+
+  coupon-service:
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/coupon:latest
+    container_name: douyinmall-coupon
+    environment:
+      TZ: Asia/Shanghai
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: coupon-service
+      KITEX_PORT_TO_REGISTRY: 8097
+    depends_on:
+      redis:
+        condition: service_healthy
 
   payment-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/payment/Dockerfile
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/payment:latest
     container_name: douyinmall-payment
-    restart: unless-stopped
     ports:
       - "8092:8092"
       - "8093:8093"
     environment:
       TZ: Asia/Shanghai
-      DB_PASSWORD: ${DB_PASSWORD:-root}
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: payment-service
+      KITEX_PORT_TO_REGISTRY: 8092
+      ALIPAY_NOTIFY_URL: http://42.193.160.221:8093/api/pay/alipay/notify
+      ALIPAY_RETURN_URL: http://42.193.160.221:8093/pay/success
     depends_on:
-      - mysql
-      - redis
-      - etcd
-      - kafka
-      - order-service
-      - mock-wechat-service
-    networks:
-      - douyinmall-net
+      redis:
+        condition: service_healthy
+      order-service:
+        condition: service_started
 
   checkout-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/checkout/Dockerfile
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/checkout:latest
     container_name: douyinmall-checkout
-    restart: unless-stopped
     ports:
       - "8086:8086"
     environment:
       TZ: Asia/Shanghai
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      KITEX_IP_TO_REGISTRY: checkout-service
+      KITEX_PORT_TO_REGISTRY: 8086
     depends_on:
-      - etcd
-      - product-service
-      - inventory-service
-      - order-service
-      - payment-service
-    networks:
-      - douyinmall-net
+      coupon-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
 
   seckill-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/seckill/Dockerfile
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/seckill:latest
     container_name: douyinmall-seckill
-    restart: unless-stopped
     ports:
       - "8098:8098"
     environment:
       TZ: Asia/Shanghai
-      DB_PASSWORD: ${DB_PASSWORD:-root}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      ROCKETMQ_NAME_SERVER: ${ROCKETMQ_NAME_SERVER:-43.136.121.171:9876}
-      ROCKETMQ_PRODUCER_GROUP: ${ROCKETMQ_PRODUCER_GROUP:-seckill-request-producer}
-      ROCKETMQ_REQUEST_GROUP: ${ROCKETMQ_REQUEST_GROUP:-seckill-request-consumer}
-      ROCKETMQ_DEAD_LETTER_GROUP: ${ROCKETMQ_DEAD_LETTER_GROUP:-seckill-request-dead-letter-consumer}
-      ROCKETMQ_ORDER_STATUS_GROUP: ${ROCKETMQ_ORDER_STATUS_GROUP:-seckill-order-status-consumer}
-      ROCKETMQ_ACCESS_KEY: ${ROCKETMQ_ACCESS_KEY:-}
-      ROCKETMQ_SECRET_KEY: ${ROCKETMQ_SECRET_KEY:-}
-      ROCKETMQ_GLOBAL_WORKER_NUM: ${ROCKETMQ_GLOBAL_WORKER_NUM:-10}
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: seckill-service
+      KITEX_PORT_TO_REGISTRY: 8098
     depends_on:
-      - mysql
-      - redis
-      - etcd
-      - kafka
-      - order-service
-    networks:
-      - douyinmall-net
+      redis:
+        condition: service_healthy
+      order-service:
+        condition: service_started
 
-  bff-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/bff/Dockerfile
-    container_name: douyinmall-bff
-    restart: unless-stopped
+  aftersale-service:
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/aftersale:latest
+    container_name: douyinmall-aftersale
     ports:
-      - "8080:8080"
+      - "8097:8097"
+      - "19097:19097"
     environment:
       TZ: Asia/Shanghai
-    depends_on:
-      - redis
-      - etcd
-      - user-service
-      - agent-service
-    networks:
-      - douyinmall-net
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      KITEX_IP_TO_REGISTRY: aftersale-service
+      KITEX_PORT_TO_REGISTRY: 8097
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:19097/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   agent-service:
-    build:
-      context: ./backend
-      dockerfile: cmd/agent/Dockerfile
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/agent:latest
     container_name: douyinmall-agent
-    restart: unless-stopped
-    command: ["./agent", "--config", "internal/agent/config/dev.yaml"]
+    command: ["./agent", "--config", "internal/agent/config/docker.yaml"]
     ports:
       - "8087:8087"
       - "18087:18087"
     environment:
       TZ: Asia/Shanghai
-      DB_PASSWORD: ${DB_PASSWORD:-root}
-      LLM_API_KEY: ${LLM_API_KEY}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+      KITEX_IP_TO_REGISTRY: agent-service
+      KITEX_PORT_TO_REGISTRY: 8087
     depends_on:
-      - mysql
-      - redis
-      - etcd
-      - mcpServer
-    networks:
-      - douyinmall-net
+      aftersale-service:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
-volumes:
-  mysql-data:
-  redis-data:
-  etcd-data:
-  kafka-data:
-  es-data:
-  milvus-etcd-data:
-  milvus-minio-data:
-  milvus-data:
+  bff-service:
+    <<: *microservice-common
+    image: ccr.ccs.tencentyun.com/douyin-mall/bff:latest
+    container_name: douyinmall-bff
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Asia/Shanghai
+      ETCD_ENDPOINTS: host.docker.internal:2379
+      REDIS_ADDR: redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      agent-service:
+        condition: service_started
 
 networks:
-  douyinmall-net:
+  mall-net:
     driver: bridge
+
+volumes:
+  redis-data:

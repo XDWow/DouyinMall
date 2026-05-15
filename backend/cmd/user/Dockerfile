@@ -9,6 +9,6 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/user .
-COPY --from=builder /app/internal/user/config/dev.yaml ./internal/user/config/dev.yaml
+COPY --from=builder /app/internal/user/config/prod.yaml ./internal/user/config/prod.yaml
 EXPOSE 8091
-ENTRYPOINT ["./user", "--config", "internal/user/config/dev.yaml"]
+ENTRYPOINT ["./user", "--config", "internal/user/config/prod.yaml"]

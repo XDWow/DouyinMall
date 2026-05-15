@@ -14,14 +14,14 @@ func InitLogger() logger.LoggerV1 {
 	encoderCfg.TimeKey = "time"
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 
-	// stdout 杈撳嚭锛圖ocker Desktop / docker logs 鍙锛?
+	// stdout 输出，Docker Desktop / docker logs 可见
 	stdoutCore := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderCfg),
 		zapcore.AddSync(os.Stdout),
 		zapcore.DebugLevel,
 	)
 
-	// 鏂囦欢杈撳嚭锛堝鍣ㄥ唴鎸佷箙鍖栵級
+	// 文件输出（容器内持久化）
 	fileCore := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderCfg),
 		zapcore.AddSync(&lumberjack.Logger{
@@ -37,5 +37,3 @@ func InitLogger() logger.LoggerV1 {
 	l := zap.New(zapcore.NewTee(stdoutCore, fileCore), zap.AddCaller())
 	return logger.NewZapLogger(l)
 }
-
-

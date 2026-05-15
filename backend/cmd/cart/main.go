@@ -3,10 +3,14 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
+	cartmcp "github.com/XDWow/DouyinMall/backend/internal/cart/transport/mcp"
+	"github.com/XDWow/DouyinMall/backend/pkg/envx"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
@@ -32,6 +36,27 @@ func main() {
 		httpErr <- app.HTTPServer.Start()
 	}()
 
+	var mcpCfg cartmcp.Config
+	mcpOK := viper.UnmarshalKey("mcp", &mcpCfg) == nil && strings.TrimSpace(mcpCfg.Server.Addr) != ""
+	if mcpOK {
+		mcpHandler, err := newMCPHandler(mcpCfg)
+		if err != nil {
+			panic(fmt.Errorf("init cart MCP failed: %w", err))
+		}
+		mux := http.NewServeMux()
+		mux.Handle("/mcp", mcpHandler)
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		})
+		go func() {
+			log.Printf("cart MCP listening on %s", mcpCfg.Server.Addr)
+			if err := http.ListenAndServe(mcpCfg.Server.Addr, mux); err != nil {
+				panic(fmt.Errorf("cart MCP server failed: %w", err))
+			}
+		}()
+	}
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -55,6 +80,10 @@ func main() {
 }
 
 func initViperWatch() {
+	if err := envx.Load(); err != nil {
+		panic(fmt.Errorf("load .env failed: %w", err))
+	}
+
 	cfile := pflag.String("config", "internal/cart/config/dev.yaml", "config file path")
 	pflag.Parse()
 
@@ -74,4 +103,6 @@ func initViperWatch() {
 	_ = viper.BindEnv("etcd.endpoints", "ETCD_ENDPOINTS")
 	_ = viper.BindEnv("grpc.server.port", "GRPC_PORT")
 	_ = viper.BindEnv("grpc.server.name", "GRPC_SERVICE_NAME")
+	_ = viper.BindEnv("mcp.server.addr", "MCP_ADDR")
+	_ = viper.BindEnv("mcp.upstream.direct_addr", "MCP_UPSTREAM_DIRECT_ADDR")
 }

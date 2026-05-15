@@ -31,9 +31,12 @@ func InitApp() *App {
 		ioc.InitPaymentStatusProducer,
 		ioc.InitPaymentMQProducer,
 		ioc.InitNativePayService,
+		ioc.InitPagePayService,
 		ioc.InitPaymentProvider,
 		ioc.InitAlipayClient,
+		ioc.InitAlipayWebConfig,
 		ioc.InitWechatNotifyHandler,
+		ioc.InitOrderClient,
 
 		repository.NewPaymentRepository,
 		repository.NewPaymentOutboxRepository,
@@ -44,6 +47,9 @@ func InitApp() *App {
 		ioc.InitSyncPaymentOrderUC,
 		usecase.NewGetPaymentUC,
 		usecase.NewConfirmPaymentUC,
+		usecase.NewAlipayPagePayUC,
+		usecase.NewAlipayNotifyUC,
+		usecase.NewAlipayReturnPageUC,
 
 		grpc.NewPaymentHandler,
 

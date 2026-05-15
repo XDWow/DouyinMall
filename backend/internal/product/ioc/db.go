@@ -21,6 +21,7 @@ func InitDB() *gorm.DB {
 	if err := viper.UnmarshalKey("db", &c); err != nil {
 		panic(fmt.Errorf("unmarshal product db config failed: %w", err))
 	}
+	c.Password = viper.GetString("db.password")
 
 	dsn, err := mysqlconfig.BuildDSN(mysqlconfig.Config{
 		Host:     c.Host,

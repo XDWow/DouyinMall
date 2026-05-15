@@ -9,6 +9,6 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/payment .
-COPY --from=builder /app/internal/payment/config/docker.yaml ./internal/payment/config/dev.yaml
+COPY --from=builder /app/internal/payment/config/prod.yaml ./internal/payment/config/prod.yaml
 EXPOSE 8092 8093
-ENTRYPOINT ["./payment"]
+ENTRYPOINT ["./payment", "--config", "internal/payment/config/prod.yaml"]

@@ -9,6 +9,6 @@ FROM alpine:3.21
 ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=builder /app/coupon .
-COPY --from=builder /app/internal/coupon/config/dev.yaml ./internal/coupon/config/dev.yaml
-EXPOSE 8095
-ENTRYPOINT ["./coupon"]
+COPY --from=builder /app/internal/coupon/config/prod.yaml ./internal/coupon/config/prod.yaml
+EXPOSE 8097
+ENTRYPOINT ["./coupon", "--config", "internal/coupon/config/prod.yaml"]

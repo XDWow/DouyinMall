@@ -12,7 +12,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/rpc_gen/kitex_gen/payment/v1/paymentservice"
 )
 
-// 閫夋嫨涓€涓鍗曟敮浠橈紝鏄綋鏃跺垱寤轰簡璁㈠崟锛屼絾娌℃敮浠樼殑鎯呭喌
+// PayOrderUseCase retries payment for an existing order that is still unpaid.
 type PayOrderUseCase struct {
 	orderClient   orderservice.Client
 	paymentClient paymentservice.Client
@@ -37,7 +37,7 @@ type PayOrderOutput struct {
 	OrderID     int64
 	PaymentURL  string
 	TotalAmount int64
-	ExpireAt    int64 // 璁㈠崟鍙栨秷杩樺墿澶氬皯鏃堕棿
+	ExpireAt    int64 // Order expiration timestamp in Unix seconds.
 }
 
 func (uc *PayOrderUseCase) Execute(ctx context.Context, input PayOrderInput) (*PayOrderOutput, error) {
@@ -86,5 +86,3 @@ func (uc *PayOrderUseCase) Execute(ctx context.Context, input PayOrderInput) (*P
 		ExpireAt:    order.GetExpireAt(),
 	}, nil
 }
-
-

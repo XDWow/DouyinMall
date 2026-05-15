@@ -18,13 +18,11 @@ func InitOrderClient() orderservice.Client {
 	}
 	r, err := etcd.NewEtcdResolver(endpoints)
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 etcd 鏈嶅姟鍙戠幇澶辫触: %w", err))
+		panic(fmt.Errorf("create etcd resolver for order client: %w", err))
 	}
 	c, err := orderservice.NewClient("order.service", client.WithResolver(r))
 	if err != nil {
-		panic(fmt.Errorf("鍒涘缓 order 瀹㈡埛绔け璐? %w", err))
+		panic(fmt.Errorf("create order client: %w", err))
 	}
 	return c
 }
-
-

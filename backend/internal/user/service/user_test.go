@@ -130,7 +130,7 @@ func TestUserService_Login(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name:     "鐢ㄦ埛涓嶅瓨鍦?,
+			name:     "user not found",
 			email:    "notfound@example.com",
 			password: "password",
 			setupFn: func() {

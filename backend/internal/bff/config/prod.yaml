@@ -1,0 +1,43 @@
+http:
+  addr: ":8080"
+
+jwt:
+  access_secret: ""
+  refresh_secret: ""
+  access_expiry: "2h"
+  refresh_expiry: "168h"
+
+redis:
+  addr: "106.52.154.235:6379"
+  password: ""
+
+ratelimit:
+  interval: "1m"
+  rate: 100000
+
+etcd:
+  endpoints:
+    - "etcd:2379"
+
+rpc:
+  agent:
+    service_name: "agent-service"
+    direct_addr: ""
+  user:
+    service_name: "user-service"
+    direct_addr: ""
+  checkout:
+    service_name: "checkout.service"
+    direct_addr: ""
+  seckill:
+    service_name: "seckill.service"
+    direct_addr: ""
+  order:
+    service_name: "order.service"
+    direct_addr: ""
+  product:
+    service_name: "product.service"
+    direct_addr: ""
+  inventory:
+    service_name: "inventory.service"
+    direct_addr: ""

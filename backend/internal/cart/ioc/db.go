@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/XDWow/DouyinMall/backend/internal/cart/config"
-	"github.com/XDWow/DouyinMall/backend/internal/product/repo/dao"
+	"github.com/XDWow/DouyinMall/backend/internal/cart/repository/dao"
 	"github.com/XDWow/DouyinMall/backend/pkg/mysqlconfig"
 	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
@@ -12,7 +12,6 @@ import (
 )
 
 func InitDB() *gorm.DB {
-	// 榛樿閰嶇疆鍏滃簳
 	c := config.DBConfig{
 		Host:     "localhost",
 		Port:     3306,
@@ -21,7 +20,7 @@ func InitDB() *gorm.DB {
 	}
 	err := viper.UnmarshalKey("db", &c)
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲璇诲彇閰嶇疆澶辫触: %w", err))
+		panic(fmt.Errorf("load cart db config: %w", err))
 	}
 
 	c.Password = viper.GetString("db.password")
@@ -34,18 +33,16 @@ func InitDB() *gorm.DB {
 		Params:   c.Params,
 	})
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲閰嶇疆澶辫触: %w", err))
+		panic(fmt.Errorf("build cart db dsn: %w", err))
 	}
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲杩炴帴澶辫触: %w", err))
+		panic(fmt.Errorf("open cart db connection: %w", err))
 	}
 
-	// 鍒濆鍖?db 鐨勮〃
-	err = dao.InitTables(db)
-	if err != nil {
-		panic(fmt.Errorf("鏁版嵁搴撳垵濮嬪寲琛ㄥけ璐? %w", err))
+	if err = dao.InitTables(db); err != nil {
+		panic(fmt.Errorf("migrate cart tables: %w", err))
 	}
 	return db
 }

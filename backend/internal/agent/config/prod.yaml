@@ -13,7 +13,7 @@ http:
 db:
   host: "134.175.67.79"
   port: 3306
-  user: "CHANGE_ME_DB_USER"
+  user: "root"
   password: ""
   database: "douyinmall_agent"
   params: "charset=utf8mb4&parseTime=True&loc=Local"
@@ -30,32 +30,32 @@ kafka:
 
 etcd:
   endpoints:
-    - "douyinmall-etcd:2379"
+    - "42.193.160.221:2379"
 
 mcp:
   servers:
     - name: "order"
-      endpoint: "http://localhost:19092/mcp"
+      endpoint: "http://42.193.160.221:19092/mcp"
       timeout_seconds: 10
       enabled: true
     - name: "search"
-      endpoint: "http://localhost:19093/mcp"
+      endpoint: "http://42.193.160.221:19093/mcp"
       timeout_seconds: 10
       enabled: true
     - name: "cart"
-      endpoint: "http://localhost:19094/mcp"
+      endpoint: "http://42.193.160.221:19094/mcp"
       timeout_seconds: 10
       enabled: true
     - name: "product"
-      endpoint: "http://localhost:19095/mcp"
+      endpoint: "http://42.193.160.221:19095/mcp"
       timeout_seconds: 10
       enabled: true
     - name: "inventory"
-      endpoint: "http://localhost:19096/mcp"
+      endpoint: "http://42.193.160.221:19096/mcp"
       timeout_seconds: 10
       enabled: true
     - name: "aftersale"
-      endpoint: "http://localhost:19097/mcp"
+      endpoint: "http://42.193.160.221:19097/mcp"
       timeout_seconds: 10
       enabled: true
 

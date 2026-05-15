@@ -19,7 +19,7 @@ func InitDB() *gorm.DB {
 		Database: "mysql",
 	}
 	if err := viper.UnmarshalKey("db", &c); err != nil {
-		panic(fmt.Errorf("数据库初始化读取配置失败: %w", err))
+		panic(fmt.Errorf("load order db config: %w", err))
 	}
 	c.Password = viper.GetString("db.password")
 
@@ -32,16 +32,16 @@ func InitDB() *gorm.DB {
 		Params:   c.Params,
 	})
 	if err != nil {
-		panic(fmt.Errorf("数据库初始化配置失败: %w", err))
+		panic(fmt.Errorf("build order db dsn: %w", err))
 	}
 
 	database, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic(fmt.Errorf("数据库初始化连接失败: %w", err))
+		panic(fmt.Errorf("open order db connection: %w", err))
 	}
 
 	if err = db.InitTables(database); err != nil {
-		panic(fmt.Errorf("数据库初始化建表失败: %w", err))
+		panic(fmt.Errorf("migrate order tables: %w", err))
 	}
 	return database
 }
