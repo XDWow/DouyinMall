@@ -39,6 +39,9 @@ func InitDB() *gorm.DB {
 	if err != nil {
 		panic(fmt.Errorf("open order db connection: %w", err))
 	}
+	if err := mysqlconfig.ApplyPool(database, mysqlconfig.PoolConfig{}); err != nil {
+		panic(fmt.Errorf("configure order db pool: %w", err))
+	}
 
 	if err = db.InitTables(database); err != nil {
 		panic(fmt.Errorf("migrate order tables: %w", err))

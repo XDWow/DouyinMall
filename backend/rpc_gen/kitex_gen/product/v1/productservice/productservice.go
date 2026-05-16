@@ -30,6 +30,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingUnary),
 	),
+	"GetProductQuotes": kitex.NewMethodInfo(
+		getProductQuotesHandler,
+		newGetProductQuotesArgs,
+		newGetProductQuotesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingUnary),
+	),
 	"CreateProduct": kitex.NewMethodInfo(
 		createProductHandler,
 		newCreateProductArgs,
@@ -336,6 +343,117 @@ func (p *GetProductsResult) IsSetSuccess() bool {
 }
 
 func (p *GetProductsResult) GetResult() interface{} {
+	return p.Success
+}
+
+func getProductQuotesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	switch s := arg.(type) {
+	case *streaming.Args:
+		st := s.Stream
+		req := new(v1.GetProductQuotesReq)
+		if err := st.RecvMsg(req); err != nil {
+			return err
+		}
+		resp, err := handler.(productv1.ProductService).GetProductQuotes(ctx, req)
+		if err != nil {
+			return err
+		}
+		return st.SendMsg(resp)
+	case *GetProductQuotesArgs:
+		success, err := handler.(productv1.ProductService).GetProductQuotes(ctx, s.Req)
+		if err != nil {
+			return err
+		}
+		realResult := result.(*GetProductQuotesResult)
+		realResult.Success = success
+		return nil
+	default:
+		return errInvalidMessageType
+	}
+}
+func newGetProductQuotesArgs() interface{} {
+	return &GetProductQuotesArgs{}
+}
+
+func newGetProductQuotesResult() interface{} {
+	return &GetProductQuotesResult{}
+}
+
+type GetProductQuotesArgs struct {
+	Req *v1.GetProductQuotesReq
+}
+
+func (p *GetProductQuotesArgs) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetReq() {
+		return out, nil
+	}
+	return proto.Marshal(p.Req)
+}
+
+func (p *GetProductQuotesArgs) Unmarshal(in []byte) error {
+	msg := new(v1.GetProductQuotesReq)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Req = msg
+	return nil
+}
+
+var GetProductQuotesArgs_Req_DEFAULT *v1.GetProductQuotesReq
+
+func (p *GetProductQuotesArgs) GetReq() *v1.GetProductQuotesReq {
+	if !p.IsSetReq() {
+		return GetProductQuotesArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+
+func (p *GetProductQuotesArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *GetProductQuotesArgs) GetFirstArgument() interface{} {
+	return p.Req
+}
+
+type GetProductQuotesResult struct {
+	Success *v1.GetProductQuotesResp
+}
+
+var GetProductQuotesResult_Success_DEFAULT *v1.GetProductQuotesResp
+
+func (p *GetProductQuotesResult) Marshal(out []byte) ([]byte, error) {
+	if !p.IsSetSuccess() {
+		return out, nil
+	}
+	return proto.Marshal(p.Success)
+}
+
+func (p *GetProductQuotesResult) Unmarshal(in []byte) error {
+	msg := new(v1.GetProductQuotesResp)
+	if err := proto.Unmarshal(in, msg); err != nil {
+		return err
+	}
+	p.Success = msg
+	return nil
+}
+
+func (p *GetProductQuotesResult) GetSuccess() *v1.GetProductQuotesResp {
+	if !p.IsSetSuccess() {
+		return GetProductQuotesResult_Success_DEFAULT
+	}
+	return p.Success
+}
+
+func (p *GetProductQuotesResult) SetSuccess(x interface{}) {
+	p.Success = x.(*v1.GetProductQuotesResp)
+}
+
+func (p *GetProductQuotesResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *GetProductQuotesResult) GetResult() interface{} {
 	return p.Success
 }
 
@@ -697,6 +815,16 @@ func (p *kClient) GetProducts(ctx context.Context, Req *v1.GetProductsReq) (r *v
 	_args.Req = Req
 	var _result GetProductsResult
 	if err = p.c.Call(ctx, "GetProducts", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetProductQuotes(ctx context.Context, Req *v1.GetProductQuotesReq) (r *v1.GetProductQuotesResp, err error) {
+	var _args GetProductQuotesArgs
+	_args.Req = Req
+	var _result GetProductQuotesResult
+	if err = p.c.Call(ctx, "GetProductQuotes", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

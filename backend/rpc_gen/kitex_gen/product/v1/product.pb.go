@@ -324,9 +324,93 @@ func (x *GetProductsResp) GetProduct() []*Product {
 	return nil
 }
 
+type ProductQuote struct {
+	ProductId int64  `protobuf:"varint,1,opt,name=product_id" json:"product_id,omitempty"`
+	SkuId     int64  `protobuf:"varint,2,opt,name=sku_id" json:"sku_id,omitempty"`
+	Price     int64  `protobuf:"varint,3,opt,name=price" json:"price,omitempty"`
+	Currency  string `protobuf:"bytes,4,opt,name=currency" json:"currency,omitempty"`
+	InStock   bool   `protobuf:"varint,5,opt,name=in_stock" json:"in_stock,omitempty"`
+}
+
+func (x *ProductQuote) Reset() { *x = ProductQuote{} }
+
+func (x *ProductQuote) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *ProductQuote) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *ProductQuote) GetProductId() int64 {
+	if x != nil {
+		return x.ProductId
+	}
+	return 0
+}
+
+func (x *ProductQuote) GetSkuId() int64 {
+	if x != nil {
+		return x.SkuId
+	}
+	return 0
+}
+
+func (x *ProductQuote) GetPrice() int64 {
+	if x != nil {
+		return x.Price
+	}
+	return 0
+}
+
+func (x *ProductQuote) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
+func (x *ProductQuote) GetInStock() bool {
+	if x != nil {
+		return x.InStock
+	}
+	return false
+}
+
+type GetProductQuotesReq struct {
+	Items []*ProductQuery `protobuf:"bytes,1,rep,name=items" json:"items,omitempty"`
+}
+
+func (x *GetProductQuotesReq) Reset() { *x = GetProductQuotesReq{} }
+
+func (x *GetProductQuotesReq) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *GetProductQuotesReq) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *GetProductQuotesReq) GetItems() []*ProductQuery {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type GetProductQuotesResp struct {
+	ProductQuotes []*ProductQuote `protobuf:"bytes,1,rep,name=product_quotes" json:"product_quotes,omitempty"`
+}
+
+func (x *GetProductQuotesResp) Reset() { *x = GetProductQuotesResp{} }
+
+func (x *GetProductQuotesResp) Marshal(in []byte) ([]byte, error) { return prutal.MarshalAppend(in, x) }
+
+func (x *GetProductQuotesResp) Unmarshal(in []byte) error { return prutal.Unmarshal(in, x) }
+
+func (x *GetProductQuotesResp) GetProductQuotes() []*ProductQuote {
+	if x != nil {
+		return x.ProductQuotes
+	}
+	return nil
+}
+
 type ProductService interface {
 	ListProducts(ctx context.Context, req *ListProductsReq) (res *ListProductsResp, err error)
 	GetProducts(ctx context.Context, req *GetProductsReq) (res *GetProductsResp, err error)
+	GetProductQuotes(ctx context.Context, req *GetProductQuotesReq) (res *GetProductQuotesResp, err error)
 	CreateProduct(ctx context.Context, req *CreateProductReq) (res *CreateProductResp, err error)
 	UpdateProduct(ctx context.Context, req *UpdateProductReq) (res *UpdateProductResp, err error)
 	DeleteProduct(ctx context.Context, req *DeleteProductReq) (res *DeleteProductResp, err error)

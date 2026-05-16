@@ -53,8 +53,8 @@ func TestProductRepo_GetProduct_BasicCacheHitPriceMiss(t *testing.T) {
 	query := domain.ProductQuery{ID: 1, SKUID: 101}
 
 	basicData, _ := json.Marshal(domain.Product{ID: 1, Name: "Phone"})
-	c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(basicData, nil)
-	c.EXPECT().Get(gomock.Any(), PriceInStockKey(1, 101)).Return(nil, errors.New("cache miss"))
+	c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(basicData, nil).Times(2)
+	c.EXPECT().Get(gomock.Any(), PriceInStockKey(1, 101)).Return(nil, errors.New("cache miss")).Times(2)
 	d.EXPECT().FindPriceInStock(gomock.Any(), int64(1), int64(101)).Return(int64(8800), "CNY", true, nil)
 	c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(1, 101), gomock.Any(), gomock.Any()).Return(nil)
 
@@ -73,8 +73,8 @@ func TestProductRepo_GetProduct_FullMissLoadsDB(t *testing.T) {
 	c := cachemocks.NewMockProductCache(ctrl)
 	query := domain.ProductQuery{ID: 1, SKUID: 101}
 
-	c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(nil, errors.New("cache miss"))
-	c.EXPECT().Get(gomock.Any(), PriceInStockKey(1, 101)).Return(nil, errors.New("cache miss"))
+	c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(nil, errors.New("cache miss")).Times(2)
+	c.EXPECT().Get(gomock.Any(), PriceInStockKey(1, 101)).Return(nil, errors.New("cache miss")).Times(2)
 	d.EXPECT().FindByID(gomock.Any(), int64(1)).Return(dao.Product{
 		ID:       1,
 		Name:     "Phone",
@@ -93,6 +93,62 @@ func TestProductRepo_GetProduct_FullMissLoadsDB(t *testing.T) {
 	assert.Equal(t, int64(101), product.SKUID)
 }
 
+func TestProductRepo_GetProducts_FullMissLoadsDBInBatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	d := daomocks.NewMockProductDao(ctrl)
+	c := cachemocks.NewMockProductCache(ctrl)
+	queries := []domain.ProductQuery{
+		{ID: 1, SKUID: 101},
+		{ID: 2, SKUID: 202},
+	}
+
+	d.EXPECT().FindByIDs(gomock.Any(), []int64{1, 2}).Return([]dao.Product{
+		{ID: 1, Name: "Phone", Price: 7700, Currency: "CNY", InStock: true},
+		{ID: 2, Name: "Case", Price: 3300, Currency: "CNY", InStock: true},
+	}, nil)
+	d.EXPECT().FindPriceInStocks(gomock.Any(), queries).Return([]dao.ProductSKU{
+		{ProductID: 1, SKUID: 101, Price: 6600, Currency: "CNY", InStock: true},
+		{ProductID: 2, SKUID: 202, Price: 2200, Currency: "CNY", InStock: true},
+	}, nil)
+	c.EXPECT().SetWithTTL(gomock.Any(), DetailBasicKey(1), gomock.Any(), gomock.Any()).Return(nil)
+	c.EXPECT().SetWithTTL(gomock.Any(), DetailBasicKey(2), gomock.Any(), gomock.Any()).Return(nil)
+	c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(1, 101), gomock.Any(), gomock.Any()).Return(nil)
+	c.EXPECT().SetWithTTL(gomock.Any(), PriceInStockKey(2, 202), gomock.Any(), gomock.Any()).Return(nil)
+
+	products, err := newTestRepo(d, c).GetProducts(context.Background(), queries)
+
+	require.NoError(t, err)
+	require.Len(t, products, 2)
+	assert.Equal(t, int64(6600), products[0].Price)
+	assert.Equal(t, int64(2200), products[1].Price)
+}
+
+func TestProductRepo_GetProductQuotes_UsesSingleQuoteQuery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	d := daomocks.NewMockProductDao(ctrl)
+	c := cachemocks.NewMockProductCache(ctrl)
+	queries := []domain.ProductQuery{
+		{ID: 1, SKUID: 101},
+		{ID: 2, SKUID: 202},
+	}
+
+	d.EXPECT().FindQuotes(gomock.Any(), queries).Return([]dao.ProductQuote{
+		{ProductID: 1, SKUID: 101, Price: 6600, Currency: "CNY", InStock: true},
+		{ProductID: 2, SKUID: 202, Price: 2200, Currency: "CNY", InStock: false},
+	}, nil)
+
+	quotes, err := newTestRepo(d, c).GetProductQuotes(context.Background(), queries)
+
+	require.NoError(t, err)
+	require.Len(t, quotes, 2)
+	assert.Equal(t, int64(6600), quotes[0].Price)
+	assert.False(t, quotes[1].InStock)
+}
+
 func TestProductRepo_GetProduct_DBError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -100,8 +156,8 @@ func TestProductRepo_GetProduct_DBError(t *testing.T) {
 	d := daomocks.NewMockProductDao(ctrl)
 	c := cachemocks.NewMockProductCache(ctrl)
 
-	c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(nil, errors.New("cache miss"))
-	c.EXPECT().Get(gomock.Any(), PriceInStockKey(1, 101)).Return(nil, errors.New("cache miss"))
+	c.EXPECT().Get(gomock.Any(), DetailBasicKey(1)).Return(nil, errors.New("cache miss")).Times(2)
+	c.EXPECT().Get(gomock.Any(), PriceInStockKey(1, 101)).Return(nil, errors.New("cache miss")).Times(2)
 	d.EXPECT().FindByID(gomock.Any(), int64(1)).Return(dao.Product{}, errors.New("db error"))
 
 	_, err := newTestRepo(d, c).GetProduct(context.Background(), domain.ProductQuery{ID: 1, SKUID: 101})

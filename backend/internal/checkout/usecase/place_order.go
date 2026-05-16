@@ -84,12 +84,12 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 		return nil, err
 	}
 
-	productResp, err := uc.productClient.GetProducts(ctx, &productv1.GetProductsReq{Items: extractProductQueries(input.Items)})
+	productResp, err := uc.productClient.GetProductQuotes(ctx, &productv1.GetProductQuotesReq{Items: extractProductQueries(input.Items)})
 	if err != nil {
-		return nil, fmt.Errorf("query products: %w", err)
+		return nil, fmt.Errorf("query product quotes: %w", err)
 	}
 
-	lines, unavailable := buildOrderLines(input.Items, productResp.Product)
+	lines, unavailable := buildOrderLinesFromQuotes(input.Items, productResp.GetProductQuotes())
 	if len(unavailable) > 0 {
 		items := make([]domain.UnavailableItem, len(unavailable))
 		for i, l := range unavailable {
@@ -126,11 +126,8 @@ func (uc *PlaceOrderUseCase) Execute(ctx context.Context, input PlaceOrderInput)
 		OperationId: operationID(orderID, "commit"),
 		Items:       toInventoryStockItems(input.Items),
 	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", domain.ErrInsufficientStock, err)
-	}
-	if commitResp != nil && commitResp.GetStatusCode() != 0 {
-		return nil, fmt.Errorf("%w: %s", domain.ErrInsufficientStock, commitResp.GetStatusMsg())
+	if err := classifyCommitStockResult(err, commitResp); err != nil {
+		return nil, err
 	}
 
 	if len(input.CouponIDs) > 0 {
@@ -247,4 +244,27 @@ func normalizeOrderKind(orderKind string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported order_kind: %s", orderKind)
 	}
+}
+
+func classifyCommitStockResult(callErr error, resp *inventoryv1.InventoryOpResp) error {
+	if callErr != nil {
+		return fmt.Errorf("commit stock rpc failed: %w", callErr)
+	}
+	if resp == nil || resp.GetStatusCode() == 0 {
+		return nil
+	}
+
+	msg := strings.TrimSpace(resp.GetStatusMsg())
+	if isInsufficientStockMessage(msg) {
+		return fmt.Errorf("%w: %s", domain.ErrInsufficientStock, msg)
+	}
+	if msg == "" {
+		msg = "unknown inventory failure"
+	}
+	return fmt.Errorf("commit stock failed: %s", msg)
+}
+
+func isInsufficientStockMessage(msg string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(msg))
+	return strings.Contains(normalized, "insufficient stock") || strings.Contains(msg, "库存不足")
 }

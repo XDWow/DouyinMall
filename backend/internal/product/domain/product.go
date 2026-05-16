@@ -20,3 +20,11 @@ type ProductQuery struct {
 	ID    int64
 	SKUID int64
 }
+
+type ProductQuote struct {
+	ProductID int64
+	SKUID     int64
+	Price     int64
+	Currency  string
+	InStock   bool
+}

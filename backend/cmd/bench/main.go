@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"sort"
@@ -32,24 +33,26 @@ import (
 )
 
 type benchConfig struct {
-	mode          string
-	checkoutAddr  string
-	productAddr   string
-	inventoryAddr string
-	orderAddr     string
-	seckillAddr   string
-	mysqlDSN      string
-	redisAddr     string
-	mockWechatURL string
-	requests      int
-	concurrency   int
-	stock         int
-	users         int
-	targetQPS     int
-	duplicatePct  int
-	hotPct        int
-	duplicateFan  int
-	settleTimeout time.Duration
+	mode           string
+	checkoutAddr   string
+	productAddr    string
+	inventoryAddr  string
+	orderAddr      string
+	seckillAddr    string
+	mysqlDSN       string
+	redisAddr      string
+	mockWechatURL  string
+	requests       int
+	concurrency    int
+	stock          int
+	users          int
+	targetQPS      int
+	duplicatePct   int
+	hotPct         int
+	checkoutItems  int
+	checkoutHotPct int
+	duplicateFan   int
+	settleTimeout  time.Duration
 }
 
 type metricSummary struct {
@@ -92,6 +95,26 @@ type metricSummary struct {
 	HotSuccessCount     int            `json:"hot_final_success_count,omitempty"`
 	ColdSuccessCount    int            `json:"cold_final_success_count,omitempty"`
 	StatusCounts        map[string]int `json:"status_counts,omitempty"`
+	CheckoutItems       int            `json:"checkout_product_count,omitempty"`
+	CheckoutHotPercent  int            `json:"checkout_hot_percent,omitempty"`
+	CheckoutHotItems    int            `json:"checkout_hot_products,omitempty"`
+}
+
+type checkoutBenchProduct struct {
+	ProductID int64
+	SKUID     int64
+	Price     int64
+}
+
+type checkoutRequestSpec struct {
+	ProductIndex int
+}
+
+type checkoutWorkload struct {
+	Requests        []checkoutRequestSpec
+	RequestsPerItem []int
+	HotProductCount int
+	HotRequests     int
 }
 
 func main() {
@@ -143,6 +166,8 @@ func parseFlags() benchConfig {
 	flag.IntVar(&cfg.targetQPS, "target_qps", 0, "target request rate for paced submission; 0 means no rate limit")
 	flag.IntVar(&cfg.duplicatePct, "duplicate_percent", 0, "duplicate request percent for seckill traffic")
 	flag.IntVar(&cfg.hotPct, "hot_percent", 100, "hot activity traffic percent for seckill traffic")
+	flag.IntVar(&cfg.checkoutItems, "checkout_products", 20, "number of products to mix in checkout benchmark")
+	flag.IntVar(&cfg.checkoutHotPct, "checkout_hot_percent", 60, "percentage of checkout traffic routed to hot products")
 	flag.IntVar(&cfg.duplicateFan, "duplicate_fan", 5, "duplicate requests per user")
 	settleTimeoutSec := flag.Int("settle_timeout_sec", 300, "max seconds to wait for async seckill settlement")
 	flag.Parse()
@@ -167,7 +192,11 @@ func runCheckoutBench(cfg benchConfig) (metricSummary, error) {
 		return metricSummary{}, err
 	}
 
-	productID, skuID, err := seedProductAndStock(productClient, inventoryClient, cfg.requests+20, 299)
+	workload, err := buildCheckoutWorkload(cfg.requests, cfg.checkoutItems, cfg.checkoutHotPct)
+	if err != nil {
+		return metricSummary{}, err
+	}
+	products, err := seedCheckoutProducts(productClient, inventoryClient, workload.RequestsPerItem)
 	if err != nil {
 		return metricSummary{}, err
 	}
@@ -176,11 +205,12 @@ func runCheckoutBench(cfg benchConfig) (metricSummary, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		userID := int64(1_000_000 + i)
+		product := products[workload.Requests[i].ProductIndex]
 		_, err := checkoutClient.PlaceOrder(ctx, &checkoutv1.PlaceOrderReq{
 			UserId: userID,
 			Items: []*checkoutv1.CheckoutItem{{
-				ProductId: productID,
-				SkuId:     skuID,
+				ProductId: product.ProductID,
+				SkuId:     product.SKUID,
 				Quantity:  1,
 			}},
 			Address: &checkoutv1.Address{
@@ -194,12 +224,25 @@ func runCheckoutBench(cfg benchConfig) (metricSummary, error) {
 			},
 			PaymentMethod:  "WECHAT_NATIVE",
 			Currency:       "CNY",
-			ExpectedAmount: 299,
+			ExpectedAmount: product.Price,
 		})
 		return err
 	})
 
-	return buildSummary("checkout_place_order", cfg.requests, cfg.concurrency, success, failure, durations, elapsed, ""), nil
+	summary := buildSummary(
+		"checkout_place_order",
+		cfg.requests,
+		cfg.concurrency,
+		success,
+		failure,
+		durations,
+		elapsed,
+		fmt.Sprintf("checkout_products=%d hot_products=%d checkout_hot_percent=%d", len(products), workload.HotProductCount, cfg.checkoutHotPct),
+	)
+	summary.CheckoutItems = len(products)
+	summary.CheckoutHotPercent = cfg.checkoutHotPct
+	summary.CheckoutHotItems = workload.HotProductCount
+	return summary, nil
 }
 
 func runPaymentConsistency(cfg benchConfig) (metricSummary, error) {
@@ -592,6 +635,135 @@ func seedProductAndStock(productClient productservice.Client, inventoryClient in
 		return 0, 0, fmt.Errorf("adjust stock failed: code=%d msg=%s", adjustResp.GetStatusCode(), adjustResp.GetStatusMsg())
 	}
 	return createResp.GetId(), skuID, nil
+}
+
+func seedCheckoutProducts(productClient productservice.Client, inventoryClient inventoryservice.Client, requestsPerItem []int) ([]checkoutBenchProduct, error) {
+	products := make([]checkoutBenchProduct, 0, len(requestsPerItem))
+	for i, requestCount := range requestsPerItem {
+		price := int64(299 + (i%5)*10)
+		productID, skuID, err := seedProductAndStock(productClient, inventoryClient, requestCount+20, price)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, checkoutBenchProduct{
+			ProductID: productID,
+			SKUID:     skuID,
+			Price:     price,
+		})
+	}
+	return products, nil
+}
+
+func buildCheckoutWorkload(totalRequests, productCount, hotPercent int) (checkoutWorkload, error) {
+	if totalRequests <= 0 {
+		return checkoutWorkload{}, fmt.Errorf("requests must be positive")
+	}
+	if productCount <= 0 {
+		productCount = 1
+	}
+	if productCount > totalRequests {
+		productCount = totalRequests
+	}
+	if hotPercent < 0 {
+		hotPercent = 0
+	}
+	if hotPercent > 100 {
+		hotPercent = 100
+	}
+
+	hotRequests := totalRequests * hotPercent / 100
+	coldRequests := totalRequests - hotRequests
+	if productCount == 1 {
+		return checkoutWorkload{
+			Requests:        repeatCheckoutRequests(totalRequests, 0),
+			RequestsPerItem: []int{totalRequests},
+			HotProductCount: 1,
+			HotRequests:     hotRequests,
+		}, nil
+	}
+
+	hotProductCount := 0
+	if hotRequests > 0 {
+		hotProductCount = int(math.Ceil(float64(productCount) * 0.2))
+		if hotProductCount <= 0 {
+			hotProductCount = 1
+		}
+		if hotProductCount > hotRequests {
+			hotProductCount = hotRequests
+		}
+		if hotProductCount > productCount {
+			hotProductCount = productCount
+		}
+	}
+
+	coldProductCount := 0
+	if coldRequests > 0 {
+		remaining := productCount - hotProductCount
+		if remaining <= 0 {
+			remaining = 0
+		}
+		coldProductCount = remaining
+		if coldProductCount > coldRequests {
+			coldProductCount = coldRequests
+		}
+	}
+
+	if hotProductCount == 0 && coldProductCount == 0 {
+		coldProductCount = 1
+	}
+
+	effectiveProductCount := hotProductCount + coldProductCount
+	if effectiveProductCount == 0 {
+		effectiveProductCount = 1
+	}
+
+	requestsPerItem := make([]int, effectiveProductCount)
+	assignments := make([]int, 0, totalRequests)
+
+	for i := 0; i < hotRequests; i++ {
+		idx := i % hotProductCount
+		assignments = append(assignments, idx)
+		requestsPerItem[idx]++
+	}
+
+	if coldProductCount == 0 {
+		for i := 0; i < coldRequests; i++ {
+			idx := (hotRequests + i) % effectiveProductCount
+			assignments = append(assignments, idx)
+			requestsPerItem[idx]++
+		}
+	} else {
+		for i := 0; i < coldRequests; i++ {
+			idx := hotProductCount + (i % coldProductCount)
+			assignments = append(assignments, idx)
+			requestsPerItem[idx]++
+		}
+	}
+
+	rng := rand.New(rand.NewSource(20260516))
+	rng.Shuffle(len(assignments), func(i, j int) {
+		assignments[i], assignments[j] = assignments[j], assignments[i]
+	})
+
+	requests := make([]checkoutRequestSpec, len(assignments))
+	for i, idx := range assignments {
+		requests[i] = checkoutRequestSpec{ProductIndex: idx}
+	}
+
+	return checkoutWorkload{
+		Requests:        requests,
+		RequestsPerItem: requestsPerItem,
+		HotProductCount: hotProductCount,
+		HotRequests:     hotRequests,
+	}, nil
+}
+
+func repeatCheckoutRequests(totalRequests, productIndex int) []checkoutRequestSpec {
+	requests := make([]checkoutRequestSpec, totalRequests)
+	for i := range requests {
+		requests[i] = checkoutRequestSpec{ProductIndex: productIndex}
+	}
+	return requests
 }
 
 func createSeckillActivity(client seckillservice.Client, stock int, price int64) (int64, error) {

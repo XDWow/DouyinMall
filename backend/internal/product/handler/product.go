@@ -25,19 +25,20 @@ func (h *ProductHandler) ListProducts(ctx context.Context, req *v1.ListProductsR
 }
 
 func (h *ProductHandler) GetProducts(ctx context.Context, req *v1.GetProductsReq) (*v1.GetProductsResp, error) {
-	items := req.GetItems()
-	products := make([]*v1.Product, 0, len(items))
-	for _, item := range items {
-		product, err := h.svc.GetProduct(ctx, domain.ProductQuery{
-			ID:    item.GetProductId(),
-			SKUID: item.GetSkuId(),
-		})
-		if err != nil {
-			return nil, err
-		}
-		products = append(products, toProto(product))
+	queries := toDomainQueries(req.GetItems())
+	products, err := h.svc.GetProducts(ctx, queries)
+	if err != nil {
+		return nil, err
 	}
-	return &v1.GetProductsResp{Product: products}, nil
+	return &v1.GetProductsResp{Product: toProtoList(products)}, nil
+}
+
+func (h *ProductHandler) GetProductQuotes(ctx context.Context, req *v1.GetProductQuotesReq) (*v1.GetProductQuotesResp, error) {
+	quotes, err := h.svc.GetProductQuotes(ctx, toDomainQueries(req.GetItems()))
+	if err != nil {
+		return nil, err
+	}
+	return &v1.GetProductQuotesResp{ProductQuotes: toProtoQuoteList(quotes)}, nil
 }
 
 func (h *ProductHandler) CreateProduct(ctx context.Context, req *v1.CreateProductReq) (*v1.CreateProductResp, error) {
@@ -88,6 +89,24 @@ func toProtoList(products []domain.Product) []*v1.Product {
 	return res
 }
 
+func toProtoQuote(q domain.ProductQuote) *v1.ProductQuote {
+	return &v1.ProductQuote{
+		ProductId: q.ProductID,
+		SkuId:     q.SKUID,
+		Price:     q.Price,
+		Currency:  q.Currency,
+		InStock:   q.InStock,
+	}
+}
+
+func toProtoQuoteList(quotes []domain.ProductQuote) []*v1.ProductQuote {
+	res := make([]*v1.ProductQuote, len(quotes))
+	for i, q := range quotes {
+		res[i] = toProtoQuote(q)
+	}
+	return res
+}
+
 func toDomain(p *v1.Product) domain.Product {
 	if p == nil {
 		return domain.Product{}
@@ -106,4 +125,15 @@ func toDomain(p *v1.Product) domain.Product {
 		MerchantID:   p.GetMerchantID(),
 		MerchantName: p.GetMerchantName(),
 	}
+}
+
+func toDomainQueries(items []*v1.ProductQuery) []domain.ProductQuery {
+	queries := make([]domain.ProductQuery, 0, len(items))
+	for _, item := range items {
+		queries = append(queries, domain.ProductQuery{
+			ID:    item.GetProductId(),
+			SKUID: item.GetSkuId(),
+		})
+	}
+	return queries
 }

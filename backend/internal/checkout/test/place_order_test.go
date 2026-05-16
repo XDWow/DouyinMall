@@ -171,6 +171,71 @@ func TestPlaceOrderPassesDiscountedPayableAmountToOrder(t *testing.T) {
 	require.Equal(t, int64(101), orderClient.createOrderReq.GetItems()[0].GetSkuId())
 }
 
+func TestPlaceOrderReturnsInsufficientStockOnlyForStockFailure(t *testing.T) {
+	productClient := &stubProductClient{
+		getProductsResp: &productv1.GetProductsResp{
+			Product: []*productv1.Product{{
+				Id:       1,
+				SkuId:    101,
+				Name:     "test product",
+				Price:    100,
+				Currency: "CNY",
+				InStock:  true,
+			}},
+		},
+	}
+	inventoryClient := &stubInventoryClient{
+		commitResp: &inventoryv1.InventoryOpResp{StatusCode: -1, StatusMsg: "库存不足"},
+	}
+
+	uc := usecase.NewPlaceOrderUseCase(
+		productClient,
+		inventoryClient,
+		&stubCouponClient{},
+		&stubOrderClient{},
+		&stubPaymentClient{},
+		staticOrderIDGenerator(12345),
+		logger.NewNopLogger(),
+	)
+
+	_, err := uc.Execute(context.Background(), validPlaceOrderInput(100, nil))
+	require.Error(t, err)
+	require.ErrorIs(t, err, domain.ErrInsufficientStock)
+}
+
+func TestPlaceOrderDoesNotMaskInventoryTimeoutAsStockFailure(t *testing.T) {
+	productClient := &stubProductClient{
+		getProductsResp: &productv1.GetProductsResp{
+			Product: []*productv1.Product{{
+				Id:       1,
+				SkuId:    101,
+				Name:     "test product",
+				Price:    100,
+				Currency: "CNY",
+				InStock:  true,
+			}},
+		},
+	}
+	inventoryClient := &stubInventoryClient{
+		commitResp: &inventoryv1.InventoryOpResp{StatusCode: -1, StatusMsg: "commit stock failed: context deadline exceeded"},
+	}
+
+	uc := usecase.NewPlaceOrderUseCase(
+		productClient,
+		inventoryClient,
+		&stubCouponClient{},
+		&stubOrderClient{},
+		&stubPaymentClient{},
+		staticOrderIDGenerator(12345),
+		logger.NewNopLogger(),
+	)
+
+	_, err := uc.Execute(context.Background(), validPlaceOrderInput(100, nil))
+	require.Error(t, err)
+	require.NotErrorIs(t, err, domain.ErrInsufficientStock)
+	require.Contains(t, err.Error(), "commit stock failed")
+}
+
 type staticOrderIDGenerator int64
 
 func (g staticOrderIDGenerator) GenerateOrderID() int64 {
@@ -202,8 +267,10 @@ func validPlaceOrderInput(expectedAmount int64, couponIDs []int64) usecase.Place
 }
 
 type stubProductClient struct {
-	getProductsResp *productv1.GetProductsResp
-	getProductsErr  error
+	getProductsResp      *productv1.GetProductsResp
+	getProductsErr       error
+	getProductQuotesResp *productv1.GetProductQuotesResp
+	getProductQuotesErr  error
 }
 
 func (s *stubProductClient) ListProducts(context.Context, *productv1.ListProductsReq, ...callopt.Option) (*productv1.ListProductsResp, error) {
@@ -211,6 +278,28 @@ func (s *stubProductClient) ListProducts(context.Context, *productv1.ListProduct
 }
 func (s *stubProductClient) GetProducts(context.Context, *productv1.GetProductsReq, ...callopt.Option) (*productv1.GetProductsResp, error) {
 	return s.getProductsResp, s.getProductsErr
+}
+func (s *stubProductClient) GetProductQuotes(context.Context, *productv1.GetProductQuotesReq, ...callopt.Option) (*productv1.GetProductQuotesResp, error) {
+	if s.getProductQuotesResp != nil || s.getProductQuotesErr != nil {
+		return s.getProductQuotesResp, s.getProductQuotesErr
+	}
+	if s.getProductsResp == nil {
+		return nil, nil
+	}
+	quotes := make([]*productv1.ProductQuote, 0, len(s.getProductsResp.GetProduct()))
+	for _, p := range s.getProductsResp.GetProduct() {
+		if p == nil {
+			continue
+		}
+		quotes = append(quotes, &productv1.ProductQuote{
+			ProductId: p.GetId(),
+			SkuId:     p.GetSkuId(),
+			Price:     p.GetPrice(),
+			Currency:  p.GetCurrency(),
+			InStock:   p.GetInStock(),
+		})
+	}
+	return &productv1.GetProductQuotesResp{ProductQuotes: quotes}, nil
 }
 func (s *stubProductClient) CreateProduct(context.Context, *productv1.CreateProductReq, ...callopt.Option) (*productv1.CreateProductResp, error) {
 	panic("unexpected call")

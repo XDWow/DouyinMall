@@ -9,6 +9,8 @@ service ProductService {
     rpc ListProducts(ListProductsReq) returns (ListProductsResp) {}
     // Get one or more product details. Prefer items when SKU-aware pricing is needed.
     rpc GetProducts(GetProductsReq) returns (GetProductsResp) {}
+    // Get authoritative product quotes for transactional checkout.
+    rpc GetProductQuotes(GetProductQuotesReq) returns (GetProductQuotesResp) {}
     // Create a product and optionally its default SKU.
     rpc CreateProduct(CreateProductReq) returns (CreateProductResp) {}
     // Update a product and optionally one SKU.
@@ -77,4 +79,20 @@ message GetProductsReq {
 
 message GetProductsResp {
     repeated Product product = 1;
+}
+
+message ProductQuote {
+    int64 product_id = 1;
+    int64 sku_id = 2;
+    int64 price = 3;
+    string currency = 4;
+    bool in_stock = 5;
+}
+
+message GetProductQuotesReq {
+    repeated ProductQuery items = 1;
+}
+
+message GetProductQuotesResp {
+    repeated ProductQuote product_quotes = 1;
 }

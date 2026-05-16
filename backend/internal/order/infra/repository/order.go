@@ -70,25 +70,32 @@ func (repo *orderRepository) Save(ctx context.Context, order *domain.Order) erro
 	// 回写自增 ID 到 domain 对象
 	order.ID = orderModel.ID
 
-	// 写缓存；失败只打日志，大不了少一层加速
-	data, err := json.Marshal(orderModel)
-	if err != nil {
-		repo.log.Warn("订单序列化失败，无法写入缓存", logger.Error(err), logger.Int64("orderID", order.ID))
-		return nil
-	}
-	if err := repo.cache.Set(ctx, orderKey(orderModel.ID), string(data), orderTTL); err != nil {
-		repo.log.Warn("写入订单缓存失败", logger.Error(err), logger.Int64("orderID", order.ID))
-	}
-
-	members := map[string]float64{
-		strconv.FormatInt(orderModel.ID, 10): float64(orderModel.CreatedAt.UnixMilli()),
-	}
-	// 使用 ZAddWithLimit 保持列表固定长度
-	if err := repo.cache.ZAddWithLimit(ctx, userOrderListKey(orderModel.UserID), members, pageLimit, userOrderListTTL); err != nil {
-		repo.log.Warn("写入用户订单列表缓存失败", logger.Error(err), logger.Int64("userID", orderModel.UserID))
-	}
+	repo.cacheOrderAfterSave(*orderModel)
 
 	return nil
+}
+
+func (repo *orderRepository) cacheOrderAfterSave(orderModel db.OrderModel) {
+	go func() {
+		cacheCtx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+		defer cancel()
+
+		data, err := json.Marshal(orderModel)
+		if err != nil {
+			repo.log.Warn("订单序列化失败，无法写入缓存", logger.Error(err), logger.Int64("orderID", orderModel.ID))
+			return
+		}
+		if err := repo.cache.Set(cacheCtx, orderKey(orderModel.ID), string(data), orderTTL); err != nil {
+			repo.log.Warn("写入订单缓存失败", logger.Error(err), logger.Int64("orderID", orderModel.ID))
+		}
+
+		members := map[string]float64{
+			strconv.FormatInt(orderModel.ID, 10): float64(orderModel.CreatedAt.UnixMilli()),
+		}
+		if err := repo.cache.ZAddWithLimit(cacheCtx, userOrderListKey(orderModel.UserID), members, pageLimit, userOrderListTTL); err != nil {
+			repo.log.Warn("写入用户订单列表缓存失败", logger.Error(err), logger.Int64("userID", orderModel.UserID))
+		}
+	}()
 }
 
 func (repo *orderRepository) FindByID(ctx context.Context, orderID int64) (domain.Order, error) {

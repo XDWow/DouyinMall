@@ -48,6 +48,50 @@ func TestProductService_GetProduct(t *testing.T) {
 	assert.Equal(t, int64(101), product.SKUID)
 }
 
+func TestProductService_GetProducts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	queries := []domain.ProductQuery{
+		{ID: 1, SKUID: 101},
+		{ID: 2, SKUID: 202},
+	}
+	repo := repomocks.NewMockProductRepo(ctrl)
+	repo.EXPECT().GetProducts(gomock.Any(), queries).Return([]domain.Product{
+		{ID: 1, SKUID: 101, Name: "Phone"},
+		{ID: 2, SKUID: 202, Name: "Case"},
+	}, nil)
+
+	svc := NewProductService(repo, logger.NewNopLogger())
+	products, err := svc.GetProducts(context.Background(), queries)
+
+	require.NoError(t, err)
+	require.Len(t, products, 2)
+	assert.Equal(t, int64(202), products[1].SKUID)
+}
+
+func TestProductService_GetProductQuotes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	queries := []domain.ProductQuery{
+		{ID: 1, SKUID: 101},
+		{ID: 2, SKUID: 202},
+	}
+	repo := repomocks.NewMockProductRepo(ctrl)
+	repo.EXPECT().GetProductQuotes(gomock.Any(), queries).Return([]domain.ProductQuote{
+		{ProductID: 1, SKUID: 101, Price: 100, Currency: "CNY", InStock: true},
+		{ProductID: 2, SKUID: 202, Price: 200, Currency: "CNY", InStock: false},
+	}, nil)
+
+	svc := NewProductService(repo, logger.NewNopLogger())
+	quotes, err := svc.GetProductQuotes(context.Background(), queries)
+
+	require.NoError(t, err)
+	require.Len(t, quotes, 2)
+	assert.Equal(t, int64(202), quotes[1].SKUID)
+}
+
 func TestProductService_GetProduct_RequiresSKU(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -57,6 +101,17 @@ func TestProductService_GetProduct_RequiresSKU(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, domain.Product{}, product)
+}
+
+func TestProductService_GetProducts_RequiresSKU(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	svc := NewProductService(repomocks.NewMockProductRepo(ctrl), logger.NewNopLogger())
+	products, err := svc.GetProducts(context.Background(), []domain.ProductQuery{{ID: 1}})
+
+	assert.Error(t, err)
+	assert.Nil(t, products)
 }
 
 func TestProductService_CreateProduct(t *testing.T) {

@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -123,21 +122,7 @@ func (uc *AlipayPagePayUC) Execute(ctx context.Context, cmd AlipayPagePayCmd) (*
 }
 
 func (uc *AlipayPagePayUC) ensurePaymentRecord(ctx context.Context, pmt domain.Payment) error {
-	existing, err := uc.repo.GetPayment(ctx, pmt.BizTradeNo)
-	switch {
-	case err == nil:
-		if existing.Status == domain.PaymentStatusSuccess {
-			return domain.ErrPaymentAlreadyPaid
-		}
-		if existing.Amt.Total != pmt.Amt.Total || existing.Amt.Currency != pmt.Amt.Currency {
-			return domain.ErrPaymentAmountChanged
-		}
-		return nil
-	case errors.Is(err, domain.ErrPaymentNotFound):
-		return uc.repo.AddPayment(ctx, pmt)
-	default:
-		return err
-	}
+	return ensurePaymentRecord(ctx, uc.repo, pmt)
 }
 
 func buildPagePaySubject(orderID int64, orderKind string) string {

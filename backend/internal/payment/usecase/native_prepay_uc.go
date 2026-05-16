@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/XDWow/DouyinMall/backend/internal/payment/domain"
@@ -42,20 +41,7 @@ func (uc *NativePrePaymentUC) Execute(ctx context.Context, cmd PrePaymentCmd) (s
 		Description: cmd.Description,
 	}
 
-	existing, err := uc.repo.GetPayment(ctx, cmd.BizTradeNo)
-	switch {
-	case err == nil:
-		if existing.Status == domain.PaymentStatusSuccess {
-			return "", domain.ErrPaymentAlreadyPaid
-		}
-		if existing.Amt.Total != cmd.Amt.Total || existing.Amt.Currency != cmd.Amt.Currency {
-			return "", domain.ErrPaymentAmountChanged
-		}
-	case errors.Is(err, domain.ErrPaymentNotFound):
-		if err = uc.repo.AddPayment(ctx, pmt); err != nil {
-			return "", err
-		}
-	default:
+	if err := ensurePaymentRecord(ctx, uc.repo, pmt); err != nil {
 		return "", err
 	}
 

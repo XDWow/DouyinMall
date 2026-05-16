@@ -3,8 +3,11 @@ package dao
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
+	"github.com/XDWow/DouyinMall/backend/internal/product/domain"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -18,7 +21,10 @@ var ErrDataNotFound = gorm.ErrRecordNotFound
 type ProductDao interface {
 	ListProducts(ctx context.Context, page, pageSize int64, category string) (products []Product, err error)
 	FindByID(ctx context.Context, id int64) (product Product, err error)
+	FindByIDs(ctx context.Context, ids []int64) (products []Product, err error)
 	FindPriceInStock(ctx context.Context, productID, skuID int64) (price int64, currency string, inStock bool, err error)
+	FindPriceInStocks(ctx context.Context, queries []domain.ProductQuery) (products []ProductSKU, err error)
+	FindQuotes(ctx context.Context, queries []domain.ProductQuery) (quotes []ProductQuote, err error)
 	Insert(ctx context.Context, product Product) (id int64, err error)
 	Update(ctx context.Context, product Product) (err error)
 	Delete(ctx context.Context, id, userID int64) (err error)
@@ -53,6 +59,14 @@ func (d *GORMProductDao) FindByID(ctx context.Context, id int64) (product Produc
 	return product, err
 }
 
+func (d *GORMProductDao) FindByIDs(ctx context.Context, ids []int64) (products []Product, err error) {
+	if len(ids) == 0 {
+		return []Product{}, nil
+	}
+	err = d.db.WithContext(ctx).Where("id IN ?", ids).Find(&products).Error
+	return products, err
+}
+
 func (d *GORMProductDao) FindPriceInStock(ctx context.Context, productID, skuID int64) (price int64, currency string, inStock bool, err error) {
 	if skuID > 0 {
 		var sku ProductSKU
@@ -73,6 +87,64 @@ func (d *GORMProductDao) FindPriceInStock(ctx context.Context, productID, skuID 
 		Where("id = ?", productID).
 		First(&result).Error
 	return result.Price, normalizeCurrency(result.Currency), result.InStock, err
+}
+
+func (d *GORMProductDao) FindPriceInStocks(ctx context.Context, queries []domain.ProductQuery) (products []ProductSKU, err error) {
+	if len(queries) == 0 {
+		return []ProductSKU{}, nil
+	}
+
+	query := d.db.WithContext(ctx).Model(&ProductSKU{})
+	added := false
+	for _, item := range queries {
+		if item.ID <= 0 || item.SKUID <= 0 {
+			continue
+		}
+		if !added {
+			query = query.Where("(product_id = ? AND sku_id = ?)", item.ID, item.SKUID)
+			added = true
+			continue
+		}
+		query = query.Or("(product_id = ? AND sku_id = ?)", item.ID, item.SKUID)
+	}
+	if !added {
+		return []ProductSKU{}, nil
+	}
+
+	err = query.Find(&products).Error
+	return products, err
+}
+
+func (d *GORMProductDao) FindQuotes(ctx context.Context, queries []domain.ProductQuery) (quotes []ProductQuote, err error) {
+	if len(queries) == 0 {
+		return []ProductQuote{}, nil
+	}
+
+	conditions := make([]string, 0, len(queries))
+	args := make([]interface{}, 0, len(queries)*2)
+	for _, item := range queries {
+		if item.ID <= 0 || item.SKUID <= 0 {
+			continue
+		}
+		conditions = append(conditions, "(s.product_id = ? AND s.sku_id = ?)")
+		args = append(args, item.ID, item.SKUID)
+	}
+	if len(conditions) == 0 {
+		return []ProductQuote{}, nil
+	}
+
+	err = d.db.WithContext(ctx).
+		Table("product_sku AS s").
+		Select(
+			"s.product_id AS product_id, s.sku_id AS sku_id, s.price AS price, s.currency AS currency, (s.in_stock AND p.in_stock) AS in_stock",
+		).
+		Joins("JOIN product AS p ON p.id = s.product_id AND p.deleted_at IS NULL").
+		Where(strings.Join(conditions, " OR "), args...).
+		Find(&quotes).Error
+	if err != nil {
+		return nil, fmt.Errorf("find product quotes: %w", err)
+	}
+	return quotes, nil
 }
 
 func (d *GORMProductDao) Insert(ctx context.Context, product Product) (id int64, err error) {
@@ -167,6 +239,14 @@ type ProductSKU struct {
 
 func (ProductSKU) TableName() string {
 	return "product_sku"
+}
+
+type ProductQuote struct {
+	ProductID int64  `gorm:"column:product_id"`
+	SKUID     int64  `gorm:"column:sku_id"`
+	Price     int64  `gorm:"column:price"`
+	Currency  string `gorm:"column:currency"`
+	InStock   bool   `gorm:"column:in_stock"`
 }
 
 func normalizeCurrency(currency string) string {

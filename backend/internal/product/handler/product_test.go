@@ -41,15 +41,15 @@ func TestProductHandler_GetProducts_UsesProductAndSKU(t *testing.T) {
 
 	svc := svcmocks.NewMockProductService(ctrl)
 	svc.EXPECT().
-		GetProduct(gomock.Any(), domain.ProductQuery{ID: 1, SKUID: 101}).
-		Return(domain.Product{
+		GetProducts(gomock.Any(), []domain.ProductQuery{{ID: 1, SKUID: 101}}).
+		Return([]domain.Product{{
 			ID:       1,
 			SKUID:    101,
 			Name:     "iPhone 15",
 			Price:    599900,
 			Currency: "CNY",
 			InStock:  true,
-		}, nil)
+		}}, nil)
 
 	h := NewProductHandler(svc)
 	resp, err := h.GetProducts(context.Background(), &v1.GetProductsReq{
@@ -69,8 +69,8 @@ func TestProductHandler_GetProducts_ReturnsServiceError(t *testing.T) {
 
 	svc := svcmocks.NewMockProductService(ctrl)
 	svc.EXPECT().
-		GetProduct(gomock.Any(), domain.ProductQuery{ID: 999, SKUID: 100999}).
-		Return(domain.Product{}, errors.New("not found"))
+		GetProducts(gomock.Any(), []domain.ProductQuery{{ID: 999, SKUID: 100999}}).
+		Return(nil, errors.New("not found"))
 
 	h := NewProductHandler(svc)
 	resp, err := h.GetProducts(context.Background(), &v1.GetProductsReq{
@@ -79,6 +79,33 @@ func TestProductHandler_GetProducts_ReturnsServiceError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
+}
+
+func TestProductHandler_GetProductQuotes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	svc := svcmocks.NewMockProductService(ctrl)
+	svc.EXPECT().
+		GetProductQuotes(gomock.Any(), []domain.ProductQuery{{ID: 1, SKUID: 101}}).
+		Return([]domain.ProductQuote{{
+			ProductID: 1,
+			SKUID:     101,
+			Price:     599900,
+			Currency:  "CNY",
+			InStock:   true,
+		}}, nil)
+
+	h := NewProductHandler(svc)
+	resp, err := h.GetProductQuotes(context.Background(), &v1.GetProductQuotesReq{
+		Items: []*v1.ProductQuery{{ProductId: 1, SkuId: 101}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, resp.GetProductQuotes(), 1)
+	assert.Equal(t, int64(1), resp.GetProductQuotes()[0].GetProductId())
+	assert.Equal(t, int64(101), resp.GetProductQuotes()[0].GetSkuId())
+	assert.Equal(t, int64(599900), resp.GetProductQuotes()[0].GetPrice())
 }
 
 func TestProductHandler_CreateProduct(t *testing.T) {

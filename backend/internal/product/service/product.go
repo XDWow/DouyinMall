@@ -13,6 +13,8 @@ import (
 type ProductService interface {
 	ListProducts(ctx context.Context, page, pageSize int64, category string) (products []domain.Product, err error)
 	GetProduct(ctx context.Context, query domain.ProductQuery) (product domain.Product, err error)
+	GetProducts(ctx context.Context, queries []domain.ProductQuery) (products []domain.Product, err error)
+	GetProductQuotes(ctx context.Context, queries []domain.ProductQuery) (quotes []domain.ProductQuote, err error)
 	CreateProduct(ctx context.Context, product domain.Product) (productID int64, err error)
 	UpdateProduct(ctx context.Context, product domain.Product) (productID int64, err error)
 	DeleteProduct(ctx context.Context, id, userID int64) (err error)
@@ -45,6 +47,30 @@ func (svc *productService) GetProduct(ctx context.Context, query domain.ProductQ
 		return domain.Product{}, err
 	}
 	return svc.repo.GetProduct(ctx, query)
+}
+
+func (svc *productService) GetProducts(ctx context.Context, queries []domain.ProductQuery) ([]domain.Product, error) {
+	if len(queries) == 0 {
+		return []domain.Product{}, nil
+	}
+	for _, query := range queries {
+		if err := validateProductQuery(query); err != nil {
+			return nil, err
+		}
+	}
+	return svc.repo.GetProducts(ctx, queries)
+}
+
+func (svc *productService) GetProductQuotes(ctx context.Context, queries []domain.ProductQuery) ([]domain.ProductQuote, error) {
+	if len(queries) == 0 {
+		return []domain.ProductQuote{}, nil
+	}
+	for _, query := range queries {
+		if err := validateProductQuery(query); err != nil {
+			return nil, err
+		}
+	}
+	return svc.repo.GetProductQuotes(ctx, queries)
 }
 
 func (svc *productService) CreateProduct(ctx context.Context, product domain.Product) (int64, error) {

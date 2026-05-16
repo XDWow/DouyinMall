@@ -39,6 +39,9 @@ func InitDB() *gorm.DB {
 	if err != nil {
 		panic(fmt.Errorf("open product db failed: %w", err))
 	}
+	if err := mysqlconfig.ApplyPool(db, mysqlconfig.PoolConfig{}); err != nil {
+		panic(fmt.Errorf("configure product db pool failed: %w", err))
+	}
 
 	if err := dao.InitTables(db); err != nil {
 		panic(fmt.Errorf("init product tables failed: %w", err))

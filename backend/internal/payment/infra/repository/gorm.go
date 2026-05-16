@@ -9,6 +9,7 @@ import (
 	"github.com/XDWow/DouyinMall/backend/internal/payment/domain"
 	"github.com/XDWow/DouyinMall/backend/internal/payment/infra/db"
 	"github.com/XDWow/DouyinMall/backend/pkg/logger"
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -27,7 +28,14 @@ func NewPaymentRepository(db *gorm.DB, l logger.LoggerV1) domain.PaymentReposito
 
 func (repo *paymentRepository) AddPayment(ctx context.Context, pmt domain.Payment) error {
 	dbPmt := toDBPayment(pmt)
-	return db.DBFromContext(ctx, repo.db).Create(&dbPmt).Error
+	if err := db.DBFromContext(ctx, repo.db).Create(&dbPmt).Error; err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+			return domain.ErrPaymentAlreadyExists
+		}
+		return err
+	}
+	return nil
 }
 
 func (repo *paymentRepository) UpdatePayment(ctx context.Context, pmt domain.Payment) error {

@@ -36,6 +36,14 @@ type PriceInStock struct {
 	InStock  bool   `json:"in_stock"`
 }
 
+type cachedProductParts struct {
+	basic      domain.Product
+	basicFound bool
+
+	priceStock PriceInStock
+	priceFound bool
+}
+
 func NewCachedProductRepo(dao dao.ProductDao, cache cache.ProductCache, l logger.LoggerV1) ProductRepo {
 	return &CacheAsideProductRepo{
 		dao:                 dao,
@@ -58,6 +66,10 @@ func DetailBasicKey(productID int64) string {
 
 func PriceInStockKey(productID, skuID int64) string {
 	return fmt.Sprintf("product:detail:price_stock:%d:%d", productID, skuID)
+}
+
+func detailLoadKey(query domain.ProductQuery) string {
+	return fmt.Sprintf("product:detail:load:%d:%d", query.ID, query.SKUID)
 }
 
 func (r *CacheAsideProductRepo) ListProducts(ctx context.Context, page, pageSize int64, category string) ([]domain.Product, error) {
@@ -96,52 +108,111 @@ func (r *CacheAsideProductRepo) ListProducts(ctx context.Context, page, pageSize
 }
 
 func (r *CacheAsideProductRepo) GetProduct(ctx context.Context, query domain.ProductQuery) (domain.Product, error) {
-	basicKey := DetailBasicKey(query.ID)
-	priceStockKey := PriceInStockKey(query.ID, query.SKUID)
-
-	var basic domain.Product
-	basicData, basicErr := r.cache.Get(ctx, basicKey)
-	priceStockData, priceStockErr := r.cache.Get(ctx, priceStockKey)
-
-	if basicErr == nil && priceStockErr == nil {
-		if err := json.Unmarshal(basicData, &basic); err == nil {
-			var priceStock PriceInStock
-			if err := json.Unmarshal(priceStockData, &priceStock); err == nil {
-				return mergeProductPriceStock(basic, priceStock), nil
-			}
-		}
+	cached := r.readProductCache(ctx, query)
+	if cached.basicFound && cached.priceFound {
+		return mergeProductPriceStock(cached.basic, cached.priceStock), nil
 	}
-
-	if basicErr == nil && priceStockErr != nil {
-		if err := json.Unmarshal(basicData, &basic); err == nil {
-			priceStock, err := r.loadAndCachePriceStock(ctx, query)
-			if err != nil {
-				return domain.Product{}, err
-			}
-			return mergeProductPriceStock(basic, priceStock), nil
-		}
-	}
-
 	if ctx.Value("downgrade") == "true" {
 		return domain.Product{}, errors.New("product detail cache missed while downgrade mode is enabled")
 	}
 
-	entity, err := r.dao.FindByID(ctx, query.ID)
+	val, err, _ := r.sf.Do(detailLoadKey(query), func() (interface{}, error) {
+		return r.resolveSingleProduct(ctx, query, r.readProductCache(ctx, query))
+	})
 	if err != nil {
 		return domain.Product{}, err
 	}
-	product, err := r.entityToDomain(entity)
-	if err != nil {
-		return domain.Product{}, err
+	return val.(domain.Product), nil
+}
+
+func (r *CacheAsideProductRepo) GetProducts(ctx context.Context, queries []domain.ProductQuery) ([]domain.Product, error) {
+	if len(queries) == 0 {
+		return []domain.Product{}, nil
+	}
+	// GetProducts serves checkout/search snapshot reads. It bypasses detail cache so
+	// price and saleable status come from the current database state instead of
+	// potentially stale Redis entries.
+	missingBasicIDs := make([]int64, 0, len(queries))
+	missingPriceQueries := make([]domain.ProductQuery, 0, len(queries))
+	seenBasicIDs := make(map[int64]struct{})
+	seenPriceQueries := make(map[string]struct{})
+
+	for _, query := range queries {
+		if ctx.Value("downgrade") == "true" {
+			return nil, errors.New("product detail cache missed while downgrade mode is enabled")
+		}
+		if _, ok := seenBasicIDs[query.ID]; !ok {
+			seenBasicIDs[query.ID] = struct{}{}
+			missingBasicIDs = append(missingBasicIDs, query.ID)
+		}
+		key := detailLoadKey(query)
+		if _, ok := seenPriceQueries[key]; !ok {
+			seenPriceQueries[key] = struct{}{}
+			missingPriceQueries = append(missingPriceQueries, query)
+		}
 	}
 
-	priceStock, err := r.loadAndCachePriceStock(ctx, query)
+	basicProducts, err := r.loadBasicProductsByIDs(ctx, missingBasicIDs)
 	if err != nil {
-		return domain.Product{}, err
+		return nil, err
 	}
-	r.cacheProductBasicDetail(ctx, product, r.detailBasicTTL)
+	priceStocks, err := r.loadPriceStocksByQueries(ctx, missingPriceQueries)
+	if err != nil {
+		return nil, err
+	}
 
-	return mergeProductPriceStock(product, priceStock), nil
+	products := make([]domain.Product, len(queries))
+	for i, query := range queries {
+		basic, ok := basicProducts[query.ID]
+		if !ok {
+			return nil, notFoundError(query)
+		}
+
+		priceStock, ok := priceStocks[detailLoadKey(query)]
+		if !ok {
+			return nil, notFoundError(query)
+		}
+
+		products[i] = mergeProductPriceStock(basic, priceStock)
+	}
+
+	return products, nil
+}
+
+func (r *CacheAsideProductRepo) GetProductQuotes(ctx context.Context, queries []domain.ProductQuery) ([]domain.ProductQuote, error) {
+	if len(queries) == 0 {
+		return []domain.ProductQuote{}, nil
+	}
+	if ctx.Value("downgrade") == "true" {
+		return nil, errors.New("product quote cache missed while downgrade mode is enabled")
+	}
+
+	entities, err := r.dao.FindQuotes(ctx, queries)
+	if err != nil {
+		return nil, err
+	}
+
+	quotes := make(map[string]domain.ProductQuote, len(entities))
+	for _, entity := range entities {
+		query := domain.ProductQuery{ID: entity.ProductID, SKUID: entity.SKUID}
+		quotes[detailLoadKey(query)] = domain.ProductQuote{
+			ProductID: entity.ProductID,
+			SKUID:     entity.SKUID,
+			Price:     entity.Price,
+			Currency:  normalizeCurrency(entity.Currency),
+			InStock:   entity.InStock,
+		}
+	}
+
+	result := make([]domain.ProductQuote, len(queries))
+	for i, query := range queries {
+		quote, ok := quotes[detailLoadKey(query)]
+		if !ok {
+			return nil, notFoundError(query)
+		}
+		result[i] = quote
+	}
+	return result, nil
 }
 
 func (r *CacheAsideProductRepo) CreateProduct(ctx context.Context, product domain.Product) (int64, error) {
@@ -255,6 +326,97 @@ func (r *CacheAsideProductRepo) shouldRefresh(ctx context.Context, key string, m
 	}
 	ttl, err := r.cache.GetTTL(ctx, key)
 	return err != nil || ttl <= minTTL
+}
+
+func (r *CacheAsideProductRepo) readProductCache(ctx context.Context, query domain.ProductQuery) cachedProductParts {
+	result := cachedProductParts{}
+
+	if basicData, err := r.cache.Get(ctx, DetailBasicKey(query.ID)); err == nil {
+		if err := json.Unmarshal(basicData, &result.basic); err == nil {
+			result.basicFound = true
+		}
+	}
+	if priceStockData, err := r.cache.Get(ctx, PriceInStockKey(query.ID, query.SKUID)); err == nil {
+		if err := json.Unmarshal(priceStockData, &result.priceStock); err == nil {
+			result.priceFound = true
+		}
+	}
+
+	return result
+}
+
+func (r *CacheAsideProductRepo) resolveSingleProduct(ctx context.Context, query domain.ProductQuery, cached cachedProductParts) (domain.Product, error) {
+	basic := cached.basic
+	if !cached.basicFound {
+		entity, err := r.dao.FindByID(ctx, query.ID)
+		if err != nil {
+			return domain.Product{}, err
+		}
+		product, err := r.entityToDomain(entity)
+		if err != nil {
+			return domain.Product{}, err
+		}
+		basic = product
+		r.cacheProductBasicDetail(ctx, product, r.detailBasicTTL)
+	}
+
+	priceStock := cached.priceStock
+	if !cached.priceFound {
+		var err error
+		priceStock, err = r.loadAndCachePriceStock(ctx, query)
+		if err != nil {
+			return domain.Product{}, err
+		}
+	}
+
+	return mergeProductPriceStock(basic, priceStock), nil
+}
+
+func (r *CacheAsideProductRepo) loadBasicProductsByIDs(ctx context.Context, ids []int64) (map[int64]domain.Product, error) {
+	if len(ids) == 0 {
+		return map[int64]domain.Product{}, nil
+	}
+
+	entities, err := r.dao.FindByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	products := make(map[int64]domain.Product, len(entities))
+	for _, entity := range entities {
+		product, err := r.entityToDomain(entity)
+		if err != nil {
+			return nil, err
+		}
+		products[product.ID] = product
+		r.cacheProductBasicDetail(ctx, product, r.detailBasicTTL)
+	}
+	return products, nil
+}
+
+func (r *CacheAsideProductRepo) loadPriceStocksByQueries(ctx context.Context, queries []domain.ProductQuery) (map[string]PriceInStock, error) {
+	if len(queries) == 0 {
+		return map[string]PriceInStock{}, nil
+	}
+
+	entities, err := r.dao.FindPriceInStocks(ctx, queries)
+	if err != nil {
+		return nil, err
+	}
+
+	priceStocks := make(map[string]PriceInStock, len(entities))
+	for _, entity := range entities {
+		priceStock := PriceInStock{
+			SKUID:    entity.SKUID,
+			Price:    entity.Price,
+			Currency: normalizeCurrency(entity.Currency),
+			InStock:  entity.InStock,
+		}
+		query := domain.ProductQuery{ID: entity.ProductID, SKUID: entity.SKUID}
+		priceStocks[detailLoadKey(query)] = priceStock
+		r.cachePriceStock(ctx, query, priceStock, r.detailPriceStockTTL)
+	}
+	return priceStocks, nil
 }
 
 func (r *CacheAsideProductRepo) loadAndCachePriceStock(ctx context.Context, query domain.ProductQuery) (PriceInStock, error) {
@@ -433,4 +595,8 @@ func normalizeCurrency(currency string) string {
 		return "CNY"
 	}
 	return currency
+}
+
+func notFoundError(query domain.ProductQuery) error {
+	return fmt.Errorf("%w: product_id=%d sku_id=%d", dao.ErrDataNotFound, query.ID, query.SKUID)
 }

@@ -39,6 +39,9 @@ func InitDB() *gorm.DB {
 	if err != nil {
 		panic(fmt.Errorf("payment db connect failed: %w", err))
 	}
+	if err := mysqlconfig.ApplyPool(database, mysqlconfig.PoolConfig{}); err != nil {
+		panic(fmt.Errorf("payment db configure pool failed: %w", err))
+	}
 
 	if err = db.InitTables(database); err != nil {
 		panic(fmt.Errorf("payment db init tables failed: %w", err))

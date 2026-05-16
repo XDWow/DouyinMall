@@ -4,6 +4,7 @@ import "errors"
 
 var (
 	ErrPaymentNotFound      = errors.New("payment not found")
+	ErrPaymentAlreadyExists = errors.New("payment already exists")
 	ErrPaymentAlreadyPaid   = errors.New("payment already succeeded")
 	ErrPaymentAmountChanged = errors.New("payment amount changed")
 	ErrPaymentStatusRace    = errors.New("payment status changed concurrently")

@@ -70,6 +70,53 @@ func buildOrderLines(items []domain.CheckoutItem, protoProducts []*productv1.Pro
 	return
 }
 
+func buildOrderLinesFromQuotes(items []domain.CheckoutItem, protoQuotes []*productv1.ProductQuote) (available, unavailable []domain.OrderLine) {
+	quoteMap := make(map[productLineKey]*productv1.ProductQuote, len(protoQuotes))
+	for _, q := range protoQuotes {
+		if q == nil {
+			continue
+		}
+		quoteMap[productLineKey{productID: q.GetProductId(), skuID: q.GetSkuId()}] = q
+	}
+
+	for _, item := range items {
+		q, ok := quoteMap[productLineKey{productID: item.ProductID, skuID: item.SKUID}]
+		if !ok {
+			unavailable = append(unavailable, domain.OrderLine{
+				ProductID:     item.ProductID,
+				SKUID:         item.SKUID,
+				Quantity:      item.Quantity,
+				Available:     false,
+				UnavailReason: "product not found",
+			})
+			continue
+		}
+		if !q.GetInStock() {
+			unavailable = append(unavailable, domain.OrderLine{
+				ProductID:     q.GetProductId(),
+				SKUID:         q.GetSkuId(),
+				Price:         q.GetPrice(),
+				Currency:      q.GetCurrency(),
+				Quantity:      item.Quantity,
+				Subtotal:      q.GetPrice() * item.Quantity,
+				Available:     false,
+				UnavailReason: "product out of stock",
+			})
+			continue
+		}
+		available = append(available, domain.OrderLine{
+			ProductID: q.GetProductId(),
+			SKUID:     q.GetSkuId(),
+			Price:     q.GetPrice(),
+			Currency:  q.GetCurrency(),
+			Quantity:  item.Quantity,
+			Subtotal:  q.GetPrice() * item.Quantity,
+			Available: true,
+		})
+	}
+	return
+}
+
 func toCouponOrderItems(lines []domain.OrderLine) []*couponv1.OrderItem {
 	result := make([]*couponv1.OrderItem, 0, len(lines))
 	for _, l := range lines {

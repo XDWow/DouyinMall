@@ -13,6 +13,7 @@ import (
 type Client interface {
 	ListProducts(ctx context.Context, Req *v1.ListProductsReq, callOptions ...callopt.Option) (r *v1.ListProductsResp, err error)
 	GetProducts(ctx context.Context, Req *v1.GetProductsReq, callOptions ...callopt.Option) (r *v1.GetProductsResp, err error)
+	GetProductQuotes(ctx context.Context, Req *v1.GetProductQuotesReq, callOptions ...callopt.Option) (r *v1.GetProductQuotesResp, err error)
 	CreateProduct(ctx context.Context, Req *v1.CreateProductReq, callOptions ...callopt.Option) (r *v1.CreateProductResp, err error)
 	UpdateProduct(ctx context.Context, Req *v1.UpdateProductReq, callOptions ...callopt.Option) (r *v1.UpdateProductResp, err error)
 	DeleteProduct(ctx context.Context, Req *v1.DeleteProductReq, callOptions ...callopt.Option) (r *v1.DeleteProductResp, err error)
@@ -55,6 +56,11 @@ func (p *kProductServiceClient) ListProducts(ctx context.Context, Req *v1.ListPr
 func (p *kProductServiceClient) GetProducts(ctx context.Context, Req *v1.GetProductsReq, callOptions ...callopt.Option) (r *v1.GetProductsResp, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetProducts(ctx, Req)
+}
+
+func (p *kProductServiceClient) GetProductQuotes(ctx context.Context, Req *v1.GetProductQuotesReq, callOptions ...callopt.Option) (r *v1.GetProductQuotesResp, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetProductQuotes(ctx, Req)
 }
 
 func (p *kProductServiceClient) CreateProduct(ctx context.Context, Req *v1.CreateProductReq, callOptions ...callopt.Option) (r *v1.CreateProductResp, err error) {
